@@ -6,6 +6,7 @@ Cloud backup for people who don't trust cloud provider security.  Features:
  - No plaintext is ever seen by the cloud provider server that you're backing up to
  - Incremental backups
  - Snapshots
+ - Preserves xattrs (extended attributes)
  - Clear security guarantees (see [SECURITY.md](blob/main/SECURITY.md))
 
 There are plenty of cloud-based backup solutions, many with more elaborate features than this one.  However, I do not know of any other utility like this that leaks zero unencrypted information to the cloud provider.  This means that if your cloud provider is hacked or your cloud data is otherwise leaked onto the Internet, you can have strong confidence that it will not be readable by anyone who does not know your passphrase.  
