@@ -10,9 +10,9 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}/main.go",
-            // "args": ["restore", "backedup2", "/tmp/restore-here/"],
-            "args": ["backup"],
-            // "args": ["cloudls"],
+            "args": ["restore", "backedup/2022-05-22_20:07:24", "/tmp/restore-here/"],
+            // "args": ["backup"],
+            // "args": ["cloudls", "--snapshot=backedup/2022-05-22_20:00:03"],
         },
     ]
 }

@@ -14,24 +14,14 @@ import (
 	"github.com/fsctl/trustlessbak/pkg/util"
 )
 
-func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string, encryptedRootDirName string, encryptedRelPath string, objst *objstore.ObjStore, bucket string) error {
+func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string, objName string, rootDirName string, snapshotName string, relPath string, objst *objstore.ObjStore, bucket string) error {
 	// Strip any trailing slashes on destination path
 	restoreIntoDirPath = util.StripTrailingSlashes(restoreIntoDirPath)
 
 	// Retrieve the ciphertext
-	ciphertextBuf, err := objst.DownloadObjToBuffer(ctx, bucket, encryptedRootDirName+"/"+encryptedRelPath)
+	ciphertextBuf, err := objst.DownloadObjToBuffer(ctx, bucket, objName)
 	if err != nil {
 		log.Fatalf("Error retrieving file: %v", err)
-	}
-
-	// decrypt the root dir name and relative path
-	decryptedRootDirName, err := cryptography.DecryptFilename(key, encryptedRootDirName)
-	if err != nil {
-		log.Fatalf("error: could not decrypt root dir name: %v", err)
-	}
-	decryptedRelPath, err := cryptography.DecryptFilename(key, encryptedRelPath)
-	if err != nil {
-		log.Fatalf("error: could not decrypt root dir name: %v", err)
 	}
 
 	// decrypt the ciphertext
@@ -52,23 +42,23 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 	// and restore contents (for files)
 	if metadataPtr.IsDir {
 		// TODO: fix hardcoded mode
-		err = createFullPath(restoreIntoDirPath, decryptedRootDirName, decryptedRelPath, 0755)
+		err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, relPath, 0755)
 		if err != nil {
 			log.Printf("error: could not create dir '%s': %v\n",
-				filepath.Join(restoreIntoDirPath, decryptedRootDirName, decryptedRelPath), err)
+				filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, relPath), err)
 			return err
 		}
 	} else {
-		dir, filename := filepath.Split(decryptedRelPath)
+		dir, filename := filepath.Split(relPath)
 		// TODO: fix hardcoded mode
-		err = createFullPath(restoreIntoDirPath, decryptedRootDirName, dir, 0755)
+		err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, dir, 0755)
 		if err != nil {
 			log.Printf("error: could not create dir '%s': %v\n",
-				filepath.Join(restoreIntoDirPath, decryptedRootDirName, dir), err)
+				filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, dir), err)
 			return err
 		}
 
-		filenameAbsPath := filepath.Join(restoreIntoDirPath, decryptedRootDirName, dir, filename)
+		filenameAbsPath := filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, dir, filename)
 		err = writeBufferToFile(fileContents, filenameAbsPath)
 		if err != nil {
 			log.Printf("error: could not write file '%s': %v\n", filenameAbsPath, err)
@@ -78,8 +68,8 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 	return nil
 }
 
-func createFullPath(basePath string, backupRootDirName string, relPath string, mode os.FileMode) error {
-	joinedDirs := filepath.Join(basePath, backupRootDirName, relPath)
+func createFullPath(basePath string, backupRootDirName string, snapshotName string, relPath string, mode os.FileMode) error {
+	joinedDirs := filepath.Join(basePath, backupRootDirName, snapshotName, relPath)
 
 	// If directory does not exist, create it.  If it does exist, correct its mode bits if necessary.
 	if info, err := os.Stat(joinedDirs); errors.Is(err, fs.ErrNotExist) {
@@ -134,23 +124,12 @@ func isNonceOneMoreThanPrev(nonce []byte, prevNonce []byte) bool {
 	return z.Cmp(y) == 0
 }
 
-func RestoreDirEntryFromChunks(ctx context.Context, key []byte, restoreIntoDirPath string, encryptedRootDirName string, encryptedRelPathChunks []string, objst *objstore.ObjStore, bucket string) error {
+func RestoreDirEntryFromChunks(ctx context.Context, key []byte, restoreIntoDirPath string, objNames []string, rootDirName string, snapshotName string, relPath string, objst *objstore.ObjStore, bucket string) error {
 	// Strip any trailing slashes on destination path
 	restoreIntoDirPath = util.StripTrailingSlashes(restoreIntoDirPath)
 
-	// decrypt the root dir name and relative path
-	decryptedRootDirName, err := cryptography.DecryptFilename(key, encryptedRootDirName)
-	if err != nil {
-		log.Fatalf("error: could not decrypt root dir name: %v", err)
-	}
-	firstRelPathChunk := encryptedRelPathChunks[0]
-	decryptedRelPath, err := cryptography.DecryptFilename(key, firstRelPathChunk[0:len(firstRelPathChunk)-4])
-	if err != nil {
-		log.Fatalf("error: could not decrypt root dir name: %v", err)
-	}
-
 	// download the first chunk
-	ciphertextFirstChunkBuf, err := objst.DownloadObjToBuffer(ctx, bucket, encryptedRootDirName+"/"+firstRelPathChunk)
+	ciphertextFirstChunkBuf, err := objst.DownloadObjToBuffer(ctx, bucket, objNames[0])
 	if err != nil {
 		log.Fatalf("Error retrieving file: %v", err)
 	}
@@ -170,17 +149,17 @@ func RestoreDirEntryFromChunks(ctx context.Context, key []byte, restoreIntoDirPa
 	}
 
 	// create the directory containing this file in case it does not exist yet
-	dir, filename := filepath.Split(decryptedRelPath)
-	err = createFullPath(restoreIntoDirPath, decryptedRootDirName, dir, 0755) // TODO: fix hardcoded mode
+	dir, filename := filepath.Split(relPath)
+	err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, dir, 0755) // TODO: fix hardcoded mode
 	if err != nil {
 		log.Printf("error: could not create dir '%s': %v\n",
-			filepath.Join(restoreIntoDirPath, decryptedRootDirName, dir), err)
+			filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, dir), err)
 		return err
 	}
 
 	// create the file and write first chunk to it
 	_ = metadataPtr // not currently using metadata to create file
-	filenameAbsPath := filepath.Join(restoreIntoDirPath, decryptedRootDirName, dir, filename)
+	filenameAbsPath := filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, dir, filename)
 	file, err := os.Create(filenameAbsPath)
 	if err != nil {
 		log.Fatalf("RestoreDirEntryFromChunks: %v", err)
@@ -195,9 +174,9 @@ func RestoreDirEntryFromChunks(ctx context.Context, key []byte, restoreIntoDirPa
 	}
 
 	// for each of the remaining chunks
-	for _, encryptedRelPathChunk := range encryptedRelPathChunks[1:] {
+	for _, objName := range objNames[1:] {
 		// download the chunk
-		ciphertextNextChunkBuf, err := objst.DownloadObjToBuffer(ctx, bucket, encryptedRootDirName+"/"+encryptedRelPathChunk)
+		ciphertextNextChunkBuf, err := objst.DownloadObjToBuffer(ctx, bucket, objName)
 		if err != nil {
 			log.Fatalf("Error retrieving file: %v", err)
 		}

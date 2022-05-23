@@ -100,15 +100,5 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB) error
 	if err != nil {
 		log.Fatalf("Error in Traverse: %v\n", err)
 	}
-
-	// Any paths remaining in knownPaths represent files that have been deleted locally.
-	// Enqueue a work item to delete them from the cloud as well.
-	for missingPath := range knownPaths {
-		if err = db.EnqueueDeleteItem(missingPath); err != nil {
-			log.Printf("Could not enqueue delete of %s, skipping", missingPath)
-			return nil
-		}
-	}
-
 	return nil
 }

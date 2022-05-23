@@ -27,7 +27,7 @@ type dirEntMetadata struct {
 	XAttrs string
 }
 
-func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath string, dirEntId int, objst *objstore.ObjStore, bucket string) error {
+func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath string, snapshotName string, dirEntId int, objst *objstore.ObjStore, bucket string) error {
 	// strip any trailing slashes on destination path
 	backupDirPath = util.StripTrailingSlashes(backupDirPath)
 
@@ -58,10 +58,15 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 		return err
 	}
 
-	// encrypt dir entry name and root dir name
+	// encrypt dir entry name, snapshot name and root dir name
 	encryptedRelPath, err := cryptography.EncryptFilename(key, relPath)
 	if err != nil {
 		log.Printf("error: Backup(): could not encrypt rel path: %v\n", err)
+		return err
+	}
+	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotName)
+	if err != nil {
+		log.Printf("error: Backup(): could not encrypt snapshot name: %v\n", err)
 		return err
 	}
 	encryptedRootDirName, err := cryptography.EncryptFilename(key, rootDirName)
@@ -90,8 +95,8 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 			return err
 		}
 
-		// try to put the (encrypted filename, encrypted buffer) pair to obj store
-		objName := encryptedRootDirName + "/" + encryptedRelPath
+		// try to put the (encrypted filename, encrypted snapshot name, encrypted buffer) tuple to obj store
+		objName := encryptedRootDirName + "/" + encryptedSnapshotName + "/" + encryptedRelPath
 		if len(objName) > 320 { // 320 seems to be the magic key length limit for minio
 			log.Printf("WARN: skipping path b/c too long: '%s' (server max is 320 chars, len(objName) is %d chars)", relPath, len(objName))
 			return fmt.Errorf("skipped path '%s'", relPath)
@@ -149,7 +154,7 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 			}
 
 			// Form object name with .N appended
-			objName := encryptedRootDirName + "/" + encryptedRelPath + fmt.Sprintf(".%03d", i)
+			objName := encryptedRootDirName + "/" + encryptedSnapshotName + "/" + encryptedRelPath + fmt.Sprintf(".%03d", i)
 
 			// Upload encrypted readBuf
 			if len(objName) > 320 { // 320 seems to be the magic key length limit for minio
