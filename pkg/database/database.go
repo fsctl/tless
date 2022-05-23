@@ -63,14 +63,14 @@ func (db *DB) DropAllTables() error {
 }
 
 func (db *DB) CreateTablesIfNotExist() error {
-	sql := "SELECT count(*) FROM sqlite_master WHERE type='table' AND (name='dirents' OR name='queue');"
+	sql := "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='dirents';"
 	cnt, err := db.querySingleRowCount(sql)
 	if err != nil {
 		log.Printf("%q: %s\n", err, sql)
 		return err
 	}
 
-	if cnt != 2 {
+	if cnt != 1 {
 		err = db.createTables()
 		if err != nil {
 			log.Printf("Error: could not create tables")
@@ -122,38 +122,58 @@ func (db *DB) HasDirEnt(rootDirName string, relPath string) (isFound bool, lastB
 
 type InsertDirEntStmt struct {
 	stmt *sql.Stmt
+	tx   *sql.Tx
 }
 
 func NewInsertDirEntStmt(db *DB) (*InsertDirEntStmt, error) {
-	stmt, err := db.dbConn.Prepare("insert into dirents(rootdir, relpath, last_backup) values (?, ?, ?)")
+	tx, err := db.dbConn.Begin()
 	if err != nil {
-		log.Printf("Error: InsertDirEnt: %v", err)
+		log.Printf("Error: NewInsertDirEntStmt: %v", err)
 		return nil, err
 	}
 
-	return &InsertDirEntStmt{stmt: stmt}, nil
+	stmt, err := tx.Prepare("insert into dirents(rootdir, relpath, last_backup) values (?, ?, ?)")
+	if err != nil {
+		log.Printf("Error: NewInsertDirEntStmt: %v", err)
+		return nil, err
+	}
+
+	return &InsertDirEntStmt{stmt: stmt, tx: tx}, nil
 }
 
 func (idst *InsertDirEntStmt) Close() {
+	idst.tx.Commit()
+
 	idst.stmt.Close()
 }
 
 // Inserts a new path into dirent table and returns id of row.
-func (idst *InsertDirEntStmt) InsertDirEnt(rootDirName string, relPath string, lastBackupUnix int64) (int, error) {
-	result, err := idst.stmt.Exec(rootDirName, relPath, lastBackupUnix)
+func (idst *InsertDirEntStmt) InsertDirEnt(rootDirName string, relPath string, lastBackupUnix int64) error {
+	_, err := idst.stmt.Exec(rootDirName, relPath, lastBackupUnix)
 	if err != nil {
 		log.Printf("Error: InsertDirEnt: %v", err)
-		return 0, err
+		return err
 	}
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		log.Printf("Error: InsertDirEnt: %v", err)
-		return 0, err
-	}
-
-	return int(id), nil
+	return nil
 }
+
+// // Inserts a new path into dirent table and returns id of row.
+// func (idst *InsertDirEntStmt) InsertDirEnt(rootDirName string, relPath string, lastBackupUnix int64) (int, error) {
+// 	result, err := idst.stmt.Exec(rootDirName, relPath, lastBackupUnix)
+// 	if err != nil {
+// 		log.Printf("Error: InsertDirEnt: %v", err)
+// 		return 0, err
+// 	}
+
+// 	id, err := result.LastInsertId()
+// 	if err != nil {
+// 		log.Printf("Error: InsertDirEnt: %v", err)
+// 		return 0, err
+// 	}
+
+// 	return int(id), nil
+// }
 
 func (db *DB) GetAllKnownPaths(rootDirName string) (map[string]int, error) {
 	paths := make(map[string]int, 0)

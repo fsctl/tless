@@ -11,7 +11,8 @@
             "mode": "auto",
             "program": "${workspaceFolder}/main.go",
             //"args": ["restore", "backedup/2022-05-22_20:07:24", "/tmp/restore-here/"],
-            "args": ["backup", "-d", "/Applications/Microsoft Excel.app"],
+            //"args": ["backup", "-d", "/Applications/Microsoft Excel.app"],
+            "args": ["backup", "-d", "/tmp/test-backup-src"],
             // "args": ["cloudls", "--snapshot=backedup/2022-05-22_20:00:03"],
         },
     ]

@@ -37,7 +37,7 @@ fi
 diff -r /tmp/test-backup-src /tmp/test-restore-dst/$SNAPSHOT_NAME
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
-    echo "ERROR: source and restore directories do not match! (/tmp/test-restore/backedup)"
+    echo "ERROR: source and restore directories do not match!"
     exit 1
 fi
 
@@ -67,7 +67,7 @@ fi
 diff -r /tmp/test-backup-src /tmp/test-restore-dst/$SNAPSHOT_NAME
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
-    echo "ERROR: source and restore directories do not match! (/tmp/test-restore/backedup)"
+    echo "ERROR: source and restore directories do not match!"
     exit 1
 fi
 
