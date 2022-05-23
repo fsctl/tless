@@ -2,10 +2,8 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"log"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -80,7 +78,8 @@ func backupMain() {
 		if err != nil {
 			log.Fatalf("Error: cannot get paths list: %v", err)
 		}
-		fstraverse.Traverse(backupDirPath, prevPaths, db)
+		var backupIdsQueue fstraverse.BackupIdsQueue
+		fstraverse.Traverse(backupDirPath, prevPaths, db, &backupIdsQueue)
 
 		// Any remaining prevPaths represent deleted files, so upload keys to mark them deleted and remove from
 		// dirents table
@@ -90,22 +89,18 @@ func backupMain() {
 
 		// Work through the queue
 		for {
-			item, err := db.DequeueNextItem()
-			if errors.Is(err, database.ErrNoWork) {
-				log.Println("queue empty")
-				break
-			} else if err != nil {
-				log.Printf("error: cannot dequeue item: %v", err)
+			var id int = 0
+			backupIdsQueue.Lock.Lock()
+			if len(backupIdsQueue.Ids) >= 1 {
+				id = backupIdsQueue.Ids[0]
+				backupIdsQueue.Ids = backupIdsQueue.Ids[1:]
+			} else {
 				break
 			}
 
-			switch item.Action {
-			case database.QueueActionBackup:
-				doActionBackup(ctx, objst, cfgBucket, item, db, backupDirPath, snapshotName)
-			// case database.QueueActionDelete:
-			// 	doActionDelete(ctx, objst, cfgBucket, encKey, item, db, snapshotName)
-			default:
-				log.Printf("error: dequeued unrecognized '%s'", item.Action)
+			backupIdsQueue.Lock.Unlock()
+			if id != 0 {
+				doActionBackup(ctx, objst, cfgBucket, id, &backupIdsQueue, db, backupDirPath, snapshotName)
 			}
 		}
 	}
@@ -158,20 +153,6 @@ func createDeletedPathsKeysAndPurgeFromDb(ctx context.Context, objst *objstore.O
 	return nil
 }
 
-// SNAPSHOTTODO: delete this
-// func createDeletedPathsList(key []byte, deletedPaths map[string]int) string {
-// 	deletedPathsList := ""
-// 	for deletedPath := range deletedPaths {
-// 		encryptedDeletedPath, err := cryptography.EncryptFilename(key, deletedPath)
-// 		if err != nil {
-// 			log.Printf("error: could not encrypt filename %s: %v", deletedPath, err)
-// 			return ""
-// 		}
-// 		deletedPathsList = deletedPathsList + encryptedDeletedPath + "\n"
-// 	}
-// 	return deletedPathsList
-// }
-
 func trySaveSaltToServer(ctx context.Context, objst *objstore.ObjStore, bucket string) {
 	var salt string
 	salt, err := objst.TryReadSalt(ctx, bucket)
@@ -192,89 +173,22 @@ func trySaveSaltToServer(ctx context.Context, objst *objstore.ObjStore, bucket s
 	}
 }
 
-/*
-func doActionDelete(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, item *database.QueueItemDescription, db *database.DB, snapshotName string) {
-	// SNAPSHOTTODO:
-	// - this should go away
-	// - don't enqueue deletes
-	// - do them in bulk on return from Traverse to create one big DELETED file
-	////////////////////////////////
-
-	pathParts := strings.SplitN(item.Arg1, "/", 2)
-	backupDirName := pathParts[0]
-	relPath := pathParts[1]
-
-	// Encrypt backupDirName and relPath to get encrypted representations matching server
-	// object names
-	encryptedBackupDirName, err := cryptography.EncryptFilename(key, backupDirName)
-	if err != nil {
-		log.Printf("error: could not encrypt filename '%s'", backupDirName)
-		return
-	}
-	encryptedRelPath, err := cryptography.EncryptFilename(key, relPath)
-	if err != nil {
-		log.Printf("error: could not encrypt filename '%s'", relPath)
-		return
-	}
-
-	// Get a list of all objects starting with encryptedBackupDirName/encryptedRelPath. There
-	// may be >1 because of chunking.
-	objectsForPath, err := objst.GetObjList(ctx, bucket, encryptedBackupDirName+"/"+encryptedRelPath)
-	if err != nil {
-		log.Printf("GetObjList failed: %v", err)
-		return
-	}
-
-	// Delete all objects in list
-	for objectName := range objectsForPath {
-		err = objst.DeleteObj(ctx, bucket, objectName)
-		if err != nil {
-			log.Printf("DeleteObj failed: %v", err)
-			return
-		}
-	}
-
-	// Delete dirents row for backupDirName/relPath
-	err = db.DeleteDirEntByPath(backupDirName, relPath)
-	if err != nil {
-		log.Printf("DeleteDirEntByPath failed: %v", err)
-		return
-	}
-}
-*/
-
-func doActionBackup(ctx context.Context, objst *objstore.ObjStore, bucket string, item *database.QueueItemDescription, db *database.DB, backupDirPath string, snapshotName string) {
-	dirEntId, err := strconv.Atoi(item.Arg1)
-	if err != nil {
-		log.Printf("error: Atoi(): malformed arg1 '%s': %v", item.Arg1, err)
-		forceReEnqueueItem(db, item)
-		return
-	}
-	if err = backup.Backup(ctx, encKey, db, backupDirPath, snapshotName, dirEntId, objst, bucket); err != nil {
+func doActionBackup(ctx context.Context, objst *objstore.ObjStore, bucket string, dirEntId int, backupIdsQueue *fstraverse.BackupIdsQueue, db *database.DB, backupDirPath string, snapshotName string) {
+	if err := backup.Backup(ctx, encKey, db, backupDirPath, snapshotName, dirEntId, objst, bucket); err != nil {
 		log.Printf("error: Backup(): %v", err)
-		forceReEnqueueItem(db, item)
+		reEnqueue(backupIdsQueue, dirEntId)
 		return
 	}
-	err = db.UpdateLastBackupTime(dirEntId)
+	err := db.UpdateLastBackupTime(dirEntId)
 	if err != nil {
 		log.Printf("error: UpdateLastBackupTime(): %v", err)
-		forceReEnqueueItem(db, item)
+		reEnqueue(backupIdsQueue, dirEntId)
 		return
 	}
-	forceCompleteQueueItem(db, item)
 }
 
-// Calls CompleteQueueItem() and logs any error.  Returns nothing.
-func forceCompleteQueueItem(db *database.DB, item *database.QueueItemDescription) {
-	err := db.CompleteQueueItem(item.QueueId)
-	if err != nil {
-		log.Printf("warning: CompleteQueueItem(): %v", err)
-	}
-}
-
-func forceReEnqueueItem(db *database.DB, item *database.QueueItemDescription) {
-	err := db.ReEnqueuQueueItem(item.QueueId)
-	if err != nil {
-		log.Printf("warning: CompleteQueueItem(): %v", err)
-	}
+func reEnqueue(backupIdsQueue *fstraverse.BackupIdsQueue, dirEntId int) {
+	backupIdsQueue.Lock.Lock()
+	backupIdsQueue.Ids = append(backupIdsQueue.Ids, dirEntId)
+	backupIdsQueue.Lock.Unlock()
 }

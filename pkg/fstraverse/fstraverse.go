@@ -8,10 +8,16 @@ import (
 	"log"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/fsctl/trustlessbak/pkg/database"
 	"github.com/fsctl/trustlessbak/pkg/util"
 )
+
+type BackupIdsQueue struct {
+	Ids  []int
+	Lock sync.Mutex
+}
 
 func relativizePath(path string, prefix string) string {
 	relPath := strings.TrimPrefix(path, util.StripTrailingSlashes(prefix)+"/")
@@ -26,13 +32,20 @@ func getMTimeUnix(dirent fs.DirEntry) (int64, error) {
 	return info.ModTime().Unix(), nil
 }
 
-func Traverse(rootPath string, knownPaths map[string]int, db *database.DB) error {
+func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, backupIdsQueue *BackupIdsQueue) error {
 	rootPath = util.StripTrailingSlashes(rootPath)
 	rootDirName := filepath.Base(rootPath)
 
-	err := filepath.WalkDir(rootPath, func(path string, dirent fs.DirEntry, err error) error {
+	dirEntStmt, err := database.NewInsertDirEntStmt(db)
+	if err != nil {
+		log.Printf("error: NewInsertDirEntStmt: %v", err)
+		return err
+	}
+
+	err = filepath.WalkDir(rootPath, func(path string, dirent fs.DirEntry, err error) error {
 		if err != nil {
-			return err
+			log.Printf("error: WalkDirFunc: %v", err)
+			return fs.SkipDir
 		}
 		relPath := relativizePath(path, rootPath)
 		if relPath == rootPath {
@@ -77,22 +90,19 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB) error
 
 		if hasDirEnt {
 			if mtimeUnix > lastBackupUnix {
-				if err = db.EnqueueBackupItem(id); err != nil {
-					log.Printf("Could not enqueue backup of %s/%s, skipping", rootDirName, relPath)
-					return nil
-				}
+				backupIdsQueue.Lock.Lock()
+				backupIdsQueue.Ids = append(backupIdsQueue.Ids, id)
+				backupIdsQueue.Lock.Unlock()
 			}
 		} else {
-			id, err = db.InsertDirEnt(rootDirName, relPath, 0)
+			id, err = dirEntStmt.InsertDirEnt(rootDirName, relPath, 0)
 			if err != nil {
 				log.Printf("Could not insert %s/%s, so skipping enqueue", rootDirName, relPath)
 				return nil
 			}
-
-			if err = db.EnqueueBackupItem(id); err != nil {
-				log.Printf("Could not enqueue backup of %s/%s, skipping", rootDirName, relPath)
-				return nil
-			}
+			backupIdsQueue.Lock.Lock()
+			backupIdsQueue.Ids = append(backupIdsQueue.Ids, id)
+			backupIdsQueue.Lock.Unlock()
 		}
 
 		return nil
@@ -100,5 +110,6 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB) error
 	if err != nil {
 		log.Fatalf("Error in Traverse: %v\n", err)
 	}
+	dirEntStmt.Close()
 	return nil
 }

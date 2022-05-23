@@ -4,7 +4,6 @@ package database
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"log"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -91,6 +90,7 @@ func (db *DB) createTables() error {
 		relpath text,
 		last_backup integer
 	);
+	create index idx_rootdir_relpaths ON dirents (rootdir, relpath);
 	drop table if exists queue;
 	create table queue (
 		id integer not null primary key autoincrement, 
@@ -128,37 +128,72 @@ func (db *DB) HasDirEnt(rootDirName string, relPath string) (isFound bool, lastB
 	}
 }
 
+// // Inserts a new path into dirent table and returns id of row.
+// // Ref on dates:  https://www.sqlitetutorial.net/sqlite-date/
+// func (db *DB) InsertDirEnt(rootDirName string, relPath string, lastBackupUnix int64) (int, error) {
+// 	tx, err := db.dbConn.Begin()
+// 	if err != nil {
+// 		log.Printf("Error: InsertDirEnt: %v", err)
+// 		return 0, err
+// 	}
+
+// 	stmt, err := tx.Prepare("insert into dirents(rootdir, relpath, last_backup) values (?, ?, ?)")
+// 	if err != nil {
+// 		log.Printf("Error: InsertDirEnt: %v", err)
+// 		return 0, err
+// 	}
+// 	defer stmt.Close()
+
+// 	_, err = stmt.Exec(rootDirName, relPath, lastBackupUnix)
+// 	if err != nil {
+// 		log.Printf("Error: InsertDirEnt: %v", err)
+// 		return 0, err
+// 	}
+
+// 	tx.Commit()
+
+// 	// Get the id of the just-inserted row
+// 	isFound, _, id, err := db.HasDirEnt(rootDirName, relPath)
+// 	if !isFound || err != nil {
+// 		return 0, fmt.Errorf("could not find just-inserted row")
+// 	}
+
+// 	return id, nil
+// }
+
+type InsertDirEntStmt struct {
+	stmt *sql.Stmt
+}
+
+func NewInsertDirEntStmt(db *DB) (*InsertDirEntStmt, error) {
+	stmt, err := db.dbConn.Prepare("insert into dirents(rootdir, relpath, last_backup) values (?, ?, ?)")
+	if err != nil {
+		log.Printf("Error: InsertDirEnt: %v", err)
+		return nil, err
+	}
+
+	return &InsertDirEntStmt{stmt: stmt}, nil
+}
+
+func (st *InsertDirEntStmt) Close() {
+	st.stmt.Close()
+}
+
 // Inserts a new path into dirent table and returns id of row.
-// Ref on dates:  https://www.sqlitetutorial.net/sqlite-date/
-func (db *DB) InsertDirEnt(rootDirName string, relPath string, lastBackupUnix int64) (int, error) {
-	tx, err := db.dbConn.Begin()
+func (st *InsertDirEntStmt) InsertDirEnt(rootDirName string, relPath string, lastBackupUnix int64) (int, error) {
+	result, err := st.stmt.Exec(rootDirName, relPath, lastBackupUnix)
 	if err != nil {
 		log.Printf("Error: InsertDirEnt: %v", err)
 		return 0, err
 	}
 
-	stmt, err := tx.Prepare("insert into dirents(rootdir, relpath, last_backup) values (?, ?, ?)")
-	if err != nil {
-		log.Printf("Error: InsertDirEnt: %v", err)
-		return 0, err
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(rootDirName, relPath, lastBackupUnix)
+	id, err := result.LastInsertId()
 	if err != nil {
 		log.Printf("Error: InsertDirEnt: %v", err)
 		return 0, err
 	}
 
-	tx.Commit()
-
-	// Get the id of the just-inserted row
-	isFound, _, id, err := db.HasDirEnt(rootDirName, relPath)
-	if !isFound || err != nil {
-		return 0, fmt.Errorf("could not find just-inserted row")
-	}
-
-	return id, nil
+	return int(id), nil
 }
 
 func (db *DB) GetAllKnownPaths(rootDirName string) (map[string]int, error) {

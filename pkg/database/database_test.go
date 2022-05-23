@@ -14,12 +14,16 @@ func TestInsertAndGetPaths(t *testing.T) {
 	assert.NoError(t, db.DropAllTables())
 
 	assert.NoError(t, db.CreateTablesIfNotExist())
-	id, err := db.InsertDirEnt("root", "dir/dir2/file.txt", 0)
+
+	dirEntStmt, err := NewInsertDirEntStmt(db)
+	assert.NoError(t, err)
+	id, err := dirEntStmt.InsertDirEnt("root", "dir/dir2/file.txt", 0)
 	assert.NoError(t, err)
 	assert.Equal(t, id, 1)
-	id, err = db.InsertDirEnt("root", "dir/file", 0)
+	id, err = dirEntStmt.InsertDirEnt("root", "dir/file", 0)
 	assert.NoError(t, err)
 	assert.Equal(t, id, 2)
+	dirEntStmt.Close()
 
 	paths, err := db.GetAllKnownPaths("root")
 	assert.NoError(t, err)
@@ -46,8 +50,11 @@ func TestUpdateLastBackupTime(t *testing.T) {
 
 	assert.NoError(t, db.CreateTablesIfNotExist())
 
-	id, err := db.InsertDirEnt("root", "dir/dir2/file.txt", 0)
+	dirEntStmt, err := NewInsertDirEntStmt(db)
 	assert.NoError(t, err)
+	id, err := dirEntStmt.InsertDirEnt("root", "dir/dir2/file.txt", 0)
+	assert.NoError(t, err)
+	dirEntStmt.Close()
 
 	err = db.UpdateLastBackupTime(id)
 	assert.NoError(t, err)
@@ -66,8 +73,11 @@ func TestGetDirEntRelPath(t *testing.T) {
 
 	assert.NoError(t, db.CreateTablesIfNotExist())
 
-	insertId, err := db.InsertDirEnt("root", "dir/dir2/file.txt", 0)
+	dirEntStmt, err := NewInsertDirEntStmt(db)
 	assert.NoError(t, err)
+	insertId, err := dirEntStmt.InsertDirEnt("root", "dir/dir2/file.txt", 0)
+	assert.NoError(t, err)
+	dirEntStmt.Close()
 
 	rootDirName, relPath, err := db.GetDirEntPaths(insertId)
 	assert.NoError(t, err)

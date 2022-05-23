@@ -103,8 +103,8 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 
 		// try to put the (encrypted filename, encrypted snapshot name, encrypted buffer) tuple to obj store
 		objName := encryptedRootDirName + "/" + encryptedSnapshotName + "/" + encryptedRelPath
-		if len(objName) > 320 { // 320 seems to be the magic key length limit for minio
-			log.Printf("WARN: skipping path b/c too long: '%s' (server max is 320 chars, len(objName) is %d chars)", relPath, len(objName))
+		if len(objName) > 425 {
+			log.Printf("WARN: skipping path b/c too long: '%s' (server max is 425 chars, len(objName) is %d chars)", relPath, len(objName))
 			return fmt.Errorf("skipped path '%s'", relPath)
 		}
 		err = objst.UploadObjFromBuffer(ctx, bucket, objName, ciphertextBuf)
@@ -163,8 +163,8 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 			objName := encryptedRootDirName + "/" + encryptedSnapshotName + "/" + encryptedRelPath + fmt.Sprintf(".%03d", i)
 
 			// Upload encrypted readBuf
-			if len(objName) > 320 { // 320 seems to be the magic key length limit for minio
-				log.Printf("WARN: skipping path b/c too long: '%s' (server max is 320 chars, len(objName) is %d chars)", relPath, len(objName))
+			if len(objName) > 425 {
+				log.Printf("WARN: skipping path b/c too long: '%s' (server max is 425 chars, len(objName) is %d chars)", relPath, len(objName))
 				return fmt.Errorf("skipped path '%s'", relPath)
 			}
 			//TODO:  send this md5 as E-Tag, it works for minio.
