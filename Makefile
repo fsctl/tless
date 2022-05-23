@@ -13,7 +13,6 @@ clean:
 	@rm trustlessbak
 
 clean-state:
-	@rm trustlessbak
 	@rm trustlessbak-state.db
 
 test:

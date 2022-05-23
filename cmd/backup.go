@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/fsctl/trustlessbak/pkg/backup"
 	"github.com/fsctl/trustlessbak/pkg/cryptography"
@@ -72,12 +73,20 @@ func backupMain() {
 	for _, backupDirPath := range cfgDirs {
 		backupDirName := filepath.Base(backupDirPath)
 
+		snapshotName := time.Now().UTC().Format("2006-01-02_15:04:05")
+
 		// Traverse the filesystem looking for changed directory entries
 		prevPaths, err := db.GetAllKnownPaths(backupDirName)
 		if err != nil {
 			log.Fatalf("Error: cannot get paths list: %v", err)
 		}
 		fstraverse.Traverse(backupDirPath, prevPaths, db)
+
+		// Any remaining prevPaths represent deleted files, so upload keys to mark them deleted and remove from
+		// dirents table
+		if err = createDeletedPathsKeysAndPurgeFromDb(ctx, objst, cfgBucket, db, encKey, backupDirName, snapshotName, prevPaths); err != nil {
+			log.Println("error: failed creatingn deleted paths keys")
+		}
 
 		// Work through the queue
 		for {
@@ -92,9 +101,9 @@ func backupMain() {
 
 			switch item.Action {
 			case database.QueueActionBackup:
-				doActionBackup(ctx, objst, cfgBucket, item, db, backupDirPath)
-			case database.QueueActionDelete:
-				doActionDelete(ctx, objst, cfgBucket, encKey, item, db)
+				doActionBackup(ctx, objst, cfgBucket, item, db, backupDirPath, snapshotName)
+			// case database.QueueActionDelete:
+			// 	doActionDelete(ctx, objst, cfgBucket, encKey, item, db, snapshotName)
 			default:
 				log.Printf("error: dequeued unrecognized '%s'", item.Action)
 			}
@@ -103,6 +112,65 @@ func backupMain() {
 
 	log.Printf("done")
 }
+
+func createDeletedPathsKeysAndPurgeFromDb(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, key []byte, backupDirName string, snapshotName string, deletedPaths map[string]int) error {
+	// get the encrypted representation of backupDirName and snapshotName
+	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotName)
+	if err != nil {
+		log.Printf("error: createDeletedPathsKeys(): could not encrypt snapshot name (%s): %v\n", snapshotName, err)
+		return err
+	}
+	encryptedBackupDirName, err := cryptography.EncryptFilename(key, backupDirName)
+	if err != nil {
+		log.Printf("error: createDeletedPathsKeys(): could not encrypt backup dir name (%s): %v\n", backupDirName, err)
+		return err
+	}
+
+	// iterate over the deleted paths
+	for deletedPath := range deletedPaths {
+		// deletedPath is backupDirName/deletedRelPath.  Make it just deletedRelPath
+		deletedPath = strings.TrimPrefix(deletedPath, backupDirName)
+		deletedPath = strings.TrimPrefix(deletedPath, "/")
+
+		// encrypt the deleted path name
+		encryptedDeletedRelPath, err := cryptography.EncryptFilename(key, deletedPath)
+		if err != nil {
+			log.Printf("error: createDeletedPathsKeys(): could not encrypt deleted rel path ('%s'): %v\n", deletedPath, err)
+			return err
+		}
+
+		// create an object in this snapshot like encBackupDirName/encSnapshotName/__encRelPath
+		// where __ prefix indicates rel path was deleted since prev snapshot
+		objName := encryptedBackupDirName + "/" + encryptedSnapshotName + "/__" + encryptedDeletedRelPath
+		if err = objst.UploadObjFromBuffer(ctx, bucket, objName, make([]byte, 0)); err != nil {
+			log.Printf("error: createDeletedPathsKeys(): could not UploadObjFromBuffer ('%s'): %v\n", objName, err)
+			return err
+		}
+
+		// Delete dirents row for backupDirName/relPath
+		err = db.DeleteDirEntByPath(backupDirName, deletedPath)
+		if err != nil {
+			log.Printf("DeleteDirEntByPath failed: %v", err)
+			return err
+		}
+	}
+
+	return nil
+}
+
+// SNAPSHOTTODO: delete this
+// func createDeletedPathsList(key []byte, deletedPaths map[string]int) string {
+// 	deletedPathsList := ""
+// 	for deletedPath := range deletedPaths {
+// 		encryptedDeletedPath, err := cryptography.EncryptFilename(key, deletedPath)
+// 		if err != nil {
+// 			log.Printf("error: could not encrypt filename %s: %v", deletedPath, err)
+// 			return ""
+// 		}
+// 		deletedPathsList = deletedPathsList + encryptedDeletedPath + "\n"
+// 	}
+// 	return deletedPathsList
+// }
 
 func trySaveSaltToServer(ctx context.Context, objst *objstore.ObjStore, bucket string) {
 	var salt string
@@ -124,7 +192,14 @@ func trySaveSaltToServer(ctx context.Context, objst *objstore.ObjStore, bucket s
 	}
 }
 
-func doActionDelete(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, item *database.QueueItemDescription, db *database.DB) {
+/*
+func doActionDelete(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, item *database.QueueItemDescription, db *database.DB, snapshotName string) {
+	// SNAPSHOTTODO:
+	// - this should go away
+	// - don't enqueue deletes
+	// - do them in bulk on return from Traverse to create one big DELETED file
+	////////////////////////////////
+
 	pathParts := strings.SplitN(item.Arg1, "/", 2)
 	backupDirName := pathParts[0]
 	relPath := pathParts[1]
@@ -166,15 +241,16 @@ func doActionDelete(ctx context.Context, objst *objstore.ObjStore, bucket string
 		return
 	}
 }
+*/
 
-func doActionBackup(ctx context.Context, objst *objstore.ObjStore, bucket string, item *database.QueueItemDescription, db *database.DB, backupDirPath string) {
+func doActionBackup(ctx context.Context, objst *objstore.ObjStore, bucket string, item *database.QueueItemDescription, db *database.DB, backupDirPath string, snapshotName string) {
 	dirEntId, err := strconv.Atoi(item.Arg1)
 	if err != nil {
 		log.Printf("error: Atoi(): malformed arg1 '%s': %v", item.Arg1, err)
 		forceReEnqueueItem(db, item)
 		return
 	}
-	if err = backup.Backup(ctx, encKey, db, backupDirPath, dirEntId, objst, bucket); err != nil {
+	if err = backup.Backup(ctx, encKey, db, backupDirPath, snapshotName, dirEntId, objst, bucket); err != nil {
 		log.Printf("error: Backup(): %v", err)
 		forceReEnqueueItem(db, item)
 		return
