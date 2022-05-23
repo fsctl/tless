@@ -45,10 +45,16 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 		log.Printf("error: Backup(): could not stat '%s'\n", absPath)
 		return err
 	}
+	// get the xattrs if any
+	xattrs, err := serializeXAttrsToHex(absPath)
+	if err != nil {
+		log.Printf("error: Backup(): could not serialize xattrs for '%s'\n", absPath)
+		return err
+	}
 	metadata := dirEntMetadata{
 		IsDir:  info.IsDir(),
 		MTime:  info.ModTime().Unix(),
-		XAttrs: "(not implemented yet)",
+		XAttrs: xattrs,
 	}
 
 	// serialize metadata into buffer with 8-byte length prefix
