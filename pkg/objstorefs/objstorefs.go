@@ -53,29 +53,36 @@ func GetGroupedSnapshots(ctx context.Context, objst *objstore.ObjStore, key []by
 			continue
 		}
 
-		// We expect everything after this to be backupName/snapshotName/relPath. So,
-		// if objName is not splittable by slashes into 3 parts, ignore it.
+		// We expect everything after this to be backupName/snapshotName/relP/ath.
+		// (relPath is split in half by a slash to overcome server limitations.) So,
+		// if objName is not splittable by slashes into 4 parts, ignore it.
 		parts := strings.Split(objName, "/")
-		if len(parts) != 3 {
+		if len(parts) != 4 {
+			log.Printf("error: object name not in proper format '%s' (skipping)", objName)
 			continue
 		}
 		encBackupName := parts[0]
 		encSnapshotName := parts[1]
-		encRelPath := parts[2]
+		encRelPath := parts[2] + "/" + parts[3]
+		encRelPathWithoutSlash := parts[2] + parts[3]
 
 		// Get the prefix and suffix stripped versions of encRelPath
 		isDeleted := false
 		encRelPathStripped := encRelPath
+		encRelPathWithoutSlashStripped := encRelPathWithoutSlash
 		if strings.HasPrefix(encRelPath, "__") {
 			encRelPathStripped = strings.TrimPrefix(encRelPathStripped, "__")
+			encRelPathWithoutSlashStripped = strings.TrimPrefix(encRelPathWithoutSlashStripped, "__")
 			isDeleted = true
 		}
 		hasDot := reDot.FindAllString(encRelPathStripped, -1) != nil
 		if hasDot {
+			// strip trailing .NNN if present
 			encRelPathStripped = encRelPathStripped[:len(encRelPathStripped)-4]
+			encRelPathWithoutSlashStripped = encRelPathWithoutSlashStripped[:len(encRelPathWithoutSlashStripped)-4]
 		}
 
-		backupName, snapshotName, relPath, err := decryptNamesTriplet(key, encBackupName, encSnapshotName, encRelPathStripped)
+		backupName, snapshotName, relPath, err := decryptNamesTriplet(key, encBackupName, encSnapshotName, encRelPathWithoutSlashStripped)
 		if err != nil {
 			continue
 		}

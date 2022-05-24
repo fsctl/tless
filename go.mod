@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/mattn/go-sqlite3 v1.14.13
 	github.com/minio/minio-go/v7 v7.0.26
+	github.com/pkg/xattr v0.4.7
 	github.com/secure-io/siv-go v0.0.0-20180922214919-5ff40651e2c4
 	github.com/sethvargo/go-diceware v0.3.0
 	github.com/spf13/cobra v1.4.0
