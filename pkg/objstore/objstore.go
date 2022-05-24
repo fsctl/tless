@@ -80,7 +80,7 @@ func (os *ObjStore) UploadObjFromBuffer(ctx context.Context, bucket string, obje
 	// Upload the file with FPutObject
 	info, err := os.minioClient.PutObject(ctx, bucket, objectName, reader, int64(len(buffer)), minio.PutObjectOptions{ContentType: contentType, PartSize: 129 * 1024 * 1024})
 	if err != nil {
-		log.Printf("error: UploadObjFromBuffer (%s): %v", objectName, err)
+		log.Println("error: UploadObjFromBuffer: ", err)
 		return err
 	}
 
@@ -114,7 +114,7 @@ func (os *ObjStore) DownloadObjToBuffer(ctx context.Context, bucket string, obje
 
 	stat, err := reader.Stat()
 	if err != nil {
-		log.Printf("error: DownloadObjToBuffer (Stat on '%s'): %v", objectName, err)
+		log.Println("error: DownloadObjToBuffer (Stat): ", err)
 		return nil, err
 	}
 

@@ -10,9 +10,8 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}/main.go",
-            "args": ["restore", "test-backup-src/2022-05-24_20:14:59", "/tmp/restore-here/"],
-            //"args": ["backup", "-d", "/Applications/Microsoft Excel.app"],
-            // "args": ["backup", "-d", "/tmp/test-backup-src"],
+            "args": ["restore", "backedup/2022-05-22_20:07:24", "/tmp/restore-here/"],
+            // "args": ["backup"],
             // "args": ["cloudls", "--snapshot=backedup/2022-05-22_20:00:03"],
         },
     ]

@@ -48,11 +48,6 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 				filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, relPath), err)
 			return err
 		}
-		if err = deserializeAndSetXAttrs(filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, relPath), metadataPtr.XAttrs); err != nil {
-			log.Printf("error: could not set xattrs on dir '%s': %v\n",
-				filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, relPath), err)
-			return err
-		}
 	} else {
 		dir, filename := filepath.Split(relPath)
 		// TODO: fix hardcoded mode
@@ -67,10 +62,6 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 		err = writeBufferToFile(fileContents, filenameAbsPath)
 		if err != nil {
 			log.Printf("error: could not write file '%s': %v\n", filenameAbsPath, err)
-			return err
-		}
-		if err = deserializeAndSetXAttrs(filenameAbsPath, metadataPtr.XAttrs); err != nil {
-			log.Printf("error: could not set xattrs on file '%s': %v\n", filenameAbsPath, err)
 			return err
 		}
 	}
@@ -212,11 +203,6 @@ func RestoreDirEntryFromChunks(ctx context.Context, key []byte, restoreIntoDirPa
 
 		// save nonce as new prevNonce
 		prevNonce = nonce
-	}
-
-	if err = deserializeAndSetXAttrs(filenameAbsPath, metadataPtr.XAttrs); err != nil {
-		log.Printf("error: could not set xattrs on multi-chunk file '%s': %v\n", filenameAbsPath, err)
-		return err
 	}
 
 	return nil

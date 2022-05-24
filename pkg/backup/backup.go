@@ -45,16 +45,10 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 		log.Printf("error: Backup(): could not stat '%s'\n", absPath)
 		return err
 	}
-	// get the xattrs if any
-	xattrs, err := serializeXAttrsToHex(absPath)
-	if err != nil {
-		log.Printf("error: Backup(): could not serialize xattrs for '%s'\n", absPath)
-		return err
-	}
 	metadata := dirEntMetadata{
 		IsDir:  info.IsDir(),
 		MTime:  info.ModTime().Unix(),
-		XAttrs: xattrs,
+		XAttrs: "(not implemented yet)",
 	}
 
 	// serialize metadata into buffer with 8-byte length prefix
@@ -101,12 +95,12 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 			return err
 		}
 
-		// Insert a slash in the middle of encrypted relPath b/c server won't
-		// allow path components > 255 characters
-		encryptedRelPath = InsertSlashIntoEncRelPath(encryptedRelPath)
-
-		// try to put the (encrypted filename, encrypted snapshot name, encrypted relPath) tuple to obj store
+		// try to put the (encrypted filename, encrypted snapshot name, encrypted buffer) tuple to obj store
 		objName := encryptedRootDirName + "/" + encryptedSnapshotName + "/" + encryptedRelPath
+		if len(objName) > 320 { // 320 seems to be the magic key length limit for minio
+			log.Printf("WARN: skipping path b/c too long: '%s' (server max is 320 chars, len(objName) is %d chars)", relPath, len(objName))
+			return fmt.Errorf("skipped path '%s'", relPath)
+		}
 		err = objst.UploadObjFromBuffer(ctx, bucket, objName, ciphertextBuf)
 		if err != nil {
 			log.Printf("error: Backup(): backing up file: %v\n", err)
@@ -129,10 +123,6 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 			return err
 		}
 		defer f.Close()
-
-		// Insert a slash in the middle of encrypted relPath b/c server won't
-		// allow path components > 255 characters
-		encryptedRelPath = InsertSlashIntoEncRelPath(encryptedRelPath)
 
 		// Loop until last partial chunk is processed
 		i := 0
@@ -167,6 +157,10 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 			objName := encryptedRootDirName + "/" + encryptedSnapshotName + "/" + encryptedRelPath + fmt.Sprintf(".%03d", i)
 
 			// Upload encrypted readBuf
+			if len(objName) > 320 { // 320 seems to be the magic key length limit for minio
+				log.Printf("WARN: skipping path b/c too long: '%s' (server max is 320 chars, len(objName) is %d chars)", relPath, len(objName))
+				return fmt.Errorf("skipped path '%s'", relPath)
+			}
 			//TODO:  send this md5 as E-Tag, it works for minio.
 			//But note that to compute it on the client, you need to know the nonce, which is
 			//bad for the case when you're just checking local file against what's on the server.
@@ -187,13 +181,6 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 	log.Printf("Backed up %s\n", relPath)
 
 	return nil
-}
-
-func InsertSlashIntoEncRelPath(encryptedRelPath string) string {
-	encryptedRelPath1 := encryptedRelPath[:len(encryptedRelPath)/2]
-	encryptedRelPath2 := encryptedRelPath[len(encryptedRelPath)/2:]
-	encryptedRelPath = encryptedRelPath1 + "/" + encryptedRelPath2
-	return encryptedRelPath
 }
 
 func incrementNonce(nonce []byte) []byte {
