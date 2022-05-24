@@ -134,6 +134,10 @@ func createDeletedPathsKeysAndPurgeFromDb(ctx context.Context, objst *objstore.O
 			return err
 		}
 
+		// Insert a slash in the middle of encrypted relPath b/c server won't
+		// allow path components > 255 characters
+		encryptedDeletedRelPath = backup.InsertSlashIntoEncRelPath(encryptedDeletedRelPath)
+
 		// create an object in this snapshot like encBackupDirName/encSnapshotName/__encRelPath
 		// where __ prefix indicates rel path was deleted since prev snapshot
 		objName := encryptedBackupDirName + "/" + encryptedSnapshotName + "/__" + encryptedDeletedRelPath
