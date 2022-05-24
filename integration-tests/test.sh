@@ -10,9 +10,13 @@ rm -rf /tmp/test-restore-dst
 # Create backup source file hierarchy
 mkdir -p /tmp/test-backup-src/emptydir
 mkdir -p /tmp/test-backup-src/subdir1
-echo "Hello, world" > /tmp/test-backup-src/subdir1/file.txt
+echo "Hello, world!" > /tmp/test-backup-src/subdir1/file.txt
 mkdir -p /tmp/test-backup-src/subdir2
 dd if=/dev/random of=/tmp/test-backup-src/subdir2/bigfile.bin bs=$((1024*1024)) count=512
+# Tests really long path name:
+mkdir -p /tmp/test-backup-src/really/long/path/Xcode.app.Contents.Developer.Platforms.iPhoneOS.platform.Library.Developer.CoreSimulator.Profiles.Runtimes.iOS.simruntime.Contents.Resources.RuntimeRoot.System.Library.Assistant.UIPlugins.GeneralKnowledge.siriUIBundle.en_AU.lproj
+echo "Small file" > /tmp/test-backup-src/really/long/path/Xcode.app.Contents.Developer.Platforms.iPhoneOS.platform.Library.Developer.CoreSimulator.Profiles.Runtimes.iOS.simruntime.Contents.Resources.RuntimeRoot.System.Library.Assistant.UIPlugins.GeneralKnowledge.siriUIBundle.en_AU.lproj/small.txt
+dd if=/dev/random of=/tmp/test-backup-src/really/long/path/Xcode.app.Contents.Developer.Platforms.iPhoneOS.platform.Library.Developer.CoreSimulator.Profiles.Runtimes.iOS.simruntime.Contents.Resources.RuntimeRoot.System.Library.Assistant.UIPlugins.GeneralKnowledge.siriUIBundle.en_AU.lproj/big.bin bs=$((1024*1024)) count=130
 
 # Backup /tmp/test-backup-src to cloud.
 ./trustlessbak backup -d /tmp/test-backup-src
@@ -23,7 +27,7 @@ if [[ $EXITCODE != 0 ]]; then
 fi
 
 # Get the snapshot names to specify in restore
-SNAPSHOT_NAME=`./trustlessbak cloudls --grep | grep test-backup-src`
+SNAPSHOT_NAME=`./trustlessbak cloudls --grep | tail -n -1`
 
 # Restore to /tmp/test-restore-dst/
 ./trustlessbak restore $SNAPSHOT_NAME /tmp/test-restore-dst/
