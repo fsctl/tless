@@ -105,12 +105,8 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 		if !info.IsDir() && !isSymlink {
 			buf, err = cryptography.AppendEntireFileToBuffer(absPath, buf)
 			if err != nil {
-				//if _, ok := err.(*os.PathError); !ok {
 				log.Printf("error: Backup(): AppendEntireFileToBuffer failed: %v\n", err)
 				return err
-				//} else {
-				//	return nil
-				//}
 			}
 		}
 
