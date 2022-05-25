@@ -28,6 +28,11 @@ cd /tmp/test-backup-src/subdir3
 ln -s ../subdir1 subdir1link
 ln -s ../subdir1/file.txt file.txt.link
 cd $CWD
+# Test xattrs
+mkdir -p /tmp/test-backup-src/xattrs
+echo "Hello" > /tmp/test-backup-src/xattrs/xattr-file
+xattr -w xattr.name xattr-file /tmp/test-backup-src/xattrs/xattr-file
+xattr -w xattr.name xattrs /tmp/test-backup-src/xattrs
 
 # Backup /tmp/test-backup-src to cloud.
 echo "🧪 Testing initial backup..."
@@ -64,6 +69,20 @@ FILE_MODE_BITS_SRC=`ls -la /tmp/test-backup-src/subdir1/file.txt | cut -c 1-10`
 FILE_MODE_BITS_DST=`ls -la /tmp/test-restore-dst/$SNAPSHOT_NAME/subdir1/file.txt | cut -c 1-10`
 if [[ "$FILE_MODE_BITS_SRC" != "$FILE_MODE_BITS_DST" ]]; then
     echo "ERROR: mode bits do not match on subdir1/file"
+    exit 1
+fi
+
+# Compare xattrs on xattrs and xattrs/xattr-file
+XATTRS_FILE_SRC=`xattr -p xattr.name /tmp/test-backup-src/xattrs/xattr-file`
+XATTRS_FILE_DST=`xattr -p xattr.name /tmp/test-restore-dst/$SNAPSHOT_NAME/xattrs/xattr-file`
+if [[ "$XATTRS_FILE_SRC" != "$XATTRS_FILE_DST" ]]; then
+    echo "ERROR: xattrs do not match on xattrs/xattr-file"
+    exit 1
+fi
+XATTRS_DIR_SRC=`xattr -p xattr.name /tmp/test-backup-src/xattrs`
+XATTRS_DIR_DST=`xattr -p xattr.name /tmp/test-restore-dst/$SNAPSHOT_NAME/xattrs`
+if [[ "$XATTRS_DIR_SRC" != "$XATTRS_DIR_DST" ]]; then
+    echo "ERROR: xattrs do not match on directory xattrs"
     exit 1
 fi
 

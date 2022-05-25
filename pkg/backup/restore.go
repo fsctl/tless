@@ -56,6 +56,8 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 		if err := os.Symlink(metadataPtr.SymlinkOrigin, linkNameAbsPath); err != nil {
 			log.Printf("error: could not create symlink '%s': %v\n", linkNameAbsPath, err)
 		}
+
+		// We don't worry about xattrs on symlink entries
 	} else if metadataPtr.IsDir {
 		err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, relPath, fs.FileMode(metadataPtr.Mode))
 		if err != nil {
