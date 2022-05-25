@@ -9,6 +9,13 @@ import (
 )
 
 var (
+	extrasCmd = &cobra.Command{
+		Use:   "extras",
+		Short: "Additional commands",
+		Long:  `Additional, less commonly used commands.`,
+		Args:  cobra.NoArgs,
+	}
+
 	checkConnCmd = &cobra.Command{
 		Use:   "check-conn",
 		Short: "Checks connectivity to object store server",
@@ -17,7 +24,7 @@ store using the credentials in the config file.
 
 Example:
 
-	trustlessbak check-conn
+	trustlessbak extras check-conn
 `,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -27,7 +34,8 @@ Example:
 )
 
 func init() {
-	rootCmd.AddCommand(checkConnCmd)
+	extrasCmd.AddCommand(checkConnCmd)
+	rootCmd.AddCommand(extrasCmd)
 }
 
 func checkConnMain() {
