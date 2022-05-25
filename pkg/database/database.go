@@ -158,23 +158,6 @@ func (idst *InsertDirEntStmt) InsertDirEnt(rootDirName string, relPath string, l
 	return nil
 }
 
-// // Inserts a new path into dirent table and returns id of row.
-// func (idst *InsertDirEntStmt) InsertDirEnt(rootDirName string, relPath string, lastBackupUnix int64) (int, error) {
-// 	result, err := idst.stmt.Exec(rootDirName, relPath, lastBackupUnix)
-// 	if err != nil {
-// 		log.Printf("Error: InsertDirEnt: %v", err)
-// 		return 0, err
-// 	}
-
-// 	id, err := result.LastInsertId()
-// 	if err != nil {
-// 		log.Printf("Error: InsertDirEnt: %v", err)
-// 		return 0, err
-// 	}
-
-// 	return int(id), nil
-// }
-
 func (db *DB) GetAllKnownPaths(rootDirName string) (map[string]int, error) {
 	paths := make(map[string]int, 0)
 

@@ -100,14 +100,6 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, backu
 				backupIdsQueue.Lock.Unlock()
 			}
 		} else {
-			// id, err = dirEntStmt.InsertDirEnt(rootDirName, relPath, 0)
-			// if err != nil {
-			// 	log.Printf("Could not insert %s/%s, so skipping enqueue", rootDirName, relPath)
-			// 	return nil
-			// }
-			// backupIdsQueue.Lock.Lock()
-			// backupIdsQueue.Ids = append(backupIdsQueue.Ids, id)
-			// backupIdsQueue.Lock.Unlock()
 			pendingDirEntryInserts = append(pendingDirEntryInserts, dirEntryInsert{rootPath: rootDirName, relPath: relPath, lastBackupUnixtime: 0})
 		}
 

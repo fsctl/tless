@@ -55,21 +55,6 @@ func (os *ObjStore) IsReachableWithRetries(ctx context.Context, maxWaitSeconds i
 	return false
 }
 
-// func (os *ObjStore) UploadObjFromFile(ctx context.Context, objectName string, filePath string) error {
-// 	// Upload the file
-// 	contentType := "application/octet-stream"
-//
-// 	// Upload the file with FPutObject
-// 	info, err := os.minioClient.FPutObject(ctx, "backups", objectName, filePath, minio.PutObjectOptions{ContentType: contentType})
-// 	if err != nil {
-// 		log.Fatalln(err)
-// 	}
-//
-// 	log.Printf("Successfully uploaded %s of size %d\n", objectName, info.Size)
-//
-// 	return nil
-// }
-
 func (os *ObjStore) UploadObjFromBuffer(ctx context.Context, bucket string, objectName string, buffer []byte) error {
 	// Upload the file
 	contentType := "application/octet-stream"
@@ -89,15 +74,6 @@ func (os *ObjStore) UploadObjFromBuffer(ctx context.Context, bucket string, obje
 
 	return nil
 }
-
-// func (os *ObjStore) DownloadObjToFile(ctx context.Context, objectName string, filePath string) error {
-// 	if err := os.minioClient.FGetObject(ctx, "backups", objectName, filePath, minio.GetObjectOptions{}); err != nil {
-// 		log.Fatalln(err)
-// 	}
-//
-// 	log.Printf("Successfully downloaded to %s\n", objectName)
-// 	return nil
-// }
 
 func (os *ObjStore) DownloadObjToBuffer(ctx context.Context, bucket string, objectName string) ([]byte, error) {
 	// Upload the file with FPutObject

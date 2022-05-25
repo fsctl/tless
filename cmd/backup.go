@@ -143,7 +143,17 @@ func backupMain() {
 			}
 			backupIdsQueue.Lock.Unlock()
 			if id != 0 {
-				doActionBackup(ctx, objst, cfgBucket, id, &backupIdsQueue, db, backupDirPath, snapshotName, cfgVerbose)
+				if err := backup.Backup(ctx, encKey, db, backupDirPath, snapshotName, id, objst, cfgBucket, cfgVerbose); err != nil {
+					log.Printf("error: Backup(): %v", err)
+					reEnqueue(&backupIdsQueue, id)
+					return
+				}
+				err := db.UpdateLastBackupTime(id)
+				if err != nil {
+					log.Printf("error: UpdateLastBackupTime(): %v", err)
+					reEnqueue(&backupIdsQueue, id)
+					return
+				}
 			}
 
 			// Update the progress bar
@@ -242,20 +252,6 @@ func trySaveSaltToServer(ctx context.Context, objst *objstore.ObjStore, bucket s
 		// Warn user that we found a different salt on the server than what we have locally
 		log.Printf("warning: local salt =/= server saved salt; using local config salt ('%s') and ignoring server salt ('%s')\n", cfgSalt, salt)
 	} else {
-		return
-	}
-}
-
-func doActionBackup(ctx context.Context, objst *objstore.ObjStore, bucket string, dirEntId int, backupIdsQueue *fstraverse.BackupIdsQueue, db *database.DB, backupDirPath string, snapshotName string, showNameOnSuccess bool) {
-	if err := backup.Backup(ctx, encKey, db, backupDirPath, snapshotName, dirEntId, objst, bucket, showNameOnSuccess); err != nil {
-		log.Printf("error: Backup(): %v", err)
-		reEnqueue(backupIdsQueue, dirEntId)
-		return
-	}
-	err := db.UpdateLastBackupTime(dirEntId)
-	if err != nil {
-		log.Printf("error: UpdateLastBackupTime(): %v", err)
-		reEnqueue(backupIdsQueue, dirEntId)
 		return
 	}
 }
