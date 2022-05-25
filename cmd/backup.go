@@ -13,7 +13,10 @@ import (
 	"github.com/fsctl/trustlessbak/pkg/database"
 	"github.com/fsctl/trustlessbak/pkg/fstraverse"
 	"github.com/fsctl/trustlessbak/pkg/objstore"
+
 	"github.com/spf13/cobra"
+	"github.com/vbauerster/mpb/v7"
+	"github.com/vbauerster/mpb/v7/decor"
 )
 
 var (
@@ -69,6 +72,9 @@ func backupMain() {
 	}
 	trySaveSaltToServer(ctx, objst, cfgBucket)
 
+	// initialize progress bar container
+	progressBarContainer := mpb.New()
+
 	for _, backupDirPath := range cfgDirs {
 		backupDirName := filepath.Base(backupDirPath)
 
@@ -81,6 +87,28 @@ func backupMain() {
 		}
 		var backupIdsQueue fstraverse.BackupIdsQueue
 		fstraverse.Traverse(backupDirPath, prevPaths, db, &backupIdsQueue)
+
+		// create the progress bar
+		var progressBarTotalItems int
+		var progressBar *mpb.Bar = nil
+		if !cfgVerbose {
+			backupIdsQueue.Lock.Lock()
+			progressBarTotalItems = len(backupIdsQueue.Ids)
+			backupIdsQueue.Lock.Unlock()
+
+			progressBar = progressBarContainer.New(
+				int64(progressBarTotalItems),
+				mpb.BarStyle().Lbound("[").Filler("=").Tip(">").Rbound("]"),
+				mpb.PrependDecorators(
+					decor.Name(backupDirName, decor.WC{W: len(backupDirName) + 1, C: decor.DidentRight}),
+					// replace ETA decorator with "done" message on OnComplete event
+					decor.OnComplete(
+						decor.AverageETA(decor.ET_STYLE_GO, decor.WC{W: 4}), "done",
+					),
+				),
+				mpb.AppendDecorators(decor.Percentage()),
+			)
+		}
 
 		// Any remaining prevPaths represent deleted files, so upload keys to mark them deleted and remove from
 		// dirents table
@@ -103,11 +131,18 @@ func backupMain() {
 			if id != 0 {
 				doActionBackup(ctx, objst, cfgBucket, id, &backupIdsQueue, db, backupDirPath, snapshotName, cfgVerbose)
 			}
+
+			// Update the progress bar
+			if !cfgVerbose {
+				progressBar.Increment()
+			}
 		}
 	}
 
 	if cfgVerbose {
 		fmt.Printf("done\n")
+	} else {
+		progressBarContainer.Wait()
 	}
 }
 
