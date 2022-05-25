@@ -47,11 +47,29 @@ Example:
 			wipeServerMain()
 		},
 	}
+
+	genTemplateCmd = &cobra.Command{
+		Use:   "print-template",
+		Short: "Prints a config file template to stdout",
+		Long: `Run this command to print an example $HOME/.trustlessbak/config.toml file template. This
+template can be copy-pasted into an actual config file, and includes comments to help you fill it
+in with your settings.
+
+Example:
+
+	trustlessbak extras print-template
+`,
+		Args: cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			genTemplateMain()
+		},
+	}
 )
 
 func init() {
 	extrasCmd.AddCommand(checkConnCmd)
 	extrasCmd.AddCommand(wipeServerCmd)
+	extrasCmd.AddCommand(genTemplateCmd)
 	rootCmd.AddCommand(extrasCmd)
 }
 
@@ -83,4 +101,9 @@ func wipeServerMain() {
 			}
 		}
 	}
+}
+
+func genTemplateMain() {
+	template := generateConfigTemplate()
+	fmt.Println(template)
 }

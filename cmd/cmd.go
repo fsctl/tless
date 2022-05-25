@@ -122,6 +122,13 @@ for the program to work.
 }
 
 func writeTemplateConfigToPath(configFilePath string) {
+	template := generateConfigTemplate()
+	if err := os.WriteFile(configFilePath, []byte(template), 0600); err != nil {
+		fmt.Println("Unable to write template file: ", err)
+	}
+}
+
+func generateConfigTemplate() string {
 	template := `[objectstore]
 # Customize this section with the real host:port of your S3-compatible object 
 # store, your credentials for the object store, and a bucket you have ALREADY 
@@ -153,9 +160,7 @@ master_password = "`
 # on the object store server as 'SALT-[salt_string]' in the bucket root.
 salt = "`
 	template += cryptography.GenerateRandomSalt() + "\"\n"
-	if err := os.WriteFile(configFilePath, []byte(template), 0600); err != nil {
-		fmt.Println("Unable to write template file: ", err)
-	}
+	return template
 }
 
 func configFallbackToTomlFile() {
