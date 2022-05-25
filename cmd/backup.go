@@ -142,7 +142,8 @@ func backupMain() {
 	if cfgVerbose {
 		fmt.Printf("done\n")
 	} else {
-		progressBarContainer.Wait()
+		// Give progress bar 0.1 sec to draw itself for final time
+		time.Sleep(1e8)
 	}
 }
 

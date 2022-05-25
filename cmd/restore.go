@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/fsctl/trustlessbak/pkg/backup"
 	"github.com/fsctl/trustlessbak/pkg/objstore"
@@ -109,6 +110,7 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 
 	// Let the progress bar finish and reach 100%
 	if !cfgVerbose {
-		progressBarContainer.Wait()
+		// Give progress bar 0.1 sec to draw itself for final time
+		time.Sleep(1e8)
 	}
 }
