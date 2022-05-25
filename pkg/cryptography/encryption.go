@@ -106,7 +106,7 @@ func AppendEntireFileToBuffer(path string, buf []byte) ([]byte, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		// There are valid reasons why a file might not be openable (eg might have disappeared since we traversed the dir)
-		//log.Printf("AppendEntireFileToBuffer: %v", err)
+		log.Printf("AppendEntireFileToBuffer: %v", err)
 		return nil, err
 	}
 	defer file.Close()
