@@ -1,11 +1,13 @@
 #!/bin/bash
 
+# Set to '-v' for verbose output
+VERBOSE=
+
 # Clean up from last run
-echo "Did you wipe the cloud machine?  Press ENTER when ready..."
-read 
 rm trustlessbak-state.db
 rm -rf /tmp/test-backup-src
 rm -rf /tmp/test-restore-dst
+./trustlessbak extras wipe-server
 
 # Create backup source file hierarchy
 mkdir -p /tmp/test-backup-src/emptydir
@@ -14,20 +16,22 @@ mkdir -p /tmp/test-backup-src/subdir1
 echo "Hello, world!" > /tmp/test-backup-src/subdir1/file.txt
 chmod 750 /tmp/test-backup-src/subdir1/file.txt
 mkdir -p /tmp/test-backup-src/subdir2
-dd if=/dev/random of=/tmp/test-backup-src/subdir2/bigfile.bin bs=$((1024*1024)) count=512
+dd if=/dev/random of=/tmp/test-backup-src/subdir2/bigfile.bin bs=$((1024*1024)) count=512 2>/dev/null
 # Tests really long path name:
 mkdir -p /tmp/test-backup-src/really/long/path/Xcode.app.Contents.Developer.Platforms.iPhoneOS.platform.Library.Developer.CoreSimulator.Profiles.Runtimes.iOS.simruntime.Contents.Resources.RuntimeRoot.System.Library.Assistant.UIPlugins.GeneralKnowledge.siriUIBundle.en_AU.lproj
 echo "Small file" > /tmp/test-backup-src/really/long/path/Xcode.app.Contents.Developer.Platforms.iPhoneOS.platform.Library.Developer.CoreSimulator.Profiles.Runtimes.iOS.simruntime.Contents.Resources.RuntimeRoot.System.Library.Assistant.UIPlugins.GeneralKnowledge.siriUIBundle.en_AU.lproj/small.txt
-dd if=/dev/random of=/tmp/test-backup-src/really/long/path/Xcode.app.Contents.Developer.Platforms.iPhoneOS.platform.Library.Developer.CoreSimulator.Profiles.Runtimes.iOS.simruntime.Contents.Resources.RuntimeRoot.System.Library.Assistant.UIPlugins.GeneralKnowledge.siriUIBundle.en_AU.lproj/big.bin bs=$((1024*1024)) count=130
+dd if=/dev/random of=/tmp/test-backup-src/really/long/path/Xcode.app.Contents.Developer.Platforms.iPhoneOS.platform.Library.Developer.CoreSimulator.Profiles.Runtimes.iOS.simruntime.Contents.Resources.RuntimeRoot.System.Library.Assistant.UIPlugins.GeneralKnowledge.siriUIBundle.en_AU.lproj/big.bin bs=$((1024*1024)) count=130 2>/dev/null
 # Tests symlinks to directories and to files
 mkdir -p /tmp/test-backup-src/subdir3
-pushd /tmp/test-backup-src/subdir3
+CWD=`pwd`
+cd /tmp/test-backup-src/subdir3
 ln -s ../subdir1 subdir1link
 ln -s ../subdir1/file.txt file.txt.link
-popd
+cd $CWD
 
 # Backup /tmp/test-backup-src to cloud.
-./trustlessbak backup -d /tmp/test-backup-src
+echo "🧪 Testing initial backup..."
+./trustlessbak backup -d /tmp/test-backup-src $VERBOSE
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
     echo "Halting test due to failure exit code ($EXITCODE)"
@@ -35,10 +39,12 @@ if [[ $EXITCODE != 0 ]]; then
 fi
 
 # Get the snapshot names to specify in restore
+echo "🧪 Testing cloudls..."
 SNAPSHOT_NAME=`./trustlessbak cloudls --grep | tail -n -1`
 
 # Restore to /tmp/test-restore-dst/
-./trustlessbak restore $SNAPSHOT_NAME /tmp/test-restore-dst/
+echo "🧪 Testing restore of initial backup..."
+./trustlessbak restore $SNAPSHOT_NAME /tmp/test-restore-dst/ $VERBOSE
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
     echo "Halting test due to failure exit code ($EXITCODE)"
@@ -65,7 +71,8 @@ fi
 rm -rf /tmp/test-backup-src/subdir2
 
 # Incremental backup of /tmp/test-backup-src
-./trustlessbak backup -d /tmp/test-backup-src
+echo "🧪 Testing incremental backup with deleted paths..."
+./trustlessbak backup -d /tmp/test-backup-src $VERBOSE
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
     echo "Halting test due to failure exit code ($EXITCODE)"
@@ -76,7 +83,8 @@ fi
 SNAPSHOT_NAME=`./trustlessbak cloudls --grep | tail -n -1`
 
 # Restore to /tmp/test-restore-dst/
-./trustlessbak restore $SNAPSHOT_NAME /tmp/test-restore-dst/
+echo "🧪 Testing restore of snapshot with deleted paths..."
+./trustlessbak restore $SNAPSHOT_NAME /tmp/test-restore-dst/ $VERBOSE
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
     echo "Halting test due to failure exit code ($EXITCODE)"
@@ -92,4 +100,4 @@ if [[ $EXITCODE != 0 ]]; then
 fi
 
 echo ""
-echo "TEST SUCCEEDED!"
+echo "ALL TESTS SUCCEEDED!"

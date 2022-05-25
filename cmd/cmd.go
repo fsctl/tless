@@ -80,7 +80,9 @@ func initConfig() {
 	viper.AddConfigPath(".")
 
 	if err := viper.ReadInConfig(); err == nil {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
+		if cfgVerbose {
+			fmt.Println("Using config file:", viper.ConfigFileUsed())
+		}
 	} else {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// Config file could not be found

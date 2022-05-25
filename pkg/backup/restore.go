@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log"
 	"math/big"
@@ -14,7 +15,7 @@ import (
 	"github.com/fsctl/trustlessbak/pkg/util"
 )
 
-func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string, objName string, rootDirName string, snapshotName string, relPath string, objst *objstore.ObjStore, bucket string) error {
+func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string, objName string, rootDirName string, snapshotName string, relPath string, objst *objstore.ObjStore, bucket string, printOnSuccess bool) error {
 	// Strip any trailing slashes on destination path
 	restoreIntoDirPath = util.StripTrailingSlashes(restoreIntoDirPath)
 
@@ -89,6 +90,11 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 			return err
 		}
 	}
+
+	if printOnSuccess {
+		fmt.Printf("Restored %s\n", filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, relPath))
+	}
+
 	return nil
 }
 
@@ -154,7 +160,7 @@ func isNonceOneMoreThanPrev(nonce []byte, prevNonce []byte) bool {
 	return z.Cmp(y) == 0
 }
 
-func RestoreDirEntryFromChunks(ctx context.Context, key []byte, restoreIntoDirPath string, objNames []string, rootDirName string, snapshotName string, relPath string, objst *objstore.ObjStore, bucket string) error {
+func RestoreDirEntryFromChunks(ctx context.Context, key []byte, restoreIntoDirPath string, objNames []string, rootDirName string, snapshotName string, relPath string, objst *objstore.ObjStore, bucket string, printOnSuccess bool) error {
 	// Strip any trailing slashes on destination path
 	restoreIntoDirPath = util.StripTrailingSlashes(restoreIntoDirPath)
 
@@ -238,6 +244,10 @@ func RestoreDirEntryFromChunks(ctx context.Context, key []byte, restoreIntoDirPa
 	if err = deserializeAndSetXAttrs(filenameAbsPath, metadataPtr.XAttrs); err != nil {
 		log.Printf("error: could not set xattrs on multi-chunk file '%s': %v\n", filenameAbsPath, err)
 		return err
+	}
+
+	if printOnSuccess {
+		fmt.Printf("Restored %s\n", filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, relPath))
 	}
 
 	return nil

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"path/filepath"
 	"strings"
@@ -83,7 +84,7 @@ func backupMain() {
 
 		// Any remaining prevPaths represent deleted files, so upload keys to mark them deleted and remove from
 		// dirents table
-		if err = createDeletedPathsKeysAndPurgeFromDb(ctx, objst, cfgBucket, db, encKey, backupDirName, snapshotName, prevPaths); err != nil {
+		if err = createDeletedPathsKeysAndPurgeFromDb(ctx, objst, cfgBucket, db, encKey, backupDirName, snapshotName, prevPaths, cfgVerbose); err != nil {
 			log.Println("error: failed creatingn deleted paths keys")
 		}
 
@@ -95,20 +96,22 @@ func backupMain() {
 				id = backupIdsQueue.Ids[0]
 				backupIdsQueue.Ids = backupIdsQueue.Ids[1:]
 			} else {
+				backupIdsQueue.Lock.Unlock()
 				break
 			}
-
 			backupIdsQueue.Lock.Unlock()
 			if id != 0 {
-				doActionBackup(ctx, objst, cfgBucket, id, &backupIdsQueue, db, backupDirPath, snapshotName)
+				doActionBackup(ctx, objst, cfgBucket, id, &backupIdsQueue, db, backupDirPath, snapshotName, cfgVerbose)
 			}
 		}
 	}
 
-	log.Printf("done")
+	if cfgVerbose {
+		fmt.Printf("done\n")
+	}
 }
 
-func createDeletedPathsKeysAndPurgeFromDb(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, key []byte, backupDirName string, snapshotName string, deletedPaths map[string]int) error {
+func createDeletedPathsKeysAndPurgeFromDb(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, key []byte, backupDirName string, snapshotName string, deletedPaths map[string]int, showNameOnSuccess bool) error {
 	// get the encrypted representation of backupDirName and snapshotName
 	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotName)
 	if err != nil {
@@ -152,6 +155,10 @@ func createDeletedPathsKeysAndPurgeFromDb(ctx context.Context, objst *objstore.O
 			log.Printf("DeleteDirEntByPath failed: %v", err)
 			return err
 		}
+
+		if showNameOnSuccess {
+			fmt.Printf("Marked as deleted %s\n", deletedPath)
+		}
 	}
 
 	return nil
@@ -177,8 +184,8 @@ func trySaveSaltToServer(ctx context.Context, objst *objstore.ObjStore, bucket s
 	}
 }
 
-func doActionBackup(ctx context.Context, objst *objstore.ObjStore, bucket string, dirEntId int, backupIdsQueue *fstraverse.BackupIdsQueue, db *database.DB, backupDirPath string, snapshotName string) {
-	if err := backup.Backup(ctx, encKey, db, backupDirPath, snapshotName, dirEntId, objst, bucket); err != nil {
+func doActionBackup(ctx context.Context, objst *objstore.ObjStore, bucket string, dirEntId int, backupIdsQueue *fstraverse.BackupIdsQueue, db *database.DB, backupDirPath string, snapshotName string, showNameOnSuccess bool) {
+	if err := backup.Backup(ctx, encKey, db, backupDirPath, snapshotName, dirEntId, objst, bucket, showNameOnSuccess); err != nil {
 		log.Printf("error: Backup(): %v", err)
 		reEnqueue(backupIdsQueue, dirEntId)
 		return

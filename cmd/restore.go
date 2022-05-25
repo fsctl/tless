@@ -58,14 +58,14 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 		if len(mRelPathsObjsMap[relPath]) > 1 {
 			relPathChunks := mRelPathsObjsMap[relPath]
 
-			err = backup.RestoreDirEntryFromChunks(ctx, encKey, pathToRestoreInto, relPathChunks, backupName, snapshotName, relPath, objst, cfgBucket)
+			err = backup.RestoreDirEntryFromChunks(ctx, encKey, pathToRestoreInto, relPathChunks, backupName, snapshotName, relPath, objst, cfgBucket, cfgVerbose)
 			if err != nil {
 				log.Printf("error: could not restore a dir entry '%s'", relPath)
 			}
 		} else if len(mRelPathsObjsMap[relPath]) == 1 {
 			objName := mRelPathsObjsMap[relPath][0]
 
-			err = backup.RestoreDirEntry(ctx, encKey, pathToRestoreInto, objName, backupName, snapshotName, relPath, objst, cfgBucket)
+			err = backup.RestoreDirEntry(ctx, encKey, pathToRestoreInto, objName, backupName, snapshotName, relPath, objst, cfgBucket, cfgVerbose)
 			if err != nil {
 				log.Printf("error: could not restore a dir entry '%s'", relPath)
 			}

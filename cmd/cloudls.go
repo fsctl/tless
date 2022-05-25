@@ -15,7 +15,6 @@ import (
 var (
 	// Flags
 	cloudlsCfgShowChunks         bool
-	cloudlsCfgShowFiles          bool
 	cloudlsCfgSnapshot           string
 	cloudlsCfgGreppableSnapshots bool
 
@@ -24,12 +23,13 @@ var (
 		Use:   "cloudls",
 		Short: "Lists all data stored in cloud",
 		Long: `Lists everything you have stored in the cloud. File and directory names are automatically
-decrypted in the display.
+decrypted in the display.  Without --verbose, just shows all snapshots for each backup name group.
+With --verbose, shows the files in each snapshot.
 
 Example:
 
 	trustlessbak cloudls
-	trustlessbak cloudls --show-files=false
+	trustlessbak cloudls --verbose
 	trustlessbak cloudls --snapshot=Documents/2020-01-01_04:56:01
 
 The available snapshot times are displayed in 'unbackupcloud cloudls' with no arguments.
@@ -48,10 +48,9 @@ The available snapshot times are displayed in 'unbackupcloud cloudls' with no ar
 )
 
 func init() {
-	cloudlsCmd.Flags().BoolVar(&cloudlsCfgShowChunks, "show-chunks", false, "whether to show the chunk(s) that make up a file (default: false)")
-	cloudlsCmd.Flags().BoolVar(&cloudlsCfgShowFiles, "show-files", true, "whether to show directories and files (default: true)")
-	cloudlsCmd.Flags().BoolVar(&cloudlsCfgGreppableSnapshots, "grep", false, "show a grep-friendly snapshot list")
-	cloudlsCmd.Flags().StringVar(&cloudlsCfgSnapshot, "snapshot", "", "snapshot to display (eg, 'Documents/2020-01-01_01:02:03')")
+	cloudlsCmd.Flags().BoolVar(&cloudlsCfgShowChunks, "show-chunks", false, "show the chunk(s) making up each file; implies -v (default: false)")
+	cloudlsCmd.Flags().BoolVar(&cloudlsCfgGreppableSnapshots, "grep", false, "show a grep-friendly snapshot list (default: false)")
+	cloudlsCmd.Flags().StringVar(&cloudlsCfgSnapshot, "snapshot", "", "snapshot to display (eg, 'Documents/2020-01-01_01:02:03'); implies -v")
 	rootCmd.AddCommand(cloudlsCmd)
 }
 
@@ -87,7 +86,7 @@ func cloudlsMain() {
 		for _, snapshotName := range snapshotKeys {
 			fmt.Printf("  %s\n", snapshotName)
 
-			if cloudlsCfgShowFiles {
+			if cfgVerbose || cloudlsCfgShowChunks {
 				relPathKeys := make([]string, 0, len(groupedObjects[groupName].Snapshots[snapshotName].RelPaths))
 				for relPath := range groupedObjects[groupName].Snapshots[snapshotName].RelPaths {
 					relPathKeys = append(relPathKeys, relPath)
