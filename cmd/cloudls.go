@@ -15,6 +15,7 @@ import (
 var (
 	// Flags
 	cloudlsCfgShowChunks         bool
+	cloudlsCfgShowFiles          bool
 	cloudlsCfgSnapshot           string
 	cloudlsCfgGreppableSnapshots bool
 
@@ -28,6 +29,7 @@ decrypted in the display.
 Example:
 
 	trustlessbak cloudls
+	trustlessbak cloudls --show-files=false
 	trustlessbak cloudls --snapshot=Documents/2020-01-01_04:56:01
 
 The available snapshot times are displayed in 'unbackupcloud cloudls' with no arguments.
@@ -46,7 +48,8 @@ The available snapshot times are displayed in 'unbackupcloud cloudls' with no ar
 )
 
 func init() {
-	cloudlsCmd.Flags().BoolVar(&cloudlsCfgShowChunks, "show-chunks", false, "whether to show the chunk(s) that make up a file")
+	cloudlsCmd.Flags().BoolVar(&cloudlsCfgShowChunks, "show-chunks", false, "whether to show the chunk(s) that make up a file (default: false)")
+	cloudlsCmd.Flags().BoolVar(&cloudlsCfgShowFiles, "show-files", true, "whether to show directories and files (default: true)")
 	cloudlsCmd.Flags().BoolVar(&cloudlsCfgGreppableSnapshots, "grep", false, "show a grep-friendly snapshot list")
 	cloudlsCmd.Flags().StringVar(&cloudlsCfgSnapshot, "snapshot", "", "snapshot to display (eg, 'Documents/2020-01-01_01:02:03')")
 	rootCmd.AddCommand(cloudlsCmd)
@@ -84,25 +87,31 @@ func cloudlsMain() {
 		for _, snapshotName := range snapshotKeys {
 			fmt.Printf("  %s\n", snapshotName)
 
-			relPathKeys := make([]string, 0, len(groupedObjects[groupName].Snapshots[snapshotName].RelPaths))
-			for relPath := range groupedObjects[groupName].Snapshots[snapshotName].RelPaths {
-				relPathKeys = append(relPathKeys, relPath)
-			}
-			sort.Strings(relPathKeys)
+			if cloudlsCfgShowFiles {
+				relPathKeys := make([]string, 0, len(groupedObjects[groupName].Snapshots[snapshotName].RelPaths))
+				for relPath := range groupedObjects[groupName].Snapshots[snapshotName].RelPaths {
+					relPathKeys = append(relPathKeys, relPath)
+				}
+				sort.Strings(relPathKeys)
 
-			for _, relPath := range relPathKeys {
-				val := groupedObjects[groupName].Snapshots[snapshotName].RelPaths[relPath]
-				fmt.Printf("    %s (deleted: %v)\n", relPath, val.IsDeleted)
-
-				if cloudlsCfgShowChunks {
-					chunkNameKeys := make([]string, 0, len(val.EncryptedChunkNames))
-					for chunkName := range val.EncryptedChunkNames {
-						chunkNameKeys = append(chunkNameKeys, chunkName)
+				for _, relPath := range relPathKeys {
+					val := groupedObjects[groupName].Snapshots[snapshotName].RelPaths[relPath]
+					deletedMsg := ""
+					if val.IsDeleted {
+						deletedMsg = " (deleted)"
 					}
-					sort.Strings(chunkNameKeys)
+					fmt.Printf("    %s%s\n", relPath, deletedMsg)
 
-					for _, chunkName := range chunkNameKeys {
-						fmt.Printf("      Chunk: %s (%d bytes)\n", chunkName, val.EncryptedChunkNames[chunkName])
+					if cloudlsCfgShowChunks {
+						chunkNameKeys := make([]string, 0, len(val.EncryptedChunkNames))
+						for chunkName := range val.EncryptedChunkNames {
+							chunkNameKeys = append(chunkNameKeys, chunkName)
+						}
+						sort.Strings(chunkNameKeys)
+
+						for _, chunkName := range chunkNameKeys {
+							fmt.Printf("      Chunk: %s (%d bytes)\n", chunkName, val.EncryptedChunkNames[chunkName])
+						}
 					}
 				}
 			}

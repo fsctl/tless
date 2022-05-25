@@ -70,9 +70,9 @@ func GetGroupedSnapshots(ctx context.Context, objst *objstore.ObjStore, key []by
 		isDeleted := false
 		encRelPathStripped := encRelPath
 		encRelPathWithoutSlashStripped := encRelPathWithoutSlash
-		if strings.HasPrefix(encRelPath, "__") {
-			encRelPathStripped = strings.TrimPrefix(encRelPathStripped, "__")
-			encRelPathWithoutSlashStripped = strings.TrimPrefix(encRelPathWithoutSlashStripped, "__")
+		if strings.HasPrefix(encRelPath, "##") {
+			encRelPathStripped = strings.TrimPrefix(encRelPathStripped, "##")
+			encRelPathWithoutSlashStripped = strings.TrimPrefix(encRelPathWithoutSlashStripped, "##")
 			isDeleted = true
 		}
 		hasDot := reDot.FindAllString(encRelPathStripped, -1) != nil

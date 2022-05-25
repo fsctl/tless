@@ -22,12 +22,12 @@ import (
 // that the same plaintext was encrypted.
 func EncryptFilename(key []byte, filename string) (string, error) {
 	// gzip filename to shorten it if it's long
-	filename = gz(filename)
+	filenameGz := gz(filename)
 
 	aessiv, err := siv.NewGCM(key)
 	if err != nil {
 		// TODO: don't Fatalln here, just return the error
-		log.Fatalln("error: EncryptFilenameAesGcm256Siv: ", err)
+		log.Fatalln("error: EncryptFilename: ", err)
 		return "", err
 	}
 
@@ -35,7 +35,7 @@ func EncryptFilename(key []byte, filename string) (string, error) {
 	// scheme (same plaintext && additional data produces the same ciphertext).
 	nonce := make([]byte, aessiv.NonceSize())
 
-	ciphertext := aessiv.Seal(nil, nonce, []byte(filename), nil)
+	ciphertext := aessiv.Seal(nil, nonce, []byte(filenameGz), nil)
 	ciphertextBase64 := base64.URLEncoding.EncodeToString(ciphertext)
 
 	return ciphertextBase64, nil
@@ -45,13 +45,14 @@ func EncryptFilename(key []byte, filename string) (string, error) {
 func DecryptFilename(key []byte, encryptedFilenameB64 string) (string, error) {
 	encryptedFilename, err := base64.URLEncoding.DecodeString(encryptedFilenameB64)
 	if err != nil {
-		log.Fatalf("DecryptFilename failed: %v", err)
+		log.Printf("warning: DecryptFilename failed on '%s' (partial decode: '%x'): %v", encryptedFilenameB64, encryptedFilename, err)
+		return "", err
 	}
 
 	aessiv, err := siv.NewGCM(key)
 	if err != nil {
-		// TODO: don't Fatalln here, just return the error
-		log.Fatalln("error: EncryptFilenameAesGcm256Siv: ", err)
+		// TODO: don't Fatalf here, just return the error?
+		log.Fatalf("error: DecryptFilename on '%s' ('%x'): %v", encryptedFilenameB64, encryptedFilename, err)
 		return "", err
 	}
 
@@ -61,7 +62,7 @@ func DecryptFilename(key []byte, encryptedFilenameB64 string) (string, error) {
 	decryptedFilename, err := aessiv.Open(nil, nonce, encryptedFilename, nil)
 	if err != nil {
 		// TODO: don't Fatalln here, just return the error
-		log.Fatalln("error: DecryptFilenameAesGcm256Siv: ", err)
+		log.Fatalf("error: DecryptFilename on '%s' ('%x'): %v", encryptedFilenameB64, encryptedFilename, err)
 		return "", err
 	}
 
