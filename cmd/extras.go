@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/fsctl/trustlessbak/pkg/objstore"
 	"github.com/spf13/cobra"
@@ -31,10 +32,26 @@ Example:
 			checkConnMain()
 		},
 	}
+
+	wipeServerCmd = &cobra.Command{
+		Use:   "wipe-server",
+		Short: "Clears all objects in bucket",
+		Long: `Run this command to delete all the contents of the bucket.
+
+Example:
+
+	trustlessbak extras wipe-server
+`,
+		Args: cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			wipeServerMain()
+		},
+	}
 )
 
 func init() {
 	extrasCmd.AddCommand(checkConnCmd)
+	extrasCmd.AddCommand(wipeServerCmd)
 	rootCmd.AddCommand(extrasCmd)
 }
 
@@ -44,5 +61,26 @@ func checkConnMain() {
 		fmt.Println("connectivity check failed: are your settings correct in config.toml?")
 	} else {
 		fmt.Println("connectivity check successful")
+	}
+}
+
+func wipeServerMain() {
+	objst := objstore.NewObjStore(context.Background(), cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
+	ctx := context.Background()
+
+	allObjects, err := objst.GetObjList(ctx, cfgBucket, "")
+	if err != nil {
+		log.Printf("error: wipeServerMain: GetObjList failed: %v", err)
+	}
+
+	for objName := range allObjects {
+		err = objst.DeleteObj(ctx, cfgBucket, objName)
+		if err != nil {
+			log.Printf("error: wipeServerMain: objst.DeleteObj failed: %v", err)
+		} else {
+			if cfgVerbose {
+				log.Printf("deleted %s\n", objName)
+			}
+		}
 	}
 }

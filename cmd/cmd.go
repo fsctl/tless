@@ -27,6 +27,7 @@ var (
 	cfgBucket          string
 	cfgMasterPassword  string
 	cfgSalt            string
+	cfgVerbose         bool
 
 	// Root command
 	rootCmd = &cobra.Command{
@@ -63,6 +64,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgBucket, "bucket", "b", "", "name of object store bucket to use")
 	rootCmd.PersistentFlags().StringVarP(&cfgMasterPassword, "master-password", "p", "", "master password known only on your local machine")
 	rootCmd.PersistentFlags().StringVarP(&cfgSalt, "salt", "l", "", "salt used for key derivation from master password")
+	rootCmd.PersistentFlags().BoolVarP(&cfgVerbose, "verbose", "v", false, "verbose output")
 
 	rootCmd.Flags().Bool("version", false, "print the version")
 
