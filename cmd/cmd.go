@@ -141,6 +141,7 @@ bucket = "<name of an empty bucket you have created on object store>"
 # Example (Linux): /home/<yourname>/Documents
 # Example (macOS): /Users/<yourname>/Documents
 dirs = [ "<absolute path to directory>", "<optional additional directory>" ]
+excludes = [ "<prefix to exclude>", "<optional additional exclude>" ]
 
 # The 10-word Diceware passphrase below has been randomly generated for you. 
 # It has ~128 bits of entropy and thus is very resistant to brute force 
