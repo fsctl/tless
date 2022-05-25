@@ -105,14 +105,15 @@ func gunzip(gzinput string) string {
 func AppendEntireFileToBuffer(path string, buf []byte) ([]byte, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		log.Fatalf("appendEntireFileToBuffer: %v", err)
+		// There are valid reasons why a file might not be openable (eg might have disappeared since we traversed the dir)
+		//log.Printf("AppendEntireFileToBuffer: %v", err)
 		return nil, err
 	}
 	defer file.Close()
 
 	fileinfo, err := file.Stat()
 	if err != nil {
-		log.Fatalf("appendEntireFileToBuffer: %v", err)
+		log.Printf("AppendEntireFileToBuffer: %v", err)
 		return nil, err
 	}
 
@@ -121,12 +122,12 @@ func AppendEntireFileToBuffer(path string, buf []byte) ([]byte, error) {
 
 	bytesRead, err := file.Read(buffer)
 	if err != nil {
-		log.Fatalf("appendEntireFileToBuffer: %v", err)
+		log.Printf("AppendEntireFileToBuffer: %v", err)
 		return nil, err
 	}
 
 	if bytesRead != int(filesize) {
-		log.Fatalf("appendEntireFileToBuffer: only read %d bytes (file size: %d bytes)", bytesRead, filesize)
+		log.Printf("AppendEntireFileToBuffer: only read %d bytes (file size: %d bytes)", bytesRead, filesize)
 		return nil, errors.New("failed to read entire file")
 	}
 

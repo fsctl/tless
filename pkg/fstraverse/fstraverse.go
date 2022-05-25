@@ -38,7 +38,7 @@ type dirEntryInsert struct {
 	lastBackupUnixtime int64
 }
 
-func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, backupIdsQueue *BackupIdsQueue) error {
+func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, backupIdsQueue *BackupIdsQueue, excludePathPrefixes []string) error {
 	rootPath = util.StripTrailingSlashes(rootPath)
 	rootDirName := filepath.Base(rootPath)
 
@@ -48,6 +48,9 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, backu
 		if err != nil {
 			log.Printf("error: WalkDirFunc: %v", err)
 			return fs.SkipDir
+		}
+		if isInExcludePathPrefixes(path, excludePathPrefixes) {
+			return nil
 		}
 		relPath := relativizePath(path, rootPath)
 		if relPath == rootPath {
@@ -130,6 +133,15 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, backu
 	}
 
 	return nil
+}
+
+func isInExcludePathPrefixes(path string, excludePathPrefixes []string) bool {
+	for _, excludePathPrefix := range excludePathPrefixes {
+		if strings.HasPrefix(path, excludePathPrefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func doPendingDirEntryInserts(db *database.DB, pendingDirEntryInserts []dirEntryInsert) error {

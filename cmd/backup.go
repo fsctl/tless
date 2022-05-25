@@ -18,13 +18,15 @@ import (
 	"github.com/fsctl/trustlessbak/pkg/objstore"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/vbauerster/mpb/v7"
 	"github.com/vbauerster/mpb/v7/decor"
 )
 
 var (
 	// Flags
-	cfgDirs []string
+	cfgDirs         []string
+	cfgExcludePaths []string
 
 	// Command
 	backupCmd = &cobra.Command{
@@ -51,16 +53,20 @@ on the cloud provider will be overwritten by these newer local copies.
 )
 
 func init() {
-	backupCmd.Flags().StringArrayVarP(&cfgDirs, "dirs", "d", nil, "directories to backup (can use multiple times)")
+	backupCmd.Flags().StringArrayVarP(&cfgDirs, "dir", "d", nil, "directories to backup (can use multiple times)")
+	backupCmd.Flags().StringArrayVarP(&cfgExcludePaths, "exclude", "x", nil, "paths starting with this will be excluded from backup (can use multiple times)")
 	rootCmd.AddCommand(backupCmd)
 }
 
 func backupMain() {
 	ctx := context.Background()
 
-	// check that cfgDirs is set
+	// check that cfgDirs is set, and allow cfgExcludePaths to be set from toml file if no arg
 	if err := validateDirs(); err != nil {
 		log.Fatalln("no valid dirs to back up: ", err)
+	}
+	if cfgExcludePaths == nil {
+		cfgExcludePaths = viper.GetStringSlice("backups.excludes")
 	}
 
 	// open and prepare sqlite database
@@ -94,7 +100,7 @@ func backupMain() {
 			log.Fatalf("Error: cannot get paths list: %v", err)
 		}
 		var backupIdsQueue fstraverse.BackupIdsQueue
-		fstraverse.Traverse(backupDirPath, prevPaths, db, &backupIdsQueue)
+		fstraverse.Traverse(backupDirPath, prevPaths, db, &backupIdsQueue, cfgExcludePaths)
 
 		// create the progress bar
 		var progressBarTotalItems int

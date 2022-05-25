@@ -43,7 +43,7 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 	absPath := filepath.Join(backupDirPath, relPath)
 
 	// get the os.stat metadata on file
-	info, err := os.Stat(absPath)
+	info, err := os.Lstat(absPath)
 	if err != nil {
 		log.Printf("error: Backup(): could not stat '%s'\n", absPath)
 		return err
@@ -61,8 +61,8 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 	// get the xattrs if any
 	xattrs, err := serializeXAttrsToHex(absPath)
 	if err != nil {
-		log.Printf("error: Backup(): could not serialize xattrs for '%s'\n", absPath)
-		return err
+		// fs may validly not support xattrs, so if serialization fails just set xattrs to blank
+		xattrs = ""
 	}
 	metadata := dirEntMetadata{
 		IsDir:         info.IsDir(),
@@ -102,11 +102,15 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 	if info.IsDir() || info.Size() < ChunkSize {
 		// Contents smaller than ChunkSize; if file just read entire file into
 		// rest of buffer after metadata
-		if !info.IsDir() {
+		if !info.IsDir() && !isSymlink {
 			buf, err = cryptography.AppendEntireFileToBuffer(absPath, buf)
 			if err != nil {
+				//if _, ok := err.(*os.PathError); !ok {
 				log.Printf("error: Backup(): AppendEntireFileToBuffer failed: %v\n", err)
 				return err
+				//} else {
+				//	return nil
+				//}
 			}
 		}
 

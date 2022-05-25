@@ -15,7 +15,8 @@ func serializeXAttrsToHex(path string) (string, error) {
 	var err error
 	var list []string
 	if list, err = xattr.List(path); err != nil {
-		log.Println("could not list xattrs: ", err)
+		// fs may validly not support xattrs, so if this call fails just return "" silently
+		//log.Println("could not list xattrs: ", err)
 		return "", err
 	}
 
