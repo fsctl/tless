@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Set to '-v' for verbose output
+# Set to '-v' for verbose output on all commands
 VERBOSE=
 
 # Clean up from last run
