@@ -2,8 +2,11 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -54,6 +57,11 @@ func init() {
 
 func backupMain() {
 	ctx := context.Background()
+
+	// check that cfgDirs is set
+	if err := validateDirs(); err != nil {
+		log.Fatalln("no valid dirs to back up: ", err)
+	}
 
 	// open and prepare sqlite database
 	db, err := database.NewDB("./trustlessbak-state.db")
@@ -145,6 +153,18 @@ func backupMain() {
 		// Give progress bar 0.1 sec to draw itself for final time
 		time.Sleep(1e8)
 	}
+}
+
+func validateDirs() error {
+	if len(cfgDirs) == 0 {
+		return fmt.Errorf("backup dirs invalid (value='%v')", cfgDirs)
+	}
+	for _, dir := range cfgDirs {
+		if _, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("backup dir '%s' does not exist)", dir)
+		}
+	}
+	return nil
 }
 
 func createDeletedPathsKeysAndPurgeFromDb(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, key []byte, backupDirName string, snapshotName string, deletedPaths map[string]int, showNameOnSuccess bool) error {

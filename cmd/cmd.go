@@ -2,9 +2,7 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -236,14 +234,6 @@ func validateConfigVars() error {
 		viper.Set("backups.salt", salt)
 		viper.WriteConfig()
 		cfgSalt = salt
-	}
-	if len(cfgDirs) == 0 {
-		return fmt.Errorf("backup dirs invalid (value='%v')", cfgDirs)
-	}
-	for _, dir := range cfgDirs {
-		if _, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("backup dir '%s' does not exist)", dir)
-		}
 	}
 	return nil
 }
