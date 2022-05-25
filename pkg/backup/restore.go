@@ -38,11 +38,25 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 		return err
 	}
 
-	// create the full path (for dirs) or path up but excluding last component (for files)
+	// create the full path (for dirs) or path up but excluding last component (for symlinks/files)
 	// and restore contents (for files)
-	if metadataPtr.IsDir {
-		// TODO: fix hardcoded mode
-		err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, relPath, 0755)
+	if metadataPtr.IsSymlink {
+		dir, linkName := filepath.Split(relPath)
+		// We can create the dir(s) initially as 0755 b/c they'll get fixed later when we process
+		// the dirs' entry themselves.
+		err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, dir, 0755)
+		if err != nil {
+			log.Printf("error: could not create dir '%s': %v\n",
+				filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, dir), err)
+			return err
+		}
+
+		linkNameAbsPath := filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, dir, linkName)
+		if err := os.Symlink(metadataPtr.SymlinkOrigin, linkNameAbsPath); err != nil {
+			log.Printf("error: could not create symlink '%s': %v\n", linkNameAbsPath, err)
+		}
+	} else if metadataPtr.IsDir {
+		err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, relPath, fs.FileMode(metadataPtr.Mode))
 		if err != nil {
 			log.Printf("error: could not create dir '%s': %v\n",
 				filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, relPath), err)
@@ -55,7 +69,8 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 		}
 	} else {
 		dir, filename := filepath.Split(relPath)
-		// TODO: fix hardcoded mode
+		// We can create the dir(s) initially as 0755 b/c they'll get fixed later when we process
+		// the dirs' entry themselves.
 		err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, dir, 0755)
 		if err != nil {
 			log.Printf("error: could not create dir '%s': %v\n",
@@ -64,7 +79,7 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 		}
 
 		filenameAbsPath := filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, dir, filename)
-		err = writeBufferToFile(fileContents, filenameAbsPath)
+		err = writeBufferToFile(fileContents, filenameAbsPath, fs.FileMode(metadataPtr.Mode))
 		if err != nil {
 			log.Printf("error: could not write file '%s': %v\n", filenameAbsPath, err)
 			return err
@@ -98,7 +113,7 @@ func createFullPath(basePath string, backupRootDirName string, snapshotName stri
 	return nil
 }
 
-func writeBufferToFile(buf []byte, path string) error {
+func writeBufferToFile(buf []byte, path string, mode fs.FileMode) error {
 	file, err := os.Create(path)
 	if err != nil {
 		log.Fatalf("writeEntireFile: %v", err)
@@ -114,6 +129,12 @@ func writeBufferToFile(buf []byte, path string) error {
 	if n != len(buf) {
 		log.Fatalf("writeEntireFile: wrote %d bytes but buffer is %d bytes", n, len(buf))
 		return errors.New("wrote wrong number of bytes")
+	}
+
+	// Fix the mode bits
+	if err := os.Chmod(path, mode); err != nil {
+		log.Fatalf("writeEntireFile: could not chmod newly created file (desired mode %#o)", mode)
+		return errors.New("could not chmod file")
 	}
 
 	return nil

@@ -22,9 +22,12 @@ const (
 )
 
 type dirEntMetadata struct {
-	IsDir  bool
-	MTime  int64
-	XAttrs string
+	IsDir         bool
+	MTime         int64
+	XAttrs        string
+	Mode          uint32
+	IsSymlink     bool
+	SymlinkOrigin string
 }
 
 func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath string, snapshotName string, dirEntId int, objst *objstore.ObjStore, bucket string) error {
@@ -45,6 +48,16 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 		log.Printf("error: Backup(): could not stat '%s'\n", absPath)
 		return err
 	}
+	// get symlink origin if it's a symlink
+	symlinkOrigin, err := getSymlinkOriginIfSymlink(absPath)
+	if err != nil {
+		log.Printf("error: Backup(): could not get symlink info on '%s'\n", absPath)
+		return err
+	}
+	var isSymlink bool = false
+	if symlinkOrigin != "" {
+		isSymlink = true
+	}
 	// get the xattrs if any
 	xattrs, err := serializeXAttrsToHex(absPath)
 	if err != nil {
@@ -52,9 +65,12 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 		return err
 	}
 	metadata := dirEntMetadata{
-		IsDir:  info.IsDir(),
-		MTime:  info.ModTime().Unix(),
-		XAttrs: xattrs,
+		IsDir:         info.IsDir(),
+		MTime:         info.ModTime().Unix(),
+		XAttrs:        xattrs,
+		Mode:          uint32(info.Mode()),
+		SymlinkOrigin: symlinkOrigin,
+		IsSymlink:     isSymlink,
 	}
 
 	// serialize metadata into buffer with 8-byte length prefix
@@ -81,7 +97,7 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 		return err
 	}
 
-	// If dir or small file (<ChhunkSize bytes), process as single chunk.
+	// If dir or small file (<ChunkSize bytes), process as single chunk.
 	// If large file (>ChunkSize bytes), apply chunk processing logic.
 	if info.IsDir() || info.Size() < ChunkSize {
 		// Contents smaller than ChunkSize; if file just read entire file into
@@ -202,4 +218,25 @@ func incrementNonce(nonce []byte) []byte {
 	z.Add(z, big.NewInt(1))
 	buf := make([]byte, 12)
 	return z.FillBytes(buf)
+}
+
+func getSymlinkOriginIfSymlink(pathToInspect string) (string, error) {
+	// get the file info
+	fileInfo, err := os.Lstat(pathToInspect)
+	if err != nil {
+		fmt.Printf("error: getSymlinkOriginIfSymlink: %v", err)
+		return "", err
+	}
+
+	// is it a sym link?
+	if fileInfo.Mode()&os.ModeSymlink != 0 {
+		linkOrigin, err := os.Readlink(pathToInspect)
+		if err != nil {
+			fmt.Printf("error: getSymlinkOriginIfSymlink: %v", err)
+			return "", err
+		}
+		return linkOrigin, nil
+	} else {
+		return "", nil
+	}
 }
