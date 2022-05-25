@@ -145,14 +145,13 @@ func backupMain() {
 			if id != 0 {
 				if err := backup.Backup(ctx, encKey, db, backupDirPath, snapshotName, id, objst, cfgBucket, cfgVerbose); err != nil {
 					log.Printf("error: Backup(): %v", err)
-					reEnqueue(&backupIdsQueue, id)
-					return
+					//reEnqueue(&backupIdsQueue, id)
+					continue
 				}
 				err := db.UpdateLastBackupTime(id)
 				if err != nil {
 					log.Printf("error: UpdateLastBackupTime(): %v", err)
-					reEnqueue(&backupIdsQueue, id)
-					return
+					//reEnqueue(&backupIdsQueue, id)
 				}
 			}
 
