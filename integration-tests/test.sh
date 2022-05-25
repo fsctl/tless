@@ -13,7 +13,6 @@ else
     # Unknown OS, try /tmp
     TEMPDIR=/tmp
 fi
-echo "TEMPDIR=$TEMPDIR"
 
 # Clean up from last run
 rm trustlessbak-state.db
@@ -28,11 +27,11 @@ mkdir -p $TEMPDIR/test-backup-src/subdir1
 echo "Hello, world!" > $TEMPDIR/test-backup-src/subdir1/file.txt
 chmod 750 $TEMPDIR/test-backup-src/subdir1/file.txt
 mkdir -p $TEMPDIR/test-backup-src/subdir2
-dd if=/dev/random of=$TEMPDIR/test-backup-src/subdir2/bigfile.bin bs=$((1024*1024)) count=512 2>/dev/null
+dd if=/dev/urandom of=$TEMPDIR/test-backup-src/subdir2/bigfile.bin bs=$((1024*1024)) count=512 2>/dev/null
 # Tests really long path name:
 mkdir -p $TEMPDIR/test-backup-src/really/long/path/Xcode.app.Contents.Developer.Platforms.iPhoneOS.platform.Library.Developer.CoreSimulator.Profiles.Runtimes.iOS.simruntime.Contents.Resources.RuntimeRoot.System.Library.Assistant.UIPlugins.GeneralKnowledge.siriUIBundle.en_AU.lproj
 echo "Small file" > $TEMPDIR/test-backup-src/really/long/path/Xcode.app.Contents.Developer.Platforms.iPhoneOS.platform.Library.Developer.CoreSimulator.Profiles.Runtimes.iOS.simruntime.Contents.Resources.RuntimeRoot.System.Library.Assistant.UIPlugins.GeneralKnowledge.siriUIBundle.en_AU.lproj/small.txt
-dd if=/dev/random of=$TEMPDIR/test-backup-src/really/long/path/Xcode.app.Contents.Developer.Platforms.iPhoneOS.platform.Library.Developer.CoreSimulator.Profiles.Runtimes.iOS.simruntime.Contents.Resources.RuntimeRoot.System.Library.Assistant.UIPlugins.GeneralKnowledge.siriUIBundle.en_AU.lproj/big.bin bs=$((1024*1024)) count=130 2>/dev/null
+dd if=/dev/urandom of=$TEMPDIR/test-backup-src/really/long/path/Xcode.app.Contents.Developer.Platforms.iPhoneOS.platform.Library.Developer.CoreSimulator.Profiles.Runtimes.iOS.simruntime.Contents.Resources.RuntimeRoot.System.Library.Assistant.UIPlugins.GeneralKnowledge.siriUIBundle.en_AU.lproj/big.bin bs=$((1024*1024)) count=130 2>/dev/null
 # Tests symlinks to directories and to files
 mkdir -p $TEMPDIR/test-backup-src/subdir3
 CWD=`pwd`
