@@ -33,9 +33,9 @@ func getMTimeUnix(dirent fs.DirEntry) (int64, error) {
 }
 
 type dirEntryInsert struct {
-	rootPath       string
-	relPath        string
-	lastBackupUnix int64
+	rootPath           string
+	relPath            string
+	lastBackupUnixtime int64
 }
 
 func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, backupIdsQueue *BackupIdsQueue) error {
@@ -105,7 +105,7 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, backu
 			// backupIdsQueue.Lock.Lock()
 			// backupIdsQueue.Ids = append(backupIdsQueue.Ids, id)
 			// backupIdsQueue.Lock.Unlock()
-			pendingDirEntryInserts = append(pendingDirEntryInserts, dirEntryInsert{rootPath: rootDirName, relPath: relPath, lastBackupUnix: 0})
+			pendingDirEntryInserts = append(pendingDirEntryInserts, dirEntryInsert{rootPath: rootDirName, relPath: relPath, lastBackupUnixtime: 0})
 		}
 
 		return nil
@@ -140,7 +140,7 @@ func doPendingDirEntryInserts(db *database.DB, pendingDirEntryInserts []dirEntry
 	}
 
 	for _, ins := range pendingDirEntryInserts {
-		err = dirEntStmt.InsertDirEnt(ins.rootPath, ins.relPath, ins.lastBackupUnix)
+		err = dirEntStmt.InsertDirEnt(ins.rootPath, ins.relPath, ins.lastBackupUnixtime)
 		if err != nil {
 			log.Printf("error: doPendingDirEntryInserts: %v", err)
 			return err
