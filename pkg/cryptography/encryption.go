@@ -137,6 +137,9 @@ func AppendEntireFileToBuffer(path string, buf []byte) ([]byte, error) {
 }
 
 func EncryptBuffer(key []byte, plaintext []byte) ([]byte, error) {
+	// gzip the plaintext
+	plaintext = []byte(gz(string(plaintext)))
+
 	// do AES-GCM encryption of plaintext buffer
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -179,6 +182,9 @@ func DecryptBuffer(key []byte, ciphertext []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// gunzip the plaintext
+	plaintext = []byte(gunzip(string(plaintext)))
 
 	return plaintext, nil
 }
