@@ -1,15 +1,23 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
+	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
 
+	pb "github.com/fsctl/trustlessbak/rpc"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
 )
 
 var (
+	// Flags
+	cfgPort int
+
 	daemonCmd = &cobra.Command{
 		Use:   "daemon",
 		Short: "Runs as a background daemon",
@@ -29,7 +37,20 @@ Example:
 	}
 )
 
+// server is used to implement helloworld.GreeterServer.
+type server struct {
+	pb.UnimplementedGreeterServer
+}
+
+// SayHello implements helloworld.GreeterServer
+func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
+	log.Printf("Received: '%v'", in.GetName())
+	return &pb.HelloReply{Message: "Hello from " + in.GetName()}, nil
+}
+
 func init() {
+	daemonCmd.Flags().IntVarP(&cfgPort, "port", "P", 50051, "localhost port that daemon listens on")
+
 	rootCmd.AddCommand(daemonCmd)
 }
 
@@ -39,14 +60,30 @@ func daemonMain() {
 	done := make(chan bool, 1)
 
 	go func() {
-		// TODO: spawn a go routine to listen on socket
+		// setup listener and grpc server instance
+		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfgPort))
+		if err != nil {
+			log.Fatalf("failed to listen: %v", err)
+		}
+		s := grpc.NewServer()
+
+		// spawn a go routine to listen on socket
+		go func() {
+			pb.RegisterGreeterServer(s, &server{})
+			log.Printf("server listening at %v", lis.Addr())
+			if err := s.Serve(lis); err != nil {
+				log.Fatalf("failed to serve: %v", err)
+			}
+		}()
 
 		// Go into a blocking wait for the requested signal notifications
 		<-signals
 		fmt.Println() // line break after ^C
 
-		// TODO: do cleanup here before terminating
+		// do cleanup here before terminating
+		s.GracefulStop()
 
+		// tell main routine we are ready to exit
 		done <- true
 	}()
 
