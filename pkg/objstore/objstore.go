@@ -170,6 +170,7 @@ func (os *ObjStore) TryWriteSalt(ctx context.Context, bucket string, salt string
 }
 
 // Computes the expected ETag for the entire buffer buf
+// Ref: https://stackoverflow.com/questions/12186993/what-is-the-algorithm-to-compute-the-amazon-s3-etag-for-a-file-larger-than-5gb#answer-19896823
 func ComputeETag(buf []byte) string {
 	md5s := make([][16]byte, 0)
 	bufStartPos := 0
@@ -187,13 +188,12 @@ func ComputeETag(buf []byte) string {
 		}
 	}
 
-	// if len(buf) was <= ObjStoreMultiPartUploadPartSize then we
-	// just return the md5
+	// If there's just one md5 then we merely return it
 	var eTag string
 	if len(md5s) == 1 {
 		eTag = fmt.Sprintf("%x", md5s[0])
 	} else {
-		// Concatenate the md5s into a single []byte, and md5 that
+		// Otherwise, concatenate the md5s into a single []byte, and md5 that
 		concatMd5s := make([]byte, 0)
 		for _, md5Val := range md5s {
 			for i := 0; i < 16; i++ {
