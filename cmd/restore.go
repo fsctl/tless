@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -83,6 +84,7 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 	}
 
 	// loop over all the relpaths and restore each
+	dirChmodQueue := make([]backup.DirChmodQueueItem, 0) // all directory mode bits are set at end
 	for relPath := range mRelPathsObjsMap {
 		if len(mRelPathsObjsMap[relPath]) > 1 {
 			relPathChunks := mRelPathsObjsMap[relPath]
@@ -94,7 +96,7 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 		} else if len(mRelPathsObjsMap[relPath]) == 1 {
 			objName := mRelPathsObjsMap[relPath][0]
 
-			err = backup.RestoreDirEntry(ctx, encKey, pathToRestoreInto, objName, backupName, snapshotName, relPath, objst, cfgBucket, cfgVerbose)
+			err = backup.RestoreDirEntry(ctx, encKey, pathToRestoreInto, objName, backupName, snapshotName, relPath, objst, cfgBucket, cfgVerbose, &dirChmodQueue)
 			if err != nil {
 				log.Printf("error: could not restore a dir entry '%s'", relPath)
 			}
@@ -113,4 +115,13 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 		// Give progress bar 0.1 sec to draw itself for final time
 		time.Sleep(1e8)
 	}
+
+	// Do all the queued up directory chmods
+	for _, dirChmodQueueItem := range dirChmodQueue {
+		err := os.Chmod(dirChmodQueueItem.AbsPath, dirChmodQueueItem.FinalMode)
+		if err != nil {
+			log.Printf("error: could not chmod dir '%s' to final %#o\n", dirChmodQueueItem.AbsPath, dirChmodQueueItem.FinalMode)
+		}
+	}
+
 }

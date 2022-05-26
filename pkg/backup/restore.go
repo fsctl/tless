@@ -15,7 +15,12 @@ import (
 	"github.com/fsctl/trustlessbak/pkg/util"
 )
 
-func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string, objName string, rootDirName string, snapshotName string, relPath string, objst *objstore.ObjStore, bucket string, printOnSuccess bool) error {
+type DirChmodQueueItem struct {
+	AbsPath   string
+	FinalMode fs.FileMode
+}
+
+func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string, objName string, rootDirName string, snapshotName string, relPath string, objst *objstore.ObjStore, bucket string, printOnSuccess bool, dirChmodQueue *[]DirChmodQueueItem) error {
 	// Strip any trailing slashes on destination path
 	restoreIntoDirPath = util.StripTrailingSlashes(restoreIntoDirPath)
 
@@ -59,15 +64,17 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 
 		// We don't worry about xattrs on symlink entries
 	} else if metadataPtr.IsDir {
-		err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, relPath, fs.FileMode(metadataPtr.Mode))
+		// We initially create dirs with mode=0755 (because real mode might be too restrictive for child
+		// restores) and enqueue an item to set dir to its correct, final mode after all files restored.
+		dirFullPath := filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, relPath)
+		err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, relPath, 0755)
 		if err != nil {
-			log.Printf("error: could not create dir '%s': %v\n",
-				filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, relPath), err)
+			log.Printf("error: could not create dir '%s': %v\n", dirFullPath, err)
 			return err
 		}
+		*dirChmodQueue = append(*dirChmodQueue, DirChmodQueueItem{AbsPath: dirFullPath, FinalMode: fs.FileMode(metadataPtr.Mode)})
 		if err = deserializeAndSetXAttrs(filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, relPath), metadataPtr.XAttrs); err != nil {
-			log.Printf("error: could not set xattrs on dir '%s': %v\n",
-				filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, relPath), err)
+			log.Printf("error: could not set xattrs on dir '%s': %v\n", dirFullPath, err)
 			return err
 		}
 	} else {
