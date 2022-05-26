@@ -61,7 +61,7 @@ func daemonMain() {
 
 	go func() {
 		// setup listener and grpc server instance
-		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfgPort))
+		lis, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", cfgPort))
 		if err != nil {
 			log.Fatalf("failed to listen: %v", err)
 		}
