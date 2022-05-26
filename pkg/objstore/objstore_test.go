@@ -15,10 +15,11 @@ func TestComputeETag(t *testing.T) {
 	eTag = ComputeETag(bufSmall)
 	assert.Equal(t, "5d41402abc4b2a76b9719d911017c592", eTag)
 
-	bufTwoParts := make([]byte, 0)
-	for i := 0; i < ObjStoreMultiPartUploadPartSize+1; i++ {
-		bufTwoParts = append(bufTwoParts, 0x00)
+	assert.Equal(t, 16*1024*1024, ObjStoreMultiPartUploadPartSize, "the precomputed hash here is based on a part size of 16mb")
+	bufMultipleParts := make([]byte, 0)
+	for i := 0; i < 134217728+1; i++ { // create buffer of 128mb + 1 byte
+		bufMultipleParts = append(bufMultipleParts, 0x00)
 	}
-	eTag = ComputeETag(bufTwoParts)
-	assert.Equal(t, "0cb34dc976627c8d711d213ea1c83f08-2", eTag)
+	eTag = ComputeETag(bufMultipleParts)
+	assert.Equal(t, "86264857aa7680b4be19eb2dd95be60a-9", eTag)
 }

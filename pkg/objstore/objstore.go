@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	ObjStoreMultiPartUploadPartSize = 129 * 1024 * 1024
+	ObjStoreMultiPartUploadPartSize = 16 * 1024 * 1024
 )
 
 type ObjStore struct {
