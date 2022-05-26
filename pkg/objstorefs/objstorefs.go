@@ -155,7 +155,7 @@ func decryptNamesTriplet(key []byte, encBackupName string, encSnapshotName strin
 //  - One object key in the slice is the case where the entire file fits in a single chunk.
 //  - Multiple object keys are of the form xxxxxxxxxxxx.000, xxxxxxxxxxxx.001, xxxxxxxxxxxx.002, etc.
 // and need to be concatenated after decryption.
-func ReconstructSnapshotFileList(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, backupName string, snapshotName string) (map[string][]string, error) {
+func ReconstructSnapshotFileList(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, backupName string, snapshotName string, partialRestorePath string) (map[string][]string, error) {
 	m := make(map[string][]string)
 
 	groupedObjects, err := GetGroupedSnapshots(ctx, objst, key, bucket)
@@ -194,6 +194,13 @@ func ReconstructSnapshotFileList(ctx context.Context, objst *objstore.ObjStore, 
 
 		// Loop through all the rel paths in current snapshot (order not important)
 		for relPath := range backupDir.Snapshots[currSnapshot].RelPaths {
+			// For a partial restore, check for prefix on each rel path and skip if no match.
+			if partialRestorePath != "" {
+				if !strings.HasPrefix(relPath, partialRestorePath) {
+					continue
+				}
+			}
+
 			if backupDir.Snapshots[currSnapshot].RelPaths[relPath].IsDeleted {
 				delete(m, relPath)
 			} else {

@@ -16,6 +16,9 @@ import (
 )
 
 var (
+	// Flags
+	cfgPartialRestore string
+
 	restoreCmd = &cobra.Command{
 		Use:   "restore [name] [/restore/into/dir]",
 		Short: "Restores a snapshot into a specified directory",
@@ -29,7 +32,19 @@ Example:
 
 	trustlessbak restore Documents/2020-01-15_04:56:00 /home/myname/Recovered-Documents
 
-The available snapshot times are displayed in 'unbackupcloud cloudls' with no arguments.
+This command will restore the entire backup of the 'Documents' hierarchy at the time
+4:56:00am on 2020-01-15. To restore just a subset of Documents, try the next two commands.
+
+	trustlessbak restore Documents/2020-01-15_04:56:00 /home/myname/Recovered-Documents --partial Journal
+	trustlessbak restore Documents/2020-01-15_04:56:00 /home/myname/Recovered-Documents --partial Journal/Feb.docx
+
+These two commands show how to do a partial restore. The same backup set ('Documents') and
+snapshot will be used, but in the first example only the files under Documents/Journal
+will be restored.
+
+In the second command, only a single file will be restored: 'Documents/Journal/Feb.docx'.
+
+The available snapshot times are displayed in 'unbackupcloud cloudls'.
 `,
 		Args: cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -39,6 +54,7 @@ The available snapshot times are displayed in 'unbackupcloud cloudls' with no ar
 )
 
 func init() {
+	restoreCmd.Flags().StringVarP(&cfgPartialRestore, "partial", "r", "", "relative path for a partial restore")
 	rootCmd.AddCommand(restoreCmd)
 }
 
@@ -58,7 +74,7 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 	progressBarContainer := mpb.New()
 
 	// get all the relpaths for this snapshot
-	mRelPathsObjsMap, err := objstorefs.ReconstructSnapshotFileList(ctx, objst, cfgBucket, encKey, backupName, snapshotName)
+	mRelPathsObjsMap, err := objstorefs.ReconstructSnapshotFileList(ctx, objst, cfgBucket, encKey, backupName, snapshotName, cfgPartialRestore)
 	if err != nil {
 		log.Fatalln("error: reconstructSnapshotFileList failed: ", err)
 	}

@@ -1,9 +1,13 @@
 #!/bin/bash
 
-# Set to '-v' for verbose output on all commands
+#
+# Set this to '-v' for verbose output on all commands
+#
 VERBOSE=
 
+#
 # Can't use tmpfs on Linux because it does not allow user-defined xattrs
+#
 UNAME=`uname`
 if [[ $UNAME == "Linux" ]]; then
     TEMPDIR=/home/mike/temp
@@ -14,13 +18,17 @@ else
     TEMPDIR=/tmp
 fi
 
+#
 # Clean up from last run
+#
 rm trustlessbak-state.db
 rm -rf $TEMPDIR/test-backup-src
 rm -rf $TEMPDIR/test-restore-dst
 ./trustlessbak extras wipe-server
 
+#
 # Create backup source file hierarchy
+#
 mkdir -p $TEMPDIR/test-backup-src/emptydir
 mkdir -p $TEMPDIR/test-backup-src/subdir1
 # Test file with non-standard mode bits
@@ -45,7 +53,9 @@ echo "Hello" > $TEMPDIR/test-backup-src/xattrs/xattr-file
 xattr -w user.xattr-name xattr-file $TEMPDIR/test-backup-src/xattrs/xattr-file
 xattr -w user.xattr-name xattrs $TEMPDIR/test-backup-src/xattrs
 
+#
 # Backup $TEMPDIR/test-backup-src to cloud.
+#
 echo "🧪 Testing initial backup..."
 ./trustlessbak backup -d $TEMPDIR/test-backup-src $VERBOSE
 EXITCODE=$?
@@ -54,12 +64,61 @@ if [[ $EXITCODE != 0 ]]; then
     exit 1
 fi
 
+#
 # Get the snapshot names to specify in restore
+#
 echo "🧪 Testing cloudls..."
 SNAPSHOT_NAME=`./trustlessbak cloudls --grep | tail -n -1`
 
-# Restore to $TEMPDIR/test-restore-dst/
-echo "🧪 Testing restore of initial backup..."
+#
+# Partial restores to $TEMPDIR/test-restore-dst/
+#
+echo "🧪 Testing partial dir restore of initial backup..."
+./trustlessbak restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE --partial emptydir
+EXITCODE=$?
+if [[ $EXITCODE != 0 ]]; then
+    echo "Halting test due to partial restore failure exit code ($EXITCODE)"
+    exit 1
+fi
+F=`find $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME -type f | wc -l | sed -e 's/ //g'`
+D=`find $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME -type d | wc -l | sed -e 's/ //g'`
+if [[ $F != 0 ]]; then
+    echo "ERROR: got wrong number of dir entries on count of $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME"
+    echo "(expected 0 files, got $F files)"
+    exit 1
+fi
+if [[ $D != 2 ]]; then
+    echo "ERROR: got wrong number of dirs on count of $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME"
+    echo "(expected 2 dirs, got $D dirs)"
+    exit 1
+fi
+rm -rf $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME
+
+echo "🧪 Testing single file partial restore of initial backup..."
+./trustlessbak restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE --partial subdir1/file.txt
+EXITCODE=$?
+if [[ $EXITCODE != 0 ]]; then
+    echo "Halting test due to partial restore failure exit code ($EXITCODE)"
+    exit 1
+fi
+F=`find $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME -type f | wc -l | sed -e 's/ //g'`
+D=`find $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME -type d | wc -l | sed -e 's/ //g'`
+if [[ $F != 1 ]]; then
+    echo "ERROR: got wrong number of dir entries on count of $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME"
+    echo "(expected 1 file, got $F files)"
+    exit 1
+fi
+if [[ $D != 2 ]]; then
+    echo "ERROR: got wrong number of dirs on count of $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME"
+    echo "(expected 2 dirs, got $D dirs)"
+    exit 1
+fi
+rm -rf $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME
+
+#
+# Full restore to $TEMPDIR/test-restore-dst/
+#
+echo "🧪 Testing full restore of initial backup..."
 ./trustlessbak restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
@@ -67,7 +126,9 @@ if [[ $EXITCODE != 0 ]]; then
     exit 1
 fi
 
+#
 # 'diff -r' to make sure they match exactly
+#
 diff -r $TEMPDIR/test-backup-src $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
@@ -75,7 +136,9 @@ if [[ $EXITCODE != 0 ]]; then
     exit 1
 fi
 
+#
 # Compare the mode bits on subdir1/file to make sure mode was set correctly
+#
 FILE_MODE_BITS_SRC=`ls -la $TEMPDIR/test-backup-src/subdir1/file.txt | cut -c 1-10`
 FILE_MODE_BITS_DST=`ls -la $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME/subdir1/file.txt | cut -c 1-10`
 if [[ "$FILE_MODE_BITS_SRC" != "$FILE_MODE_BITS_DST" ]]; then
@@ -83,7 +146,9 @@ if [[ "$FILE_MODE_BITS_SRC" != "$FILE_MODE_BITS_DST" ]]; then
     exit 1
 fi
 
+#
 # Compare xattrs on xattrs and xattrs/xattr-file
+#
 XATTRS_FILE_SRC=`xattr -p user.xattr-name $TEMPDIR/test-backup-src/xattrs/xattr-file`
 XATTRS_FILE_DST=`xattr -p user.xattr-name $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME/xattrs/xattr-file`
 if [[ "$XATTRS_FILE_SRC" != "$XATTRS_FILE_DST" ]]; then
@@ -97,10 +162,14 @@ if [[ "$XATTRS_DIR_SRC" != "$XATTRS_DIR_DST" ]]; then
     exit 1
 fi
 
+#
 # Now delete a file and repeat the whole test process
+#
 rm -rf $TEMPDIR/test-backup-src/subdir2
 
+#
 # Incremental backup of $TEMPDIR/test-backup-src
+#
 echo "🧪 Testing incremental backup with deleted paths..."
 ./trustlessbak backup -d $TEMPDIR/test-backup-src $VERBOSE
 EXITCODE=$?
@@ -109,10 +178,14 @@ if [[ $EXITCODE != 0 ]]; then
     exit 1
 fi
 
+#
 # Get the new snapshot name to specify in next restore
+#
 SNAPSHOT_NAME=`./trustlessbak cloudls --grep | tail -n -1`
 
+#
 # Restore to $TEMPDIR/test-restore-dst/
+#
 echo "🧪 Testing restore of snapshot with deleted paths..."
 ./trustlessbak restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE
 EXITCODE=$?
@@ -121,7 +194,9 @@ if [[ $EXITCODE != 0 ]]; then
     exit 1
 fi
 
+#
 # 'diff -r' to make sure they match exactly
+#
 diff -r $TEMPDIR/test-backup-src $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then

@@ -164,7 +164,7 @@ func cloudlsMainShowSnapshot() {
 	snapshotName := snapshotFlagParts[1]
 	// TODO: check both parts for regex validity
 
-	mRelPathsObjsMap, err := objstorefs.ReconstructSnapshotFileList(ctx, objst, cfgBucket, encKey, backupName, snapshotName)
+	mRelPathsObjsMap, err := objstorefs.ReconstructSnapshotFileList(ctx, objst, cfgBucket, encKey, backupName, snapshotName, "")
 	if err != nil {
 		log.Fatalln("error: reconstructSnapshotFileList failed: ", err)
 	}
