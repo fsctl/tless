@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
+	"github.com/fsctl/trustlessbak/pkg/cryptography"
 	"github.com/fsctl/trustlessbak/pkg/objstore"
 	"github.com/spf13/cobra"
 	"github.com/vbauerster/mpb/v7"
@@ -67,12 +69,46 @@ Example:
 			genTemplateMain()
 		},
 	}
+
+	decObjNameCmd = &cobra.Command{
+		Use:   "dec-objname",
+		Short: "Decrypts an object name",
+		Long: `This command decrypts object store object names, either full ones with multiple slashes
+or individual components.  See below for some examples.
+
+Example:
+
+	trustlessbak extras dec-objname KVNWnYqs9WjINZhAU6UCWCEGoJcqNpKgbOWVEs7IBlCKzaFkbih4i9sYRyMyZurFohPDGUypMA==/4EyQgOMGXAyubu52fp5wpG_AVR5n3XLE1-fBtn_p9klvMiiC35S_i8N-3EW9HEBsikhRvGl4ZUoQI8c=/KOguujOV6osTNUcQUx6_XBCG50JhsjX8Vx8iAXzM/g7TiJMogCcRqVFLV9j0BGseTtLLid7NYIZ-7EO4=.003
+	=> test-backup-src / 2020-10-16_12:23:41 / subdir1/subdir2/file1.txt
+
+	trustlessbak extras dec-objname KVNWnYqs9WjINZhAU6UCWCEGoJcqNpKgbOWVEs7IBlCKzaFkbih4i9sYRyMyZurFohPDGUypMA==
+	=> test-backup-src
+
+	trustlessbak extras dec-objname 4EyQgOMGXAyubu52fp5wpG_AVR5n3XLE1-fBtn_p9klvMiiC35S_i8N-3EW9HEBsikhRvGl4ZUoQI8c=
+	=> 2020-10-16_12:23:41
+
+	trustlessbak extras dec-objname KOguujOV6osTNUcQUx6_XBCG50JhsjX8Vx8iAXzM/g7TiJMogCcRqVFLV9j0BGseTtLLid7NYIZ-7EO4=.003
+	=> subdir1/subdir2/file1.txt
+
+	Note that the last example contains a single slash in the encrypted object component name. This
+	indicates that it is a relative path. Previous examples either contain all possible slashes or
+	no slashes.
+`,
+		Args: cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			if len(args) != 1 {
+				fmt.Printf("Expecting one argument: the object name to decrypt. (--help for examples)")
+			}
+			decObjNameMain(args[0])
+		},
+	}
 )
 
 func init() {
 	extrasCmd.AddCommand(checkConnCmd)
 	extrasCmd.AddCommand(wipeServerCmd)
 	extrasCmd.AddCommand(genTemplateCmd)
+	extrasCmd.AddCommand(decObjNameCmd)
 	rootCmd.AddCommand(extrasCmd)
 }
 
@@ -139,4 +175,58 @@ func wipeServerMain() {
 func genTemplateMain() {
 	template := generateConfigTemplate()
 	fmt.Println(template)
+}
+
+func decObjNameMain(encObjectName string) {
+	// validate encryptedObjectName format
+	encObjectNameParts := strings.Split(encObjectName, "/")
+	if len(encObjectNameParts) != 1 && len(encObjectNameParts) != 2 && len(encObjectNameParts) != 4 {
+		fmt.Printf("malformed input: either 0, 1 or 3 slashes expected")
+		return
+	}
+
+	// decrypt each format
+	if len(encObjectNameParts) == 1 {
+		if decrypted, err := cryptography.DecryptFilename(encKey, encObjectNameParts[0]); err != nil {
+			fmt.Println("error: ", err)
+		} else {
+			fmt.Printf("=> %s\n", decrypted)
+		}
+	} else if len(encObjectNameParts) == 2 {
+		// We assume one slash means its a relpath, so join the two parts and decrypt
+		encRelPath := encObjectNameParts[0] + encObjectNameParts[1]
+		encRelPath = strings.TrimPrefix(encRelPath, "##")
+		if strings.Contains(encRelPath, ".") {
+			encRelPath = encRelPath[:len(encRelPath)-4] // strip off .NNN
+		}
+		if decrypted, err := cryptography.DecryptFilename(encKey, encRelPath); err != nil {
+			fmt.Println("error: ", err)
+		} else {
+			fmt.Printf("=> %s\n", decrypted)
+		}
+	} else if len(encObjectNameParts) == 4 {
+		// We assume four slashes means its a full object name, so join the last two parts and decrypt
+		encBackupDirName := encObjectNameParts[0]
+		decBackupDirName, err := cryptography.DecryptFilename(encKey, encBackupDirName)
+		if err != nil {
+			fmt.Println("error: ", err)
+		}
+
+		encSnapshotName := encObjectNameParts[0]
+		decSnapshotName, err := cryptography.DecryptFilename(encKey, encSnapshotName)
+		if err != nil {
+			fmt.Println("error: ", err)
+		}
+
+		encRelPath := encObjectNameParts[2] + encObjectNameParts[3]
+		encRelPath = strings.TrimPrefix(encRelPath, "##")
+		if strings.Contains(encRelPath, ".") {
+			encRelPath = encRelPath[:len(encRelPath)-4] // strip off .NNN
+		}
+		if decRelPath, err := cryptography.DecryptFilename(encKey, encRelPath); err != nil {
+			fmt.Println("error: ", err)
+		} else {
+			fmt.Printf("=> %s / %s / %s\n", decBackupDirName, decSnapshotName, decRelPath)
+		}
+	}
 }
