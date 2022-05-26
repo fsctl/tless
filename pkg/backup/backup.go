@@ -123,7 +123,7 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 
 		// try to put the (encrypted filename, encrypted snapshot name, encrypted relPath) tuple to obj store
 		objName := encryptedRootDirName + "/" + encryptedSnapshotName + "/" + encryptedRelPath
-		err = objst.UploadObjFromBuffer(ctx, bucket, objName, ciphertextBuf)
+		err = objst.UploadObjFromBuffer(ctx, bucket, objName, ciphertextBuf, objstore.ComputeETag(ciphertextBuf))
 		if err != nil {
 			log.Printf("error: Backup(): backing up file: %v\n", err)
 			return err
@@ -188,7 +188,7 @@ func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath stri
 			//bad for the case when you're just checking local file against what's on the server.
 			//Would need to retrieve first 24 bytes of server file to compute ciphertext correctly.
 			//fmt.Printf("MD5 of ciphertext buffer: %x (%d bytes)\n", md5.Sum(ciphertextReadBuf), len(ciphertextReadBuf))
-			err = objst.UploadObjFromBuffer(ctx, bucket, objName, ciphertextReadBuf)
+			err = objst.UploadObjFromBuffer(ctx, bucket, objName, ciphertextReadBuf, objstore.ComputeETag(ciphertextReadBuf))
 			if err != nil {
 				log.Printf("error: Backup(): backing up file: %v\n", err)
 				return err

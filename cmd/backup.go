@@ -213,7 +213,7 @@ func createDeletedPathsKeysAndPurgeFromDb(ctx context.Context, objst *objstore.O
 		// create an object in this snapshot like encBackupDirName/encSnapshotName/##encRelPath
 		// where ## prefix indicates rel path was deleted since prev snapshot
 		objName := encryptedBackupDirName + "/" + encryptedSnapshotName + "/##" + encryptedDeletedRelPath
-		if err = objst.UploadObjFromBuffer(ctx, bucket, objName, make([]byte, 0)); err != nil {
+		if err = objst.UploadObjFromBuffer(ctx, bucket, objName, make([]byte, 0), objstore.ComputeETag([]byte{})); err != nil {
 			log.Printf("error: createDeletedPathsKeys(): could not UploadObjFromBuffer ('%s'): %v\n", objName, err)
 			return err
 		}
