@@ -145,13 +145,11 @@ func backupMain() {
 			if id != 0 {
 				if err := backup.Backup(ctx, encKey, db, backupDirPath, snapshotName, id, objst, cfgBucket, cfgVerbose); err != nil {
 					log.Printf("error: Backup(): %v", err)
-					//reEnqueue(&backupIdsQueue, id)
 					continue
 				}
 				err := db.UpdateLastBackupTime(id)
 				if err != nil {
 					log.Printf("error: UpdateLastBackupTime(): %v", err)
-					//reEnqueue(&backupIdsQueue, id)
 				}
 			}
 
@@ -253,10 +251,4 @@ func trySaveSaltToServer(ctx context.Context, objst *objstore.ObjStore, bucket s
 	} else {
 		return
 	}
-}
-
-func reEnqueue(backupIdsQueue *fstraverse.BackupIdsQueue, dirEntId int) {
-	backupIdsQueue.Lock.Lock()
-	backupIdsQueue.Ids = append(backupIdsQueue.Ids, dirEntId)
-	backupIdsQueue.Lock.Unlock()
 }
