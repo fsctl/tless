@@ -8,11 +8,11 @@ Cloud backup for people who don't trust cloud provider security.  Features:
  - Snapshots
  - Compression
  - Preserves xattrs, file mode, symlinks
- - Clear security guarantees (see [SECURITY.md](blob/main/SECURITY.md))
+ - Clear security guarantees (see [SECURITY.md](SECURITY.md))
 
 There are plenty of cloud-based backup solutions, many with more elaborate features than this one.  However, I do not know of any other utility like this that leaks zero unencrypted information to the cloud provider.  This means that if your cloud provider is hacked or your cloud data is otherwise leaked onto the Internet, you can have strong confidence that it will not be readable by anyone who does not know your passphrase.  
 
-If you follow the [security recommendations](blob/main/SECURITY.md), your data is likely to be secure through at least the middle of this century.
+If you follow the [security recommendations](SECURITY.md), your data is likely to be secure through at least the middle of this century.
 
 ## Installation & Usage
 
