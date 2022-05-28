@@ -21,10 +21,10 @@ fi
 #
 # Clean up from last run
 #
-rm trustlessbak-state.db
+rm tless-state.db
 rm -rf $TEMPDIR/test-backup-src
 rm -rf $TEMPDIR/test-restore-dst
-./trustlessbak extras wipe-server --force
+./tless extras wipe-server --force
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
     echo "$0: Halting test because could not wipe server (exit code $EXITCODE)"
@@ -62,7 +62,7 @@ xattr -w user.xattr-name xattrs $TEMPDIR/test-backup-src/xattrs
 # Backup $TEMPDIR/test-backup-src to cloud.
 #
 echo "🧪 Testing initial backup..."
-./trustlessbak backup -d $TEMPDIR/test-backup-src $VERBOSE
+./tless backup -d $TEMPDIR/test-backup-src $VERBOSE
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
     echo "$0: Halting test due to failure exit code ($EXITCODE)"
@@ -73,13 +73,13 @@ fi
 # Get the snapshot names to specify in restore
 #
 echo "🧪 Testing cloudls..."
-SNAPSHOT_NAME=`./trustlessbak cloudls --grep | tail -n -1`
+SNAPSHOT_NAME=`./tless cloudls --grep | tail -n -1`
 
 #
 # Partial restores to $TEMPDIR/test-restore-dst/
 #
 echo "🧪 Testing partial dir restore of initial backup..."
-./trustlessbak restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE --partial emptydir
+./tless restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE --partial emptydir
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
     echo "$0: Halting test due to partial restore failure exit code ($EXITCODE)"
@@ -100,7 +100,7 @@ fi
 rm -rf $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME
 
 echo "🧪 Testing single file partial restore of initial backup..."
-./trustlessbak restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE --partial subdir1/file.txt
+./tless restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE --partial subdir1/file.txt
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
     echo "$0: Halting test due to partial restore failure exit code ($EXITCODE)"
@@ -124,7 +124,7 @@ rm -rf $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME
 # Full restore to $TEMPDIR/test-restore-dst/
 #
 echo "🧪 Testing full restore of initial backup..."
-./trustlessbak restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE
+./tless restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
     echo "$0: Halting test due to failure exit code ($EXITCODE)"
@@ -176,7 +176,7 @@ rm -rf $TEMPDIR/test-backup-src/subdir2
 # Incremental backup of $TEMPDIR/test-backup-src
 #
 echo "🧪 Testing incremental backup with deleted paths..."
-./trustlessbak backup -d $TEMPDIR/test-backup-src $VERBOSE
+./tless backup -d $TEMPDIR/test-backup-src $VERBOSE
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
     echo "$0: Halting test due to failure exit code ($EXITCODE)"
@@ -186,13 +186,13 @@ fi
 #
 # Get the new snapshot name to specify in next restore
 #
-SNAPSHOT_NAME=`./trustlessbak cloudls --grep | tail -n -1`
+SNAPSHOT_NAME=`./tless cloudls --grep | tail -n -1`
 
 #
 # Restore to $TEMPDIR/test-restore-dst/
 #
 echo "🧪 Testing restore of snapshot with deleted paths..."
-./trustlessbak restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE
+./tless restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
     echo "$0: Halting test due to failure exit code ($EXITCODE)"

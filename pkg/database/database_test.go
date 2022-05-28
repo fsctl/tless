@@ -7,7 +7,7 @@ import (
 )
 
 func TestInsertAndGetPaths(t *testing.T) {
-	db, err := NewDB("./trustlessbak-state.db")
+	db, err := NewDB("./tless-state.db")
 	assert.NoError(t, err)
 	defer db.Close()
 
@@ -40,7 +40,7 @@ func TestInsertAndGetPaths(t *testing.T) {
 }
 
 func TestUpdateLastBackupTime(t *testing.T) {
-	db, err := NewDB("./trustlessbak-state.db")
+	db, err := NewDB("./tless-state.db")
 	assert.NoError(t, err)
 	defer db.Close()
 
@@ -63,7 +63,7 @@ func TestUpdateLastBackupTime(t *testing.T) {
 }
 
 func TestGetDirEntRelPath(t *testing.T) {
-	db, err := NewDB("./trustlessbak-state.db")
+	db, err := NewDB("./tless-state.db")
 	assert.NoError(t, err)
 	defer db.Close()
 

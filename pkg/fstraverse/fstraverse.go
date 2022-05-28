@@ -10,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/fsctl/trustlessbak/pkg/database"
-	"github.com/fsctl/trustlessbak/pkg/util"
+	"github.com/fsctl/tless/pkg/database"
+	"github.com/fsctl/tless/pkg/util"
 )
 
 type BackupIdsQueue struct {

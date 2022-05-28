@@ -10,8 +10,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/fsctl/trustlessbak/pkg/cryptography"
-	"github.com/fsctl/trustlessbak/pkg/objstore"
+	"github.com/fsctl/tless/pkg/cryptography"
+	"github.com/fsctl/tless/pkg/objstore"
 )
 
 var (
@@ -30,10 +30,10 @@ var (
 
 	// Root command
 	rootCmd = &cobra.Command{
-		Use:   "trustlessbak",
+		Use:   "tless",
 		Short: "Backup directories to the cloud without trusting it",
-		Long: `                         === trustlessbak ===
-trustlessbak is a tool for cloud backups for people who don't want to place
+		Long: `                         === tless ===
+tless is a tool for cloud backups for people who don't want to place
 any trust in cloud providers. It encrypts files and filenames locally, with 
 a password that never leaves the local machine.`,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
@@ -76,10 +76,10 @@ func init() {
 }
 
 func initConfig() {
-	// look for config in:  $HOME/.trustlessbak/config.toml or './config.toml'
+	// look for config in:  $HOME/.tless/config.toml or './config.toml'
 	viper.SetConfigType("toml")
 	viper.SetConfigName("config")
-	viper.AddConfigPath("$HOME/.trustlessbak")
+	viper.AddConfigPath("$HOME/.tless")
 	viper.AddConfigPath(".")
 
 	if err := viper.ReadInConfig(); err == nil {
@@ -106,7 +106,7 @@ func initConfig() {
 
 func makeTemplateConfigFile() {
 	fmt.Printf(
-		`No config file was found in $HOME/.trustlessbak/config.toml or the current 
+		`No config file was found in $HOME/.tless/config.toml or the current 
 directory. 
 
 A template config file will be written for you, but you must fill in its values
@@ -117,7 +117,7 @@ for the program to work.
 	if err != nil {
 		log.Printf("error: could not write config file template: %v\n", err)
 	}
-	appCfgDir := filepath.Join(userHomeDir, ".trustlessbak")
+	appCfgDir := filepath.Join(userHomeDir, ".tless")
 	os.Mkdir(appCfgDir, 0700)
 	configFilePath := filepath.Join(appCfgDir, "config.toml")
 	writeTemplateConfigToPath(configFilePath)

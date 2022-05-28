@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fsctl/trustlessbak/pkg/cryptography"
-	"github.com/fsctl/trustlessbak/pkg/objstore"
+	"github.com/fsctl/tless/pkg/cryptography"
+	"github.com/fsctl/tless/pkg/objstore"
 )
 
 type RelPath struct {

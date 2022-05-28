@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/fsctl/trustlessbak/cmd"
+	"github.com/fsctl/tless/cmd"
 )
 
 var (
@@ -18,7 +18,7 @@ func main() {
 	// We have to trap "--version" out here because linker won't write to cmd package
 	// during `go build`
 	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "version") {
-		fmt.Printf("trustlessbak v%s-%s (built at %s)\n", Version, CommitHash, BuildTimestamp)
+		fmt.Printf("tless v%s-%s (built at %s)\n", Version, CommitHash, BuildTimestamp)
 	} else {
 		cmd.Execute()
 	}

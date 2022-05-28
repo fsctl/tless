@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	pb "github.com/fsctl/trustlessbak/rpc"
+	pb "github.com/fsctl/tless/rpc"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -23,7 +23,7 @@ connect to it and send an RPC.
 
 Example:
 
-	trustlessbak daemon-client --daemon-host localhost:50051
+	tless daemon-client --daemon-host localhost:50051
 `,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {

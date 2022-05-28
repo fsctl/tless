@@ -8,7 +8,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/fsctl/trustlessbak/pkg/cryptography"
+	"github.com/fsctl/tless/pkg/cryptography"
 )
 
 var (

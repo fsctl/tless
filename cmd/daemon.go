@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	pb "github.com/fsctl/trustlessbak/rpc"
+	pb "github.com/fsctl/tless/rpc"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 )
@@ -22,13 +22,13 @@ var (
 		Use:   "daemon",
 		Short: "Runs as a background daemon",
 		Long: `Starts the program in a mode where it just sits and waits for SIGINT or SIGTERM. 
-While waiting, the daemon will listen on the socket /tmp/trustlessbak.sock for commands and 
+While waiting, the daemon will listen on the socket /tmp/tless.sock for commands and 
 return the results of running those commands through the socket. Logging output will still 
 be written to STDERR.
 
 Example:
 
-	trustlessbak daemon
+	tless daemon
 `,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {

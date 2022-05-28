@@ -11,10 +11,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/fsctl/trustlessbak/pkg/cryptography"
-	"github.com/fsctl/trustlessbak/pkg/database"
-	"github.com/fsctl/trustlessbak/pkg/objstore"
-	"github.com/fsctl/trustlessbak/pkg/util"
+	"github.com/fsctl/tless/pkg/cryptography"
+	"github.com/fsctl/tless/pkg/database"
+	"github.com/fsctl/tless/pkg/objstore"
+	"github.com/fsctl/tless/pkg/util"
 )
 
 const (

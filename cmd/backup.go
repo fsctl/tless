@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fsctl/trustlessbak/pkg/backup"
-	"github.com/fsctl/trustlessbak/pkg/cryptography"
-	"github.com/fsctl/trustlessbak/pkg/database"
-	"github.com/fsctl/trustlessbak/pkg/fstraverse"
-	"github.com/fsctl/trustlessbak/pkg/objstore"
+	"github.com/fsctl/tless/pkg/backup"
+	"github.com/fsctl/tless/pkg/cryptography"
+	"github.com/fsctl/tless/pkg/database"
+	"github.com/fsctl/tless/pkg/fstraverse"
+	"github.com/fsctl/tless/pkg/objstore"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -38,7 +38,7 @@ a configuration file rather than use the command line flags.
 
 Example:
 
-	trustlessbak backup
+	tless backup
 
 This will read your config.toml configuration file for all information about the backup,
 cloud provider credentials, and master password. It will then perform an incremental backup to
@@ -70,7 +70,7 @@ func backupMain() {
 	}
 
 	// open and prepare sqlite database
-	db, err := database.NewDB("./trustlessbak-state.db")
+	db, err := database.NewDB("./tless-state.db")
 	if err != nil {
 		log.Fatalf("Error: cannot open database: %v", err)
 	}

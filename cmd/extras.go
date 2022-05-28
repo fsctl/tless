@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fsctl/trustlessbak/pkg/cryptography"
-	"github.com/fsctl/trustlessbak/pkg/objstore"
+	"github.com/fsctl/tless/pkg/cryptography"
+	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/spf13/cobra"
 	"github.com/vbauerster/mpb/v7"
 	"github.com/vbauerster/mpb/v7/decor"
@@ -30,7 +30,7 @@ store using the credentials in the config file.
 
 Example:
 
-	trustlessbak extras check-conn
+	tless extras check-conn
 `,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -45,7 +45,7 @@ Example:
 
 Example:
 
-	trustlessbak extras wipe-server
+	tless extras wipe-server
 `,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -56,13 +56,13 @@ Example:
 	genTemplateCmd = &cobra.Command{
 		Use:   "print-template",
 		Short: "Prints a config file template to stdout",
-		Long: `Run this command to print an example $HOME/.trustlessbak/config.toml file template. This
+		Long: `Run this command to print an example $HOME/.tless/config.toml file template. This
 template can be copy-pasted into an actual config file, and includes comments to help you fill it
 in with your settings.
 
 Example:
 
-	trustlessbak extras print-template
+	tless extras print-template
 `,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -78,16 +78,16 @@ or individual components.  See below for some examples.
 
 Example:
 
-	trustlessbak extras dec-objname KVNWnYqs9WjINZhAU6UCWCEGoJcqNpKgbOWVEs7IBlCKzaFkbih4i9sYRyMyZurFohPDGUypMA==/4EyQgOMGXAyubu52fp5wpG_AVR5n3XLE1-fBtn_p9klvMiiC35S_i8N-3EW9HEBsikhRvGl4ZUoQI8c=/KOguujOV6osTNUcQUx6_XBCG50JhsjX8Vx8iAXzM/g7TiJMogCcRqVFLV9j0BGseTtLLid7NYIZ-7EO4=.003
+	tless extras dec-objname KVNWnYqs9WjINZhAU6UCWCEGoJcqNpKgbOWVEs7IBlCKzaFkbih4i9sYRyMyZurFohPDGUypMA==/4EyQgOMGXAyubu52fp5wpG_AVR5n3XLE1-fBtn_p9klvMiiC35S_i8N-3EW9HEBsikhRvGl4ZUoQI8c=/KOguujOV6osTNUcQUx6_XBCG50JhsjX8Vx8iAXzM/g7TiJMogCcRqVFLV9j0BGseTtLLid7NYIZ-7EO4=.003
 	=> test-backup-src / 2020-10-16_12:23:41 / subdir1/subdir2/file1.txt
 
-	trustlessbak extras dec-objname KVNWnYqs9WjINZhAU6UCWCEGoJcqNpKgbOWVEs7IBlCKzaFkbih4i9sYRyMyZurFohPDGUypMA==
+	tless extras dec-objname KVNWnYqs9WjINZhAU6UCWCEGoJcqNpKgbOWVEs7IBlCKzaFkbih4i9sYRyMyZurFohPDGUypMA==
 	=> test-backup-src
 
-	trustlessbak extras dec-objname 4EyQgOMGXAyubu52fp5wpG_AVR5n3XLE1-fBtn_p9klvMiiC35S_i8N-3EW9HEBsikhRvGl4ZUoQI8c=
+	tless extras dec-objname 4EyQgOMGXAyubu52fp5wpG_AVR5n3XLE1-fBtn_p9klvMiiC35S_i8N-3EW9HEBsikhRvGl4ZUoQI8c=
 	=> 2020-10-16_12:23:41
 
-	trustlessbak extras dec-objname KOguujOV6osTNUcQUx6_XBCG50JhsjX8Vx8iAXzM/g7TiJMogCcRqVFLV9j0BGseTtLLid7NYIZ-7EO4=.003
+	tless extras dec-objname KOguujOV6osTNUcQUx6_XBCG50JhsjX8Vx8iAXzM/g7TiJMogCcRqVFLV9j0BGseTtLLid7NYIZ-7EO4=.003
 	=> subdir1/subdir2/file1.txt
 
 	Note that the last example contains a single slash in the encrypted object component name. This

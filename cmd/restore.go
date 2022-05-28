@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fsctl/trustlessbak/pkg/backup"
-	"github.com/fsctl/trustlessbak/pkg/objstore"
-	"github.com/fsctl/trustlessbak/pkg/objstorefs"
+	"github.com/fsctl/tless/pkg/backup"
+	"github.com/fsctl/tless/pkg/objstore"
+	"github.com/fsctl/tless/pkg/objstorefs"
 	"github.com/spf13/cobra"
 	"github.com/vbauerster/mpb/v7"
 	"github.com/vbauerster/mpb/v7/decor"
@@ -24,19 +24,19 @@ var (
 		Short: "Restores a snapshot into a specified directory",
 		Long: `Restores the named snapshot into the specified path. Usage:
 
-trustlessbak restore [snapshot] [/restore/into/dir]
+tless restore [snapshot] [/restore/into/dir]
 
-(Use 'trustlessbak cloudls' to get the names of your stored snapshots.)
+(Use 'tless cloudls' to get the names of your stored snapshots.)
 
 Example:
 
-	trustlessbak restore Documents/2020-01-15_04:56:00 /home/myname/Recovered-Documents
+	tless restore Documents/2020-01-15_04:56:00 /home/myname/Recovered-Documents
 
 This command will restore the entire backup of the 'Documents' hierarchy at the time
 4:56:00am on 2020-01-15. To restore just a subset of Documents, try the next two commands.
 
-	trustlessbak restore Documents/2020-01-15_04:56:00 /home/myname/Recovered-Documents --partial Journal
-	trustlessbak restore Documents/2020-01-15_04:56:00 /home/myname/Recovered-Documents --partial Journal/Feb.docx
+	tless restore Documents/2020-01-15_04:56:00 /home/myname/Recovered-Documents --partial Journal
+	tless restore Documents/2020-01-15_04:56:00 /home/myname/Recovered-Documents --partial Journal/Feb.docx
 
 These two commands show how to do a partial restore. The same backup set ('Documents') and
 snapshot will be used, but in the first example only the files under Documents/Journal

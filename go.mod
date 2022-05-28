@@ -1,4 +1,4 @@
-module github.com/fsctl/trustlessbak
+module github.com/fsctl/tless
 
 go 1.18
 

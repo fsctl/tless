@@ -1,4 +1,4 @@
-# trustlessbak
+# tless
 
 Cloud backup for people who don't trust cloud provider security.  Features:
 
@@ -28,20 +28,20 @@ Whatever blobstore you use, make note of these pieces of information:
 
 Note: Go 1.18 or higher is required
 
-3.  Run the program as `trustlessbak backup` to generate a template config file in `$HOME/.trustlessbak/config.toml`
+3.  Run the program as `tless backup` to generate a template config file in `$HOME/.tless/config.toml`
 
 4.  Edit the config file, following the instructions in the comments.  This is where you provide your blobstore credentials.  A high-entropy Diceware password and a strong salt are generated for you, though you can change them if you like.  
 
 The config file also specifies what directory tree(s) to back up, e.g., `/home/<your name>` on Linux or `/Users/<your name>/Documents` on macOS.
 
-5.  Test your config file by running `trustlessbak check-conn`. This will report on whether your blob store is reachable.
+5.  Test your config file by running `tless check-conn`. This will report on whether your blob store is reachable.
 
-6.  Run your first backup:  `trustlessbak backup`.  Change (or `touch`) some files and run that command again to create an incremental snapshot.
+6.  Run your first backup:  `tless backup`.  Change (or `touch`) some files and run that command again to create an incremental snapshot.
 
-7.  Use `trustlessbak cloudls` to see the snapshots you have accumulated on your cloud server.  They are all named after the directory being backed up and the time the snapshot was made.  Pick one to restore from the list and run:
+7.  Use `tless cloudls` to see the snapshots you have accumulated on your cloud server.  They are all named after the directory being backed up and the time the snapshot was made.  Pick one to restore from the list and run:
 
 ```
-trustlessbak restore Documents/2022-05-22_11:52:01 /tmp/restore-here
+tless restore Documents/2022-05-22_11:52:01 /tmp/restore-here
 ```
 
 8.  Connect to your bucket via its web interface and observe that everything is encrypted:  file and directory names, file metadata, file contents.

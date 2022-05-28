@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/fsctl/trustlessbak/pkg/objstore"
-	"github.com/fsctl/trustlessbak/pkg/objstorefs"
+	"github.com/fsctl/tless/pkg/objstore"
+	"github.com/fsctl/tless/pkg/objstorefs"
 	"github.com/spf13/cobra"
 )
 
@@ -28,9 +28,9 @@ With --verbose, shows the files in each snapshot.
 
 Example:
 
-	trustlessbak cloudls
-	trustlessbak cloudls --verbose
-	trustlessbak cloudls --snapshot=Documents/2020-01-01_04:56:01
+	tless cloudls
+	tless cloudls --verbose
+	tless cloudls --snapshot=Documents/2020-01-01_04:56:01
 
 The available snapshot times are displayed in 'unbackupcloud cloudls' with no arguments.
 `,
