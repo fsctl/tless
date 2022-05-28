@@ -49,7 +49,7 @@ func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRe
 }
 
 func init() {
-	daemonCmd.Flags().IntVarP(&cfgPort, "port", "P", 50051, "localhost port that daemon listens on")
+	daemonCmd.Flags().IntVarP(&cfgPort, "port", "P", 63964, "localhost port that daemon listens on")
 
 	rootCmd.AddCommand(daemonCmd)
 }
