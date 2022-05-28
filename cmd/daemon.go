@@ -14,10 +14,11 @@ import (
 	"google.golang.org/grpc"
 )
 
-var (
-	// Flags
-	cfgPort int
+const (
+	unixSocketPath = "/tmp/tless.sock"
+)
 
+var (
 	daemonCmd = &cobra.Command{
 		Use:   "daemon",
 		Short: "Runs as a background daemon",
@@ -49,8 +50,6 @@ func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRe
 }
 
 func init() {
-	daemonCmd.Flags().IntVarP(&cfgPort, "port", "P", 63964, "localhost port that daemon listens on")
-
 	rootCmd.AddCommand(daemonCmd)
 }
 
@@ -61,7 +60,8 @@ func daemonMain() {
 
 	go func() {
 		// setup listener and grpc server instance
-		lis, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", cfgPort))
+		//lis, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", cfgPort))
+		lis, err := net.Listen("unix", unixSocketPath)
 		if err != nil {
 			log.Fatalf("failed to listen: %v", err)
 		}
