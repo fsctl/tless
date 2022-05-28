@@ -13,7 +13,7 @@ import (
 
 var (
 	// Flags
-	cfgDaemonHost string
+	cfgDaemonSocket string
 
 	daemonClientCmd = &cobra.Command{
 		Use:   "daemon-client",
@@ -23,7 +23,10 @@ connect to it and send an RPC.
 
 Example:
 
-	tless daemon-client --daemon-host localhost:50051
+	tless daemon-client --socket unix:///tmp/tless.sock
+
+Note the 3 slashes in the socket address.  It's "unix://" plus the absolute path of the socket, which
+also begins with a slash.
 `,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -33,14 +36,14 @@ Example:
 )
 
 func init() {
-	daemonClientCmd.Flags().StringVarP(&cfgDaemonHost, "daemon-host", "D", "127.0.0.1:50051", "host:port on which daemon is listening")
+	daemonClientCmd.Flags().StringVarP(&cfgDaemonSocket, "socket", "S", "unix:///tmp/tless.sock", "unix socket on which daemon is listening")
 
 	extrasCmd.AddCommand(daemonClientCmd)
 }
 
 func daemonClientMain() {
 	// Set up a connection to the server.
-	conn, err := grpc.Dial(cfgDaemonHost, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(cfgDaemonSocket, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
