@@ -26,7 +26,7 @@ func DeriveKey(salt string, masterPassword string) ([]byte, error) {
 	if len(salt) < 8 {
 		return nil, ErrorBadSalt
 	}
-	key := argon2.IDKey([]byte(masterPassword), []byte(salt), 3, 1024*1024, 4, 32)
+	key := argon2.IDKey([]byte(masterPassword), []byte(salt), 10, 256*1024, 4, 32)
 	return key, nil
 }
 
