@@ -26,6 +26,7 @@ var (
 	cfgMasterPassword  string
 	cfgSalt            string
 	cfgVerbose         bool
+	cfgForce           bool
 
 	// Root command
 	rootCmd = &cobra.Command{
@@ -38,10 +39,13 @@ a password that never leaves the local machine.`,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			var err error
 
-			// derive encryption key
-			encKey, err = cryptography.DeriveKey(cfgSalt, cfgMasterPassword)
-			if err != nil {
-				log.Fatalf("Could not derive key: %v", err)
+			// Deriving the encryption key is slow, so only do it if DeriveKey was not already
+			// called as part of objstore.CheckCryptoConfigMatchesServer during package init
+			if encKey == nil {
+				encKey, err = cryptography.DeriveKey(cfgSalt, cfgMasterPassword)
+				if err != nil {
+					log.Fatalf("Could not derive key: %v", err)
+				}
 			}
 		},
 	}
@@ -63,6 +67,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgMasterPassword, "master-password", "p", "", "master password known only on your local machine")
 	rootCmd.PersistentFlags().StringVarP(&cfgSalt, "salt", "l", "", "salt used for key derivation from master password")
 	rootCmd.PersistentFlags().BoolVarP(&cfgVerbose, "verbose", "v", false, "verbose output")
+	rootCmd.PersistentFlags().BoolVarP(&cfgForce, "force", "f", false, "override check that salt and master password match\nwhat was previously used on server")
 
 	rootCmd.Flags().Bool("version", false, "print the version")
 
@@ -188,14 +193,6 @@ func configFallbackToTomlFile() {
 
 // Checks that configuration variables have sensible values (e.g., non-blannk, sane length)
 func validateConfigVars() error {
-	// fmt.Println("hello from main")
-	// fmt.Println("cfg variables:")
-	// fmt.Printf("  endpoint:            '%v'\n", cfgEndpoint)
-	// fmt.Printf("  cfgAccessKeyId:      '%v'\n", cfgAccessKeyId)
-	// fmt.Printf("  cfgSecretAccessKey:  '%v'\n", cfgSecretAccessKey)
-	// fmt.Printf("  cfgMasterPassword:   '%v'\n", cfgMasterPassword)
-	// fmt.Printf("  cfgSalt:             '%v'\n", cfgSalt)
-	// fmt.Printf("  cfgDirs:             '%v'\n", cfgDirs)
 	if cfgEndpoint == "" {
 		return fmt.Errorf("endpoint invalid (value='%s')", cfgEndpoint)
 	}
@@ -211,30 +208,27 @@ func validateConfigVars() error {
 	if cfgMasterPassword == "" {
 		return fmt.Errorf("master password invalid (value='%s')", cfgMasterPassword)
 	}
-	if len(cfgSalt) == 0 {
-		// If salt is blank/missing, try to read it from the server.
-		// If successful, use that salt but also save it to local config file.
-		objst := objstore.NewObjStore(context.Background(), cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
-		if !objst.IsReachableWithRetries(context.Background(), 10, cfgBucket) {
-			log.Fatalln("error: exiting because server not reachable")
-		}
-		salt, err := objst.TryReadSalt(context.Background(), cfgBucket)
-		if err != nil {
-			log.Println("warning: no salt in config and failed to read salt from server (will generate and save): ", err)
-		}
 
-		if salt == "" {
-			// If salt is not on the server, generate one and write it to config file + backup
-			// to server.
-			salt = cryptography.GenerateRandomSalt()
-			if err = objst.TryWriteSalt(context.Background(), cfgBucket, salt); err != nil {
-				log.Println("warning: generated a salt because no salt in config, but could not write salt to server: ", err)
-			}
-		}
-
-		viper.Set("backups.salt", salt)
-		viper.WriteConfig()
-		cfgSalt = salt
+	// Check crypto config in SALT-xxxx file
+	ctx := context.Background()
+	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
+	if !objst.IsReachableWithRetries(context.Background(), 10, cfgBucket) {
+		log.Fatalln("error: exiting because server not reachable")
 	}
+	if !cfgForce {
+		var err error
+		encKey, err = cryptography.DeriveKey(cfgSalt, cfgMasterPassword)
+		if err != nil {
+			log.Fatalf("Could not derive key: %v", err)
+		}
+		if !objst.CheckCryptoConfigMatchesServer(ctx, encKey, cfgBucket, cfgSalt, cfgVerbose) {
+			fmt.Println("Halting because of salt file problem; use --force to override this check")
+			log.Fatalf("halting due to salt file problem")
+		}
+	}
+	if len(cfgSalt) == 0 {
+		return fmt.Errorf("invalid salt (value='%s')", cfgSalt)
+	}
+
 	return nil
 }

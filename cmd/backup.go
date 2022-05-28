@@ -84,7 +84,6 @@ func backupMain() {
 	if !objst.IsReachableWithRetries(ctx, 10, cfgBucket) {
 		log.Fatalln("error: exiting because server not reachable")
 	}
-	trySaveSaltToServer(ctx, objst, cfgBucket)
 
 	// initialize progress bar container
 	progressBarContainer := mpb.New()
@@ -231,24 +230,4 @@ func createDeletedPathsKeysAndPurgeFromDb(ctx context.Context, objst *objstore.O
 	}
 
 	return nil
-}
-
-func trySaveSaltToServer(ctx context.Context, objst *objstore.ObjStore, bucket string) {
-	var salt string
-	salt, err := objst.TryReadSalt(ctx, bucket)
-	if err != nil {
-		log.Printf("warning: failed to read salt from server: %v\n", err)
-	}
-	if salt == "" {
-		// If salt read back from server is blank, try to save the current salt to the server for
-		// future use.
-		if err = objst.TryWriteSalt(ctx, bucket, cfgSalt); err != nil {
-			log.Printf("warning: failed to write salt to server for backup: %v\n", err)
-		}
-	} else if salt != cfgSalt {
-		// Warn user that we found a different salt on the server than what we have locally
-		log.Printf("warning: local salt =/= server saved salt; using local config salt ('%s') and ignoring server salt ('%s')\n", cfgSalt, salt)
-	} else {
-		return
-	}
 }

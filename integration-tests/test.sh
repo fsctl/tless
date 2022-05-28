@@ -24,7 +24,12 @@ fi
 rm trustlessbak-state.db
 rm -rf $TEMPDIR/test-backup-src
 rm -rf $TEMPDIR/test-restore-dst
-./trustlessbak extras wipe-server
+./trustlessbak extras wipe-server --force
+EXITCODE=$?
+if [[ $EXITCODE != 0 ]]; then
+    echo "$0: Halting test because could not wipe server (exit code $EXITCODE)"
+    exit 1
+fi
 
 #
 # Create backup source file hierarchy
@@ -60,7 +65,7 @@ echo "🧪 Testing initial backup..."
 ./trustlessbak backup -d $TEMPDIR/test-backup-src $VERBOSE
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
-    echo "Halting test due to failure exit code ($EXITCODE)"
+    echo "$0: Halting test due to failure exit code ($EXITCODE)"
     exit 1
 fi
 
@@ -77,19 +82,19 @@ echo "🧪 Testing partial dir restore of initial backup..."
 ./trustlessbak restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE --partial emptydir
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
-    echo "Halting test due to partial restore failure exit code ($EXITCODE)"
+    echo "$0: Halting test due to partial restore failure exit code ($EXITCODE)"
     exit 1
 fi
 F=`find $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME -type f | wc -l | sed -e 's/ //g'`
 D=`find $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME -type d | wc -l | sed -e 's/ //g'`
 if [[ $F != 0 ]]; then
-    echo "ERROR: got wrong number of dir entries on count of $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME"
-    echo "(expected 0 files, got $F files)"
+    echo "$0: ERROR: got wrong number of dir entries on count of $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME"
+    echo "$0: (expected 0 files, got $F files)"
     exit 1
 fi
 if [[ $D != 2 ]]; then
-    echo "ERROR: got wrong number of dirs on count of $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME"
-    echo "(expected 2 dirs, got $D dirs)"
+    echo "$0: ERROR: got wrong number of dirs on count of $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME"
+    echo "$0: (expected 2 dirs, got $D dirs)"
     exit 1
 fi
 rm -rf $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME
@@ -98,19 +103,19 @@ echo "🧪 Testing single file partial restore of initial backup..."
 ./trustlessbak restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE --partial subdir1/file.txt
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
-    echo "Halting test due to partial restore failure exit code ($EXITCODE)"
+    echo "$0: Halting test due to partial restore failure exit code ($EXITCODE)"
     exit 1
 fi
 F=`find $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME -type f | wc -l | sed -e 's/ //g'`
 D=`find $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME -type d | wc -l | sed -e 's/ //g'`
 if [[ $F != 1 ]]; then
-    echo "ERROR: got wrong number of dir entries on count of $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME"
-    echo "(expected 1 file, got $F files)"
+    echo "$0: ERROR: got wrong number of dir entries on count of $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME"
+    echo "$0: (expected 1 file, got $F files)"
     exit 1
 fi
 if [[ $D != 2 ]]; then
-    echo "ERROR: got wrong number of dirs on count of $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME"
-    echo "(expected 2 dirs, got $D dirs)"
+    echo "$0: ERROR: got wrong number of dirs on count of $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME"
+    echo "$0: (expected 2 dirs, got $D dirs)"
     exit 1
 fi
 rm -rf $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME
@@ -122,7 +127,7 @@ echo "🧪 Testing full restore of initial backup..."
 ./trustlessbak restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
-    echo "Halting test due to failure exit code ($EXITCODE)"
+    echo "$0: Halting test due to failure exit code ($EXITCODE)"
     exit 1
 fi
 
@@ -132,7 +137,7 @@ fi
 diff -r $TEMPDIR/test-backup-src $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
-    echo "ERROR: source and restore directories do not match!"
+    echo "$0: ERROR: source and restore directories do not match!"
     exit 1
 fi
 
@@ -142,7 +147,7 @@ fi
 FILE_MODE_BITS_SRC=`ls -la $TEMPDIR/test-backup-src/subdir1/file.txt | cut -c 1-10`
 FILE_MODE_BITS_DST=`ls -la $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME/subdir1/file.txt | cut -c 1-10`
 if [[ "$FILE_MODE_BITS_SRC" != "$FILE_MODE_BITS_DST" ]]; then
-    echo "ERROR: mode bits do not match on subdir1/file"
+    echo "$0: ERROR: mode bits do not match on subdir1/file"
     exit 1
 fi
 
@@ -152,13 +157,13 @@ fi
 XATTRS_FILE_SRC=`xattr -p user.xattr-name $TEMPDIR/test-backup-src/xattrs/xattr-file`
 XATTRS_FILE_DST=`xattr -p user.xattr-name $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME/xattrs/xattr-file`
 if [[ "$XATTRS_FILE_SRC" != "$XATTRS_FILE_DST" ]]; then
-    echo "ERROR: xattrs do not match on xattrs/xattr-file"
+    echo "$0: ERROR: xattrs do not match on xattrs/xattr-file"
     exit 1
 fi
 XATTRS_DIR_SRC=`xattr -p user.xattr-name $TEMPDIR/test-backup-src/xattrs`
 XATTRS_DIR_DST=`xattr -p user.xattr-name $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME/xattrs`
 if [[ "$XATTRS_DIR_SRC" != "$XATTRS_DIR_DST" ]]; then
-    echo "ERROR: xattrs do not match on directory xattrs"
+    echo "$0: ERROR: xattrs do not match on directory xattrs"
     exit 1
 fi
 
@@ -174,7 +179,7 @@ echo "🧪 Testing incremental backup with deleted paths..."
 ./trustlessbak backup -d $TEMPDIR/test-backup-src $VERBOSE
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
-    echo "Halting test due to failure exit code ($EXITCODE)"
+    echo "$0: Halting test due to failure exit code ($EXITCODE)"
     exit 1
 fi
 
@@ -190,7 +195,7 @@ echo "🧪 Testing restore of snapshot with deleted paths..."
 ./trustlessbak restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
-    echo "Halting test due to failure exit code ($EXITCODE)"
+    echo "$0: Halting test due to failure exit code ($EXITCODE)"
     exit 1
 fi
 
@@ -200,7 +205,7 @@ fi
 diff -r $TEMPDIR/test-backup-src $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
-    echo "ERROR: source and restore directories do not match!"
+    echo "$0: ERROR: source and restore directories do not match!"
     exit 1
 fi
 

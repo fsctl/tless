@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"strings"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -148,24 +147,6 @@ func (os *ObjStore) DeleteObj(ctx context.Context, bucket string, objectName str
 		GovernanceBypass: true,
 	}
 	err := os.minioClient.RemoveObject(context.Background(), bucket, objectName, opts)
-	return err
-}
-
-func (os *ObjStore) TryReadSalt(ctx context.Context, bucket string) (string, error) {
-	if m, err := os.GetObjList(ctx, bucket, "SALT-"); err == nil {
-		for key := range m {
-			salt := strings.TrimPrefix(key, "SALT-")
-			return salt, nil
-		}
-	} else {
-		return "", err
-	}
-
-	return "", nil
-}
-
-func (os *ObjStore) TryWriteSalt(ctx context.Context, bucket string, salt string) error {
-	err := os.UploadObjFromBuffer(ctx, bucket, "SALT-"+salt, []byte(""), ComputeETag([]byte{}))
 	return err
 }
 

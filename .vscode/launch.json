@@ -11,9 +11,10 @@
             "mode": "auto",
             "program": "${workspaceFolder}/main.go",
             // "args": ["restore", "test-backup-src/2022-05-24_20:14:59", "/tmp/restore-here/"],
-            "args": ["backup", "-d", "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Kernel.framework"],
+            // "args": ["backup", "-d", "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Kernel.framework"],
             // "args": ["backup", "-d", "/tmp/test-backup-src"],
             // "args": ["cloudls"],
+            "args": ["extras", "wipe-server"],
         },
     ]
 }

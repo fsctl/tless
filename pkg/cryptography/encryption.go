@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -163,6 +164,11 @@ func EncryptBuffer(key []byte, plaintext []byte) ([]byte, error) {
 }
 
 func DecryptBuffer(key []byte, ciphertext []byte) ([]byte, error) {
+	// ciphertext must be >12 bytes b/c at a minimum there is the 12-byte nonce and some ciphertext
+	if len(ciphertext) <= 12 {
+		return nil, fmt.Errorf("error: DecryptBuffer: ciphertext too short to be valid")
+	}
+
 	// Extract the nonce (first 12 bytes of ciphertext)
 	nonce := ciphertext[0:12]
 	ciphertext = ciphertext[12:]
