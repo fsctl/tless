@@ -39,6 +39,10 @@ func DaemonMain() {
 		if err != nil {
 			log.Fatalf("failed to listen: %v", err)
 		}
+		err = os.Chmod(unixSocketPath, 0777)
+		if err != nil {
+			log.Fatalf("failed to chmod the socket: %v", err)
+		}
 		s := grpc.NewServer()
 
 		// spawn a go routine to listen on socket
