@@ -212,7 +212,7 @@ func decObjNameMain(encObjectName string) {
 			fmt.Println("error: ", err)
 		}
 
-		encSnapshotName := encObjectNameParts[0]
+		encSnapshotName := encObjectNameParts[1]
 		decSnapshotName, err := cryptography.DecryptFilename(encKey, encSnapshotName)
 		if err != nil {
 			fmt.Println("error: ", err)

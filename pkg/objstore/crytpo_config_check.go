@@ -79,7 +79,7 @@ func (os *ObjStore) tryReadSalt(ctx context.Context, key []byte, bucket string, 
 	var saltObjName string
 	if len(m) > 1 {
 		for k := range m {
-			log.Printf("warning: found salt: '%s' in bucket", k)
+			log.Printf("warning: found salt: '%s' in bucket\n", k)
 		}
 		log.Printf("warning: there are multiple SALT-xxxx files on the server; you need to manually delete the wrong one(s)")
 		return "", ErrMultipleSalts
@@ -91,7 +91,7 @@ func (os *ObjStore) tryReadSalt(ctx context.Context, key []byte, bucket string, 
 		for k := range m {
 			saltObjName = k
 			if isVerbose {
-				fmt.Printf("found salt file '%s' in bucket", saltObjName)
+				fmt.Printf("found salt file '%s' in bucket\n", saltObjName)
 			}
 		}
 	}

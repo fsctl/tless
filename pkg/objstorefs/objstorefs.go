@@ -226,3 +226,118 @@ func ReconstructSnapshotFileList(ctx context.Context, objst *objstore.ObjStore, 
 
 	return m, nil
 }
+
+type RenameObj struct {
+	RelPath     string
+	OldSnapshot string
+	NewSnapshot string
+}
+
+func ComputeSnapshotDelete(snapshots map[string]Snapshot, snapshotToDelete string) (deleteObjs []map[string]int64, renameObjs []RenameObj, err error) {
+	// Make sure snapshotToDelete is actually a real snapshot
+	if _, ok := snapshots[snapshotToDelete]; !ok {
+		return nil, nil, fmt.Errorf("error: snapshot '%s' not in list of snapshots", snapshotToDelete)
+	}
+
+	// Get an ordered list of all snapshots from earliest to most recent
+	snapshotKeys := make([]string, 0, len(snapshots))
+	for k := range snapshots {
+		snapshotKeys = append(snapshotKeys, k)
+	}
+	sort.Strings(snapshotKeys)
+
+	// Check whether snapshotToDelete is the most recent snapshot.  If it is, just delete everything
+	// since there's no snapshot to merge forward into.
+	if snapshotKeys[len(snapshotKeys)-1] == snapshotToDelete {
+		deleteObjs = deleteAllKeysInSnapshot(snapshots, snapshotToDelete)
+		return deleteObjs, nil, nil
+	}
+
+	// Get the next snapshot forward in time after snapshotToDelete
+	nextSnapshot := getNextSnapshot(snapshotKeys, snapshotToDelete)
+
+	// loop over each rel path in snapshotToDelete
+	for relPath := range snapshots[snapshotToDelete].RelPaths {
+		// If relpath in the current snapshot is just a ## deletion marker, we either need to
+		// delete it or roll it forward to the next snapshot.
+		// - Delete if relPath shows up again in the next snapshot
+		// - Else rename and roll it forward
+		if snapshots[snapshotToDelete].RelPaths[relPath].IsDeleted {
+			deletionMarker := "##" + snapshots[snapshotToDelete].RelPaths[relPath].EncryptedRelPathStripped
+
+			// If rel path is in next snapshot...
+			if containsRelPath(snapshots[nextSnapshot], relPath) {
+				// If rel path is in next snapshot as a non-deleted entry, we can delete relpath in snapshotToDelete
+				deleteObjs = append(deleteObjs, map[string]int64{deletionMarker: 0})
+			} else {
+				// If relpath is NOT in next snapshot change set at all, then we must rename relpath objects in
+				// snapshotToDelete to next snapshot.
+				renameObjs = append(renameObjs, renameDeletionMarkerIntoNextSnapshot(snapshots, relPath, snapshotToDelete, nextSnapshot)...)
+			}
+		} else {
+			// relPath in snapshotToDelete is a real file.  Delete it if it shows up in the next
+			// snapshot, otherwise roll it forward
+			if containsRelPath(snapshots[nextSnapshot], relPath) {
+				deleteObjs = append(deleteObjs, snapshots[snapshotToDelete].RelPaths[relPath].EncryptedChunkNames)
+			} else {
+				renameObjs = append(renameObjs, renameAllChunksIntoNextSnapshot(snapshots, relPath, snapshotToDelete, nextSnapshot)...)
+			}
+		}
+	}
+
+	return deleteObjs, renameObjs, nil
+}
+
+func renameDeletionMarkerIntoNextSnapshot(snapshots map[string]Snapshot, relPath, snapshotToDelete, nextSnapshot string) (renameObjs []RenameObj) {
+	renameObjs = make([]RenameObj, 0)
+	renameObj := RenameObj{
+		RelPath:     relPath,
+		OldSnapshot: snapshotToDelete,
+		NewSnapshot: nextSnapshot,
+	}
+	renameObjs = append(renameObjs, renameObj)
+	return renameObjs
+}
+
+func deleteAllKeysInSnapshot(snapshots map[string]Snapshot, snapshotToDelete string) (deleteObjs []map[string]int64) {
+	deleteObjs = make([]map[string]int64, 0)
+	for relPath := range snapshots[snapshotToDelete].RelPaths {
+		for chunk, size := range snapshots[snapshotToDelete].RelPaths[relPath].EncryptedChunkNames {
+			delObj := make(map[string]int64)
+			delObj[chunk] = size
+			deleteObjs = append(deleteObjs, delObj)
+		}
+	}
+	return deleteObjs
+}
+
+func renameAllChunksIntoNextSnapshot(snapshots map[string]Snapshot, relPath string, snapshotToDelete string, nextSnapshot string) (renameObjs []RenameObj) {
+	renameObjs = make([]RenameObj, 0)
+	for chunk := range snapshots[snapshotToDelete].RelPaths[relPath].EncryptedChunkNames {
+		renameObjs = append(renameObjs, RenameObj{RelPath: chunk, OldSnapshot: snapshotToDelete, NewSnapshot: nextSnapshot})
+	}
+	return renameObjs
+}
+
+// Returns true if snapshot's RelPaths member contains relPath. False otherwise.
+func containsRelPath(snapshot Snapshot, relPath string) bool {
+	_, ok := snapshot.RelPaths[relPath]
+	return ok
+}
+
+// Gets the next snapshot forward in time after snapshotToDelete.
+// Assumes snapshotKeys are in ascending order.
+// Assumes it is never called on the last snapshot in snapshotKeys.
+func getNextSnapshot(snapshotKeys []string, snapshotToDelete string) (nextSnapshot string) {
+	isNext := false
+	for _, val := range snapshotKeys {
+		if isNext {
+			return val
+		}
+		if val == snapshotToDelete {
+			isNext = true
+		}
+	}
+	log.Fatalln("error: getNextSnapshot couldn't find next snapshot")
+	return ""
+}

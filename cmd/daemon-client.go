@@ -36,7 +36,7 @@ also begins with a slash.
 )
 
 func init() {
-	daemonClientCmd.Flags().StringVarP(&cfgDaemonSocket, "socket", "S", "unix:///tmp/tless.sock", "unix socket on which daemon is listening")
+	daemonClientCmd.Flags().StringVarP(&cfgDaemonSocket, "socket", "o", "unix:///tmp/tless.sock", "unix socket on which daemon is listening")
 
 	extrasCmd.AddCommand(daemonClientCmd)
 }

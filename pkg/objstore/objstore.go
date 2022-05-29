@@ -150,6 +150,24 @@ func (os *ObjStore) DeleteObj(ctx context.Context, bucket string, objectName str
 	return err
 }
 
+func (os *ObjStore) RenameObj(ctx context.Context, bucket string, objectNameSrc string, objectNameDst string) error {
+	srcOpts := minio.CopySrcOptions{
+		Bucket: bucket,
+		Object: objectNameSrc,
+	}
+	dstOpts := minio.CopyDestOptions{
+		Bucket: bucket,
+		Object: objectNameDst,
+	}
+	_, err := os.minioClient.CopyObject(ctx, dstOpts, srcOpts)
+	if err != nil {
+		return err
+	}
+
+	err = os.DeleteObj(ctx, bucket, objectNameSrc)
+	return err
+}
+
 // Computes the expected ETag for the entire buffer buf
 // Ref: https://stackoverflow.com/questions/12186993/what-is-the-algorithm-to-compute-the-amazon-s3-etag-for-a-file-larger-than-5gb#answer-19896823
 func ComputeETag(buf []byte) string {

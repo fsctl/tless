@@ -14,7 +14,7 @@
             // "args": ["backup", "-d", "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Kernel.framework"],
             // "args": ["backup", "-d", "/tmp/test-backup-src"],
             // "args": ["cloudls"],
-            "args": ["extras", "wipe-server"],
+            "args": ["cloudrm", "-S", "backedup2/2022-05-29_13:37:47"],
         },
     ]
 }

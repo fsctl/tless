@@ -32,7 +32,7 @@ Example:
 	tless cloudls --verbose
 	tless cloudls --snapshot=Documents/2020-01-01_04:56:01
 
-The available snapshot times are displayed in 'unbackupcloud cloudls' with no arguments.
+The available snapshot times are displayed in 'tless cloudls' with no arguments.
 `,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
