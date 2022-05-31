@@ -1,6 +1,7 @@
 package util
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,4 +22,19 @@ func TestStripTrailingSlashes(t *testing.T) {
 	assert.Equal(t, r2, "/a/b/c")
 	assert.Equal(t, r3, "/")
 	assert.Equal(t, r4, "/a/b/c")
+}
+
+func TestGenerateRandomSalt(t *testing.T) {
+	salt := GenerateRandomSalt()
+	assert.Equal(t, 32, len(salt))
+}
+
+func TestGenerateRandomPassphrase(t *testing.T) {
+	passphrase := GenerateRandomPassphrase(5)
+	componentWords := strings.Split(passphrase, "-")
+	assert.Equal(t, 5, len(componentWords))
+
+	for _, word := range componentWords {
+		assert.Greater(t, len(word), 0)
+	}
 }

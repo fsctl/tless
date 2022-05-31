@@ -9,6 +9,7 @@ import (
 
 	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/objstore"
+	"github.com/fsctl/tless/pkg/util"
 	"github.com/spf13/cobra"
 	"github.com/vbauerster/mpb/v7"
 	"github.com/vbauerster/mpb/v7/decor"
@@ -173,7 +174,7 @@ func wipeServerMain() {
 }
 
 func genTemplateMain() {
-	template := generateConfigTemplate()
+	template := util.GenerateConfigTemplate()
 	fmt.Println(template)
 }
 

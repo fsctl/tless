@@ -12,6 +12,7 @@ import (
 
 	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/objstore"
+	"github.com/fsctl/tless/pkg/util"
 )
 
 var (
@@ -125,46 +126,10 @@ for the program to work.
 }
 
 func writeTemplateConfigToPath(configFilePath string) {
-	template := generateConfigTemplate()
+	template := util.GenerateConfigTemplate()
 	if err := os.WriteFile(configFilePath, []byte(template), 0600); err != nil {
 		fmt.Println("Unable to write template file: ", err)
 	}
-}
-
-func generateConfigTemplate() string {
-	template := `[objectstore]
-# Customize this section with the real host:port of your S3-compatible object 
-# store, your credentials for the object store, and a bucket you have ALREADY 
-# created for storing backups.
-endpoint = "127.0.0.1:9000"
-access_key_id = "<your object store user id>"
-access_secret = "<your object store password>"
-bucket = "<name of an empty bucket you have created on object store>"
-
-[backups]
-# You can specify as many directories to back up as you want. 
-# Example (Linux): /home/<yourname>/Documents
-# Example (macOS): /Users/<yourname>/Documents
-dirs = [ "<absolute path to directory>", "<optional additional directory>" ]
-excludes = [ "<prefix to exclude>", "<optional additional exclude>" ]
-
-# The 10-word Diceware passphrase below has been randomly generated for you. 
-# It has ~128 bits of entropy and thus is very resistant to brute force 
-# cracking through at least the middle of this century.
-#
-# Note that your passphrase resides in this file but never leaves this machine.
-master_password = "`
-
-	template += cryptography.GenerateRandomPassphrase(10)
-
-	template += `"
-
-# This salt has been randomly generated for you; there's no need to change it.
-# The salt does not need to be kept secret. In fact, a backup copy is stored 
-# on the object store server as 'SALT-[salt_string]' in the bucket root.
-salt = "`
-	template += cryptography.GenerateRandomSalt() + "\"\n"
-	return template
 }
 
 func configFallbackToTomlFile() {

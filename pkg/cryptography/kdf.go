@@ -4,15 +4,9 @@
 package cryptography
 
 import (
-	"crypto/rand"
 	"errors"
-	"log"
-	"math/big"
-	"strings"
 
 	"golang.org/x/crypto/argon2"
-
-	"github.com/sethvargo/go-diceware/diceware"
 )
 
 var (
@@ -28,30 +22,4 @@ func DeriveKey(salt string, masterPassword string) ([]byte, error) {
 	}
 	key := argon2.IDKey([]byte(masterPassword), []byte(salt), 10, 256*1024, 4, 32)
 	return key, nil
-}
-
-func GenerateRandomSalt() string {
-	var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-	lettersLen := big.NewInt(int64(len(letters)))
-
-	salt := ""
-
-	for i := 0; i < 32; i++ {
-		n, err := rand.Int(rand.Reader, lettersLen)
-		if err != nil {
-			log.Fatalf("error: generateRandomSalt: %v", err)
-		}
-		randLetter := letters[n.Int64()]
-		salt += string(randLetter)
-	}
-
-	return salt
-}
-
-func GenerateRandomPassphrase(numDicewareWords int) string {
-	list, err := diceware.Generate(numDicewareWords)
-	if err != nil {
-		log.Fatalln("error: could not generate random diceware passphrase", err)
-	}
-	return strings.Join(list, "-")
 }
