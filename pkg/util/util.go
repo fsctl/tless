@@ -175,3 +175,12 @@ func sliceToCommaSeparatedString(s []string) string {
 	}
 	return ret
 }
+
+// Accepts a string of any length and returns '********' of same length.
+func MakeLogSafe(s string) string {
+	ret := ""
+	for range s {
+		ret += "*"
+	}
+	return ret
+}

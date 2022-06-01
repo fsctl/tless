@@ -48,3 +48,11 @@ func TestSliceToCommaSeparatedString(t *testing.T) {
 	s2Result := sliceToCommaSeparatedString(s2)
 	assert.Equal(t, `"a", "b"`, s2Result)
 }
+
+func TestMakeLogSafe(t *testing.T) {
+	s := ""
+	assert.Equal(t, "", MakeLogSafe(s))
+
+	s = "abc"
+	assert.Equal(t, "***", MakeLogSafe(s))
+}

@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/fsctl/tless/pkg/objstore"
+	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
 )
 
@@ -33,7 +34,7 @@ func (s *server) CheckConn(ctx context.Context, in *pb.CheckConnRequest) (*pb.Ch
 	log.Println("with these parameters:")
 	log.Printf("    Endpoint:   '%s'\n", in.GetEndpoint())
 	log.Printf("    Access Key: '%s'\n", in.GetAccessKey())
-	log.Printf("    Secret Key: '%s'\n", in.GetSecretKey())
+	log.Printf("    Secret Key: '%s'\n", util.MakeLogSafe(in.GetSecretKey()))
 	log.Printf("    Bucket:     '%s'\n", in.GetBucketName())
 	objst := objstore.NewObjStore(ctx, in.GetEndpoint(), in.GetAccessKey(), in.GetSecretKey())
 	isSuccessful := objst.IsReachableWithRetries(context.Background(), 5, in.GetBucketName())
