@@ -2,7 +2,9 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"net"
 	"os"
@@ -14,21 +16,29 @@ import (
 )
 
 const (
-	unixSocketPath = "/tmp/tless.sock"
+	unixSocketPath         = "/tmp/tless.sock"
+	standardConfigFileName = "config.toml"
 )
 
 // server is used to implement helloworld.GreeterServer.
 type server struct {
-	pb.UnimplementedGreeterServer
+	pb.UnimplementedDaemonCtlServer
 }
 
-// SayHello implements helloworld.GreeterServer
-func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
-	log.Printf("Received: '%v'", in.GetName())
-	return &pb.HelloReply{Message: "Hello from " + in.GetName()}, nil
+// Callback for rpc.DaemonCtlServer.Hello requests
+func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
+	log.Printf("Received Hello from: '%v' (with homedir '%v')", in.GetUsername(), in.GetUserHomeDir())
+	initConfig(in.GetUsername(), in.GetUserHomeDir())
+	return &pb.HelloReply{Message: "Hello there, " + in.GetUsername() + " (with homedir '" + in.GetUserHomeDir() + "')"}, nil
 }
 
 func DaemonMain() {
+	// clean up old socket file from any preceding unclean shutdown
+	err := os.Remove(unixSocketPath)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		log.Printf("error removing old socket: %T", err)
+	}
+
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	done := make(chan bool, 1)
@@ -47,7 +57,7 @@ func DaemonMain() {
 
 		// spawn a go routine to listen on socket
 		go func() {
-			pb.RegisterGreeterServer(s, &server{})
+			pb.RegisterDaemonCtlServer(s, &server{})
 			log.Printf("server listening at %v", lis.Addr())
 			if err := s.Serve(lis); err != nil {
 				log.Fatalf("failed to serve: %v", err)

@@ -5,17 +5,55 @@ option go_package = "github.com/fsctl/tless/rpc";
 package rpc;
 
 // The greeting service definition.
-service Greeter {
-  // Sends a greeting
-  rpc SayHello (HelloRequest) returns (HelloReply) {}
+service DaemonCtl {
+  // Sends the console user's username+homedir to establish connectivity
+  // and initialize the daemon with correct config.toml path
+  rpc Hello (HelloRequest) returns (HelloReply) {}
+
+  // Gets the status of the daemon
+  rpc Status (DaemonStatusRequest) returns (DaemonStatusResponse) {}
+
+  // Commands daemon to check connection to object store and report back
+  rpc CheckConn (CheckConnRequest) returns (CheckConnResponse) {}
 }
 
-// The request message containing the user's name.
+// Initial connect request with information about console logged-in user
 message HelloRequest {
-  string name = 1;
+  string username = 1;
+  string userHomeDir = 2;
 }
 
-// The response message containing the greetings
+// TODO:  return last backup timestamp
 message HelloReply {
   string message = 1;
+}
+
+message DaemonStatusRequest {}
+
+message DaemonStatusResponse {
+  enum State {
+    IDLE = 0;
+    CHECKING_CONN = 1;
+    BACKING_UP = 2;
+    RESTORING = 3;
+  }
+  State status = 1;
+  string msg = 2;
+  float percentage = 3;
+}
+
+message CheckConnRequest {
+  string Endpoint = 1;
+  string AccessKey = 2;
+  string SecretKey = 3;
+  string BucketName = 4;
+}
+
+message CheckConnResponse {
+  enum CheckConnResult {
+    SUCCESS = 0;
+    ERROR = 1;
+  }
+  CheckConnResult result = 1;
+  string errorMsg = 2;
 }

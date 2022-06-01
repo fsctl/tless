@@ -175,12 +175,13 @@ func validateConfigVars() error {
 	}
 
 	// Check crypto config in SALT-xxxx file
-	ctx := context.Background()
-	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
-	if !objst.IsReachableWithRetries(context.Background(), 10, cfgBucket) {
-		log.Fatalln("error: exiting because server not reachable")
-	}
 	if !cfgForce {
+		ctx := context.Background()
+		objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
+		if !objst.IsReachableWithRetries(context.Background(), 10, cfgBucket) {
+			log.Fatalln("error: exiting because server not reachable")
+		}
+
 		var err error
 		encKey, err = cryptography.DeriveKey(cfgSalt, cfgMasterPassword)
 		if err != nil {

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"log"
+	"os/user"
 	"time"
 
 	pb "github.com/fsctl/tless/rpc"
@@ -48,14 +49,55 @@ func daemonClientMain() {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
-	c := pb.NewGreeterClient(conn)
+	c := pb.NewDaemonCtlClient(conn)
+
+	// Get information on user running this process
+	user, err := user.Current()
+	if err != nil {
+		log.Fatalln("error: Could not get current user name: ", err)
+	}
 
 	// Contact the server and print out its response.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	r, err := c.SayHello(ctx, &pb.HelloRequest{Name: "Daemon Client"})
+	r, err := c.Hello(ctx, &pb.HelloRequest{
+		Username:    user.Username,
+		UserHomeDir: user.HomeDir})
 	if err != nil {
-		log.Fatalf("could not greet: %v", err)
+		log.Fatalf("error: could not initiate connection: %v", err)
 	}
-	log.Printf("Greeting reply received: %s", r.GetMessage())
+	log.Printf("Hello response received: %s", r.GetMessage())
+
+	go func() {
+		for {
+			r, err := c.Status(ctx, &pb.DaemonStatusRequest{})
+			if err != nil {
+				log.Fatalf("error: could not get daemon status: %v", err)
+			}
+			log.Printf("Status response: %v\n", r.GetStatus())
+			if r.GetMsg() != "" {
+				log.Printf("  Message: %s\n\n", r.GetMsg())
+			}
+
+			time.Sleep(time.Second)
+		}
+	}()
+
+	checkConnResp, err := c.CheckConn(ctx, &pb.CheckConnRequest{
+		Endpoint:   cfgEndpoint,
+		AccessKey:  cfgAccessKeyId,
+		SecretKey:  cfgSecretAccessKey,
+		BucketName: cfgBucket,
+	})
+	if err != nil {
+		log.Fatalf("error: could not get daemon status: %v", err)
+	}
+	if checkConnResp.Result == pb.CheckConnResponse_SUCCESS {
+		log.Printf("Connection check SUCCESSFUL\n")
+	} else {
+		log.Printf("Connection check FAILED (with error '%s')\n", checkConnResp.ErrorMsg)
+	}
+
+	// Wait 2 seconds then exit program
+	time.Sleep(time.Second * 2)
 }

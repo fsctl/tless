@@ -37,11 +37,17 @@ access_secret = "<your object store password>"
 bucket = "<name of an empty bucket you have created on object store>"
 
 [backups]
-# You can specify as many directories to back up as you want. 
+# You can specify as many directories to back up as you want. All paths 
+# should be absolute paths. 
 # Example (Linux): /home/<yourname>/Documents
 # Example (macOS): /Users/<yourname>/Documents
 dirs = [ "<absolute path to directory>", "<optional additional directory>" ]
-excludes = [ "<prefix to exclude>", "<optional additional exclude>" ]
+
+# Specify as many exclusion paths as you want. Excludes can be entire 
+# directories or single files. All paths should be absolute paths. 
+# Example (Linux): /home/<yourname>/Documents/MyJournal
+# Example (macOS): /Users/<yourname>/Documents/MyJournal
+excludes = [ "<absolute path to exclude>", "<optional additional exclude path>" ]
 
 # The 10-word Diceware passphrase below has been randomly generated for you. 
 # It has ~128 bits of entropy and thus is very resistant to brute force 
