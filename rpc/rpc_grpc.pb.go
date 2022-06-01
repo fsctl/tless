@@ -29,6 +29,9 @@ type DaemonCtlClient interface {
 	Status(ctx context.Context, in *DaemonStatusRequest, opts ...grpc.CallOption) (*DaemonStatusResponse, error)
 	// Commands daemon to check connection to object store and report back
 	CheckConn(ctx context.Context, in *CheckConnRequest, opts ...grpc.CallOption) (*CheckConnResponse, error)
+	// Commands to synchronize config between client and daemon
+	ReadDaemonConfig(ctx context.Context, in *ReadConfigRequest, opts ...grpc.CallOption) (*ReadConfigResponse, error)
+	WriteToDaemonConfig(ctx context.Context, in *WriteConfigRequest, opts ...grpc.CallOption) (*WriteConfigResponse, error)
 }
 
 type daemonCtlClient struct {
@@ -66,6 +69,24 @@ func (c *daemonCtlClient) CheckConn(ctx context.Context, in *CheckConnRequest, o
 	return out, nil
 }
 
+func (c *daemonCtlClient) ReadDaemonConfig(ctx context.Context, in *ReadConfigRequest, opts ...grpc.CallOption) (*ReadConfigResponse, error) {
+	out := new(ReadConfigResponse)
+	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/ReadDaemonConfig", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonCtlClient) WriteToDaemonConfig(ctx context.Context, in *WriteConfigRequest, opts ...grpc.CallOption) (*WriteConfigResponse, error) {
+	out := new(WriteConfigResponse)
+	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/WriteToDaemonConfig", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonCtlServer is the server API for DaemonCtl service.
 // All implementations must embed UnimplementedDaemonCtlServer
 // for forward compatibility
@@ -77,6 +98,9 @@ type DaemonCtlServer interface {
 	Status(context.Context, *DaemonStatusRequest) (*DaemonStatusResponse, error)
 	// Commands daemon to check connection to object store and report back
 	CheckConn(context.Context, *CheckConnRequest) (*CheckConnResponse, error)
+	// Commands to synchronize config between client and daemon
+	ReadDaemonConfig(context.Context, *ReadConfigRequest) (*ReadConfigResponse, error)
+	WriteToDaemonConfig(context.Context, *WriteConfigRequest) (*WriteConfigResponse, error)
 	mustEmbedUnimplementedDaemonCtlServer()
 }
 
@@ -92,6 +116,12 @@ func (UnimplementedDaemonCtlServer) Status(context.Context, *DaemonStatusRequest
 }
 func (UnimplementedDaemonCtlServer) CheckConn(context.Context, *CheckConnRequest) (*CheckConnResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckConn not implemented")
+}
+func (UnimplementedDaemonCtlServer) ReadDaemonConfig(context.Context, *ReadConfigRequest) (*ReadConfigResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReadDaemonConfig not implemented")
+}
+func (UnimplementedDaemonCtlServer) WriteToDaemonConfig(context.Context, *WriteConfigRequest) (*WriteConfigResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method WriteToDaemonConfig not implemented")
 }
 func (UnimplementedDaemonCtlServer) mustEmbedUnimplementedDaemonCtlServer() {}
 
@@ -160,6 +190,42 @@ func _DaemonCtl_CheckConn_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonCtl_ReadDaemonConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReadConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonCtlServer).ReadDaemonConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/rpc.DaemonCtl/ReadDaemonConfig",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonCtlServer).ReadDaemonConfig(ctx, req.(*ReadConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonCtl_WriteToDaemonConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WriteConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonCtlServer).WriteToDaemonConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/rpc.DaemonCtl/WriteToDaemonConfig",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonCtlServer).WriteToDaemonConfig(ctx, req.(*WriteConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonCtl_ServiceDesc is the grpc.ServiceDesc for DaemonCtl service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -178,6 +244,14 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CheckConn",
 			Handler:    _DaemonCtl_CheckConn_Handler,
+		},
+		{
+			MethodName: "ReadDaemonConfig",
+			Handler:    _DaemonCtl_ReadDaemonConfig_Handler,
+		},
+		{
+			MethodName: "WriteToDaemonConfig",
+			Handler:    _DaemonCtl_WriteToDaemonConfig_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

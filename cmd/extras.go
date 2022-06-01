@@ -174,7 +174,7 @@ func wipeServerMain() {
 }
 
 func genTemplateMain() {
-	template := util.GenerateConfigTemplate()
+	template := util.GenerateConfigTemplate(nil)
 	fmt.Println(template)
 }
 

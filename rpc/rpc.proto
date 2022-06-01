@@ -15,6 +15,10 @@ service DaemonCtl {
 
   // Commands daemon to check connection to object store and report back
   rpc CheckConn (CheckConnRequest) returns (CheckConnResponse) {}
+
+  // Commands to synchronize config between client and daemon
+  rpc ReadDaemonConfig (ReadConfigRequest) returns (ReadConfigResponse) {}
+  rpc WriteToDaemonConfig (WriteConfigRequest) returns (WriteConfigResponse) {}
 }
 
 // Initial connect request with information about console logged-in user
@@ -56,4 +60,36 @@ message CheckConnResponse {
   }
   CheckConnResult result = 1;
   string errorMsg = 2;
+}
+
+message ReadConfigRequest {}
+
+message ReadConfigResponse {
+  string Endpoint = 1;
+  string AccessKey = 2;
+  string SecretKey = 3;
+  string BucketName = 4;
+  string MasterPassword = 5;
+  string Salt = 6;
+  repeated string Dirs = 7;
+  repeated string Excludes = 8;
+
+  bool IsValid = 9;
+  string ErrMsg = 10;
+}
+
+message WriteConfigRequest {
+  string Endpoint = 1;
+  string AccessKey = 2;
+  string SecretKey = 3;
+  string BucketName = 4;
+  string MasterPassword = 5;
+  string Salt = 6;
+  repeated string Dirs = 7;
+  repeated string Excludes = 8;
+}
+
+message WriteConfigResponse {
+  bool DidSucceed = 1;
+  string ErrMsg = 2;
 }

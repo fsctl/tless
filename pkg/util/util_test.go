@@ -38,3 +38,13 @@ func TestGenerateRandomPassphrase(t *testing.T) {
 		assert.Greater(t, len(word), 0)
 	}
 }
+
+func TestSliceToCommaSeparatedString(t *testing.T) {
+	s1 := []string{"a"}
+	s1Result := sliceToCommaSeparatedString(s1)
+	assert.Equal(t, `"a"`, s1Result)
+
+	s2 := []string{"a", "b"}
+	s2Result := sliceToCommaSeparatedString(s2)
+	assert.Equal(t, `"a", "b"`, s2Result)
+}

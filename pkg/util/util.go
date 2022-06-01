@@ -26,28 +26,87 @@ func StripTrailingSlashes(s string) string {
 	}
 }
 
-func GenerateConfigTemplate() string {
+type CfgSettings struct {
+	Endpoint        string
+	AccessKeyId     string
+	SecretAccessKey string
+	Bucket          string
+	MasterPassword  string
+	Salt            string
+	Dirs            []string
+	ExcludePaths    []string
+}
+
+func GenerateConfigTemplate(configValues *CfgSettings) string {
 	template := `[objectstore]
 # Customize this section with the real host:port of your S3-compatible object 
 # store, your credentials for the object store, and a bucket you have ALREADY 
 # created for storing backups.
-endpoint = "127.0.0.1:9000"
-access_key_id = "<your object store user id>"
-access_secret = "<your object store password>"
-bucket = "<name of an empty bucket you have created on object store>"
+endpoint = "`
+
+	if configValues != nil && configValues.Endpoint != "" {
+		template += configValues.Endpoint
+	} else {
+		template += "127.0.0.1:9000"
+	}
+
+	template += `"
+access_key_id = "`
+
+	if configValues != nil && configValues.AccessKeyId != "" {
+		template += configValues.AccessKeyId
+	} else {
+		template += "<your object store user id>"
+	}
+
+	template += `"
+access_secret = "`
+
+	if configValues != nil && configValues.SecretAccessKey != "" {
+		template += configValues.SecretAccessKey
+	} else {
+		template += "<your object store password>"
+	}
+
+	template += `"
+bucket = "`
+
+	if configValues != nil && configValues.Bucket != "" {
+		template += configValues.Bucket
+	} else {
+		template += "<name of an empty bucket you have created on object store>"
+	}
+
+	template += `"
 
 [backups]
 # You can specify as many directories to back up as you want. All paths 
 # should be absolute paths. 
 # Example (Linux): /home/<yourname>/Documents
 # Example (macOS): /Users/<yourname>/Documents
-dirs = [ "<absolute path to directory>", "<optional additional directory>" ]
+dirs = [ `
+
+	if configValues != nil && len(configValues.Dirs) > 0 {
+		template += sliceToCommaSeparatedString(configValues.Dirs)
+	} else {
+		template += "\"<absolute path to directory>\", \"<optional additional directory>\""
+	}
+
+	template += ` ]
 
 # Specify as many exclusion paths as you want. Excludes can be entire 
 # directories or single files. All paths should be absolute paths. 
 # Example (Linux): /home/<yourname>/Documents/MyJournal
 # Example (macOS): /Users/<yourname>/Documents/MyJournal
-excludes = [ "<absolute path to exclude>", "<optional additional exclude path>" ]
+excludes = [ `
+
+	if configValues != nil && len(configValues.ExcludePaths) > 0 {
+		template += sliceToCommaSeparatedString(configValues.ExcludePaths)
+	} else {
+		template += "\"<absolute path to exclude>\", \"<optional additional exclude path>\""
+	}
+
+	template += ` ]
 
 # The 10-word Diceware passphrase below has been randomly generated for you. 
 # It has ~128 bits of entropy and thus is very resistant to brute force 
@@ -56,7 +115,11 @@ excludes = [ "<absolute path to exclude>", "<optional additional exclude path>" 
 # Note that your passphrase resides in this file but never leaves this machine.
 master_password = "`
 
-	template += GenerateRandomPassphrase(10)
+	if configValues != nil && configValues.MasterPassword != "" {
+		template += configValues.MasterPassword
+	} else {
+		template += GenerateRandomPassphrase(10)
+	}
 
 	template += `"
 
@@ -64,7 +127,13 @@ master_password = "`
 # The salt does not need to be kept secret. In fact, a backup copy is stored 
 # on the object store server as 'SALT-[salt_string]' in the bucket root.
 salt = "`
-	template += GenerateRandomSalt() + "\"\n"
+
+	if configValues != nil && configValues.Salt != "" {
+		template += configValues.Salt + "\"\n"
+	} else {
+		template += GenerateRandomSalt() + "\"\n"
+	}
+
 	return template
 }
 
@@ -92,4 +161,17 @@ func GenerateRandomPassphrase(numDicewareWords int) string {
 		log.Fatalln("error: could not generate random diceware passphrase", err)
 	}
 	return strings.Join(list, "-")
+}
+
+// Turns a slice of strings into a toml format array, i.e.:
+// "string1", "string2", "string3"
+func sliceToCommaSeparatedString(s []string) string {
+	ret := ""
+	for i := 0; i < len(s); i++ {
+		ret += "\"" + s[i] + "\""
+		if i+1 < len(s) {
+			ret += ", "
+		}
+	}
+	return ret
 }

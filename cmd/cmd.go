@@ -126,7 +126,7 @@ for the program to work.
 }
 
 func writeTemplateConfigToPath(configFilePath string) {
-	template := util.GenerateConfigTemplate()
+	template := util.GenerateConfigTemplate(nil)
 	if err := os.WriteFile(configFilePath, []byte(template), 0600); err != nil {
 		fmt.Println("Unable to write template file: ", err)
 	}
