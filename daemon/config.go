@@ -15,22 +15,22 @@ import (
 
 var (
 	// Module level variables
-	cfg         *util.CfgSettings
-	username    string
-	userHomeDir string
+	gCfg         *util.CfgSettings
+	gUsername    string
+	gUserHomeDir string
 )
 
-func initConfig(username string, userHomeDir string) {
+func initConfig() {
 	viper.SetConfigType("toml")
 	viper.SetConfigName("config")
-	viper.AddConfigPath(filepath.Join(userHomeDir, ".tless"))
+	viper.AddConfigPath(filepath.Join(gUserHomeDir, ".tless"))
 
 	if err := viper.ReadInConfig(); err == nil {
 		log.Println("Using config file:", viper.ConfigFileUsed())
 	} else {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// Config file could not be found, make one and read it in
-			makeTemplateConfigFile(username, userHomeDir, nil)
+			makeTemplateConfigFile(gUsername, gUserHomeDir, nil)
 			if err := viper.ReadInConfig(); err == nil {
 				log.Println("Using config file:", viper.ConfigFileUsed())
 			} else {
@@ -41,7 +41,7 @@ func initConfig(username string, userHomeDir string) {
 			log.Fatalf("Error reading config file: %v\n", err)
 		}
 	}
-	cfg = &util.CfgSettings{
+	gCfg = &util.CfgSettings{
 		Endpoint:        viper.GetString("objectstore.endpoint"),
 		AccessKeyId:     viper.GetString("objectstore.access_key_id"),
 		SecretAccessKey: viper.GetString("objectstore.access_secret"),
@@ -101,7 +101,7 @@ func (s *server) ReadDaemonConfig(ctx context.Context, in *pb.ReadConfigRequest)
 	log.Println(">> GOT COMMAND: ReadDaemonConfig")
 	defer log.Println(">> COMPLETED COMMAND: ReadDaemonConfig")
 
-	if cfg == nil {
+	if gCfg == nil {
 		log.Println("Config not available for reading yet, returning nothing")
 		return &pb.ReadConfigResponse{
 			IsValid: false,
@@ -112,14 +112,14 @@ func (s *server) ReadDaemonConfig(ctx context.Context, in *pb.ReadConfigRequest)
 		return &pb.ReadConfigResponse{
 			IsValid:        true,
 			ErrMsg:         "",
-			Endpoint:       cfg.Endpoint,
-			AccessKey:      cfg.AccessKeyId,
-			SecretKey:      cfg.SecretAccessKey,
-			BucketName:     cfg.Bucket,
-			MasterPassword: cfg.MasterPassword,
-			Salt:           cfg.Salt,
-			Dirs:           cfg.Dirs,
-			Excludes:       cfg.ExcludePaths,
+			Endpoint:       gCfg.Endpoint,
+			AccessKey:      gCfg.AccessKeyId,
+			SecretKey:      gCfg.SecretAccessKey,
+			BucketName:     gCfg.Bucket,
+			MasterPassword: gCfg.MasterPassword,
+			Salt:           gCfg.Salt,
+			Dirs:           gCfg.Dirs,
+			Excludes:       gCfg.ExcludePaths,
 		}, nil
 	}
 }
@@ -129,7 +129,7 @@ func (s *server) WriteToDaemonConfig(ctx context.Context, in *pb.WriteConfigRequ
 	log.Println(">> GOT COMMAND: WriteToDaemonConfig")
 	defer log.Println(">> COMPLETED COMMAND: WriteToDaemonConfig")
 
-	if cfg == nil {
+	if gCfg == nil {
 		log.Println("Config not available yet, took no action")
 
 		return &pb.WriteConfigResponse{
@@ -149,10 +149,10 @@ func (s *server) WriteToDaemonConfig(ctx context.Context, in *pb.WriteConfigRequ
 			Dirs:            in.GetDirs(),
 			ExcludePaths:    in.GetExcludes(),
 		}
-		makeTemplateConfigFile(username, userHomeDir, configToWrite)
+		makeTemplateConfigFile(gUsername, gUserHomeDir, configToWrite)
 
 		// read this new config back into daemon
-		initConfig(username, userHomeDir)
+		initConfig()
 
 		return &pb.WriteConfigResponse{
 			DidSucceed: true,
