@@ -8,15 +8,13 @@ import (
 	"log"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/util"
 )
 
 type BackupIdsQueue struct {
-	Ids  []int
-	Lock sync.Mutex
+	Ids []int
 }
 
 func relativizePath(path string, prefix string) string {
@@ -95,9 +93,7 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, backu
 
 		if hasDirEnt {
 			if mtimeUnix > lastBackupUnix {
-				backupIdsQueue.Lock.Lock()
 				backupIdsQueue.Ids = append(backupIdsQueue.Ids, id)
-				backupIdsQueue.Lock.Unlock()
 			}
 		} else {
 			pendingDirEntryInserts = append(pendingDirEntryInserts, dirEntryInsert{rootPath: rootDirName, relPath: relPath, lastBackupUnixtime: 0})
@@ -119,9 +115,7 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, backu
 		if err != nil {
 			log.Printf("error: Traverse: db.HasDirEnt: %v\n", err)
 		}
-		backupIdsQueue.Lock.Lock()
 		backupIdsQueue.Ids = append(backupIdsQueue.Ids, id)
-		backupIdsQueue.Lock.Unlock()
 	}
 
 	return nil

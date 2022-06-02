@@ -110,9 +110,7 @@ func backupMain() {
 		var progressBarTotalItems int
 		var progressBar *mpb.Bar = nil
 		if !cfgVerbose {
-			backupIdsQueue.Lock.Lock()
 			progressBarTotalItems = len(backupIdsQueue.Ids)
-			backupIdsQueue.Lock.Unlock()
 
 			progressBar = progressBarContainer.New(
 				int64(progressBarTotalItems),
@@ -137,15 +135,12 @@ func backupMain() {
 		// Work through the queue
 		for {
 			var id int = 0
-			backupIdsQueue.Lock.Lock()
 			if len(backupIdsQueue.Ids) >= 1 {
 				id = backupIdsQueue.Ids[0]
 				backupIdsQueue.Ids = backupIdsQueue.Ids[1:]
 			} else {
-				backupIdsQueue.Lock.Unlock()
 				break
 			}
-			backupIdsQueue.Lock.Unlock()
 			if id != 0 {
 				rootDirName, relPath, err := db.GetDirEntPaths(id)
 				if err != nil {
