@@ -47,6 +47,14 @@ func TestSliceToCommaSeparatedString(t *testing.T) {
 	s2 := []string{"a", "b"}
 	s2Result := sliceToCommaSeparatedString(s2)
 	assert.Equal(t, `"a", "b"`, s2Result)
+
+	s3 := []string{""}
+	s3Result := sliceToCommaSeparatedString(s3)
+	assert.Equal(t, `""`, s3Result)
+
+	s4 := []string{}
+	s4Result := sliceToCommaSeparatedString(s4)
+	assert.Equal(t, ``, s4Result)
 }
 
 func TestMakeLogSafe(t *testing.T) {

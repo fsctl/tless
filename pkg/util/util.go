@@ -86,7 +86,7 @@ bucket = "`
 # Example (macOS): /Users/<yourname>/Documents
 dirs = [ `
 
-	if configValues != nil && len(configValues.Dirs) > 0 {
+	if configValues != nil {
 		template += sliceToCommaSeparatedString(configValues.Dirs)
 	} else {
 		template += "\"<absolute path to directory>\", \"<optional additional directory>\""
@@ -100,7 +100,7 @@ dirs = [ `
 # Example (macOS): /Users/<yourname>/Documents/MyJournal
 excludes = [ `
 
-	if configValues != nil && len(configValues.ExcludePaths) > 0 {
+	if configValues != nil {
 		template += sliceToCommaSeparatedString(configValues.ExcludePaths)
 	} else {
 		template += "\"<absolute path to exclude>\", \"<optional additional exclude path>\""
