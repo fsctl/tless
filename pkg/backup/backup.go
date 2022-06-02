@@ -29,7 +29,7 @@ type dirEntMetadata struct {
 	SymlinkOrigin string
 }
 
-func Backup(ctx context.Context, key []byte, rootDirName string, relPath string, backupDirPath string, snapshotName string, dirEntId int, objst *objstore.ObjStore, bucket string, showNameOnSuccess bool) error {
+func Backup(ctx context.Context, key []byte, rootDirName string, relPath string, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string, showNameOnSuccess bool) error {
 	// strip any trailing slashes on destination path
 	backupDirPath = util.StripTrailingSlashes(backupDirPath)
 

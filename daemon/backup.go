@@ -190,7 +190,7 @@ func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 		}
 		log.Printf("Backing up '%s/%s'", rootDirName, relPath)
 
-		if err := backup.Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, int(bjt.DirEntId), objst, bucket, true); err != nil {
+		if err := backup.Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, false); err != nil {
 			log.Printf("error: backup.Backup(): %v", err)
 			continue
 		}
