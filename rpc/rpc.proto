@@ -40,6 +40,7 @@ message DaemonStatusResponse {
     CHECKING_CONN = 1;
     BACKING_UP = 2;
     RESTORING = 3;
+    NEED_HELLO = 4;
   }
   State status = 1;
   string msg = 2;

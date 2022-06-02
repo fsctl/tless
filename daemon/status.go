@@ -36,6 +36,15 @@ var (
 func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.DaemonStatusResponse, error) {
 	log.Println(">> GOT & COMPLETED COMMAND: Status")
 
+	// If daemon has restarted we need to tell the client we need a new Hello to boot us up
+	if gUsername == "" || gUserHomeDir == "" || gCfg == nil {
+		return &pb.DaemonStatusResponse{
+			Status:     pb.DaemonStatusResponse_NEED_HELLO,
+			Msg:        "",
+			Percentage: 0}, nil
+	}
+
+	// Normal status responses
 	Status.lock.Lock()
 	defer Status.lock.Unlock()
 
