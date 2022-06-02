@@ -53,7 +53,10 @@ func (db *DB) querySingleRowCount(sql string) (int, error) {
 func (db *DB) DropAllTables() error {
 	sqlStmt := `
 	drop table if exists dirents;
-	drop table if exists queue;
+	drop table if exists backup_info;
+	drop table if exists backup_journal;
+	drop table if exists rm_snapshot_info;
+	drop table if exists rm_snapshot_journal;
 	`
 	_, err := db.dbConn.Exec(sqlStmt)
 	if err != nil {
@@ -63,14 +66,14 @@ func (db *DB) DropAllTables() error {
 }
 
 func (db *DB) CreateTablesIfNotExist() error {
-	sql := "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='dirents';"
+	sql := "SELECT count(*) FROM sqlite_master WHERE type='table' AND (name='dirents' OR name='backup_info' OR name='backup_journal' OR name='rm_snapshot_info' OR name='rm_snapshot_journal');"
 	cnt, err := db.querySingleRowCount(sql)
 	if err != nil {
 		log.Printf("%q: %s\n", err, sql)
 		return err
 	}
 
-	if cnt != 1 {
+	if cnt != 5 {
 		err = db.createTables()
 		if err != nil {
 			log.Printf("Error: could not create tables")
@@ -91,6 +94,43 @@ func (db *DB) createTables() error {
 		last_backup integer
 	);
 	create index idx_rootdir_relpaths ON dirents (rootdir, relpath);
+
+	drop table if exists backup_info;
+	create table backup_info (
+		id integer primary key autoincrement,
+		snapshot_time integer         /* epoch seconds when we started snapshot */
+	);
+
+	drop table if exists backup_journal;
+	create table backup_journal (
+		id integer primary key autoincrement,
+		backup_info_id integer NOT NULL, /* key into backups_info */
+		dirent_id integer,            /* key into dirents */
+		status integer                /* 1=Unstarted */
+							          /* 2=InProgress */
+							          /* 3=Finished */
+	);
+	create index idx_status ON backup_journal (status);
+	create index idx_binfo_id ON backup_journal (backup_info_id);
+
+	drop table if exists rm_snapshot_info;
+	create table rm_snapshot_info (
+		id integer primary key autoincrement,
+		rootdir text,
+		snapshot_time text            /* "YYYY-MM-DD_hh:mm:ss" in UTC */
+	);
+
+	drop table if exists rm_snapshot_journal;
+	create table rm_snapshot_journal (
+		id integer primary key autoincrement,
+		rm_snapshot_info_id integer,  /* key into rm_snapshot_info */
+		action integer,               /* 1=rename obj */
+							          /* 2=delete obj */
+		old_name text, 	              /* obj name under old snapshot (one being pruned) */
+		new_name text,                /* obj name under new snapshot (one being merged into) */
+							          /* (new_name left blank for deletes) */
+		status integer                /* 1=Unstarted */
+	);                                /* 3=Finished */
 	`
 	_, err := db.dbConn.Exec(sqlStmt)
 	if err != nil {
