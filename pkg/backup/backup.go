@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 
 	"github.com/fsctl/tless/pkg/cryptography"
-	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/util"
 )
@@ -30,16 +29,11 @@ type dirEntMetadata struct {
 	SymlinkOrigin string
 }
 
-func Backup(ctx context.Context, key []byte, db *database.DB, backupDirPath string, snapshotName string, dirEntId int, objst *objstore.ObjStore, bucket string, showNameOnSuccess bool) error {
+func Backup(ctx context.Context, key []byte, rootDirName string, relPath string, backupDirPath string, snapshotName string, dirEntId int, objst *objstore.ObjStore, bucket string, showNameOnSuccess bool) error {
 	// strip any trailing slashes on destination path
 	backupDirPath = util.StripTrailingSlashes(backupDirPath)
 
 	// get the path for the dirent
-	rootDirName, relPath, err := db.GetDirEntPaths(dirEntId)
-	if err != nil {
-		log.Printf("error: Backup(): could not get dirent id '%d'\n", dirEntId)
-		return err
-	}
 	absPath := filepath.Join(backupDirPath, relPath)
 
 	// get the os.stat metadata on file

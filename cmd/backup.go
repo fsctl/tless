@@ -147,11 +147,15 @@ func backupMain() {
 			}
 			backupIdsQueue.Lock.Unlock()
 			if id != 0 {
-				if err := backup.Backup(ctx, encKey, db, backupDirPath, snapshotName, id, objst, cfgBucket, cfgVerbose); err != nil {
+				rootDirName, relPath, err := db.GetDirEntPaths(id)
+				if err != nil {
+					log.Printf("error: db.GetDirEntPaths(): could not get dirent id '%d'\n", id)
+				}
+				if err := backup.Backup(ctx, encKey, rootDirName, relPath, backupDirPath, snapshotName, id, objst, cfgBucket, cfgVerbose); err != nil {
 					log.Printf("error: Backup(): %v", err)
 					continue
 				}
-				err := db.UpdateLastBackupTime(id)
+				err = db.UpdateLastBackupTime(id)
 				if err != nil {
 					log.Printf("error: UpdateLastBackupTime(): %v", err)
 				}
