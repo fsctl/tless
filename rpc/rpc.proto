@@ -19,6 +19,9 @@ service DaemonCtl {
   // Commands to synchronize config between client and daemon
   rpc ReadDaemonConfig (ReadConfigRequest) returns (ReadConfigResponse) {}
   rpc WriteToDaemonConfig (WriteConfigRequest) returns (WriteConfigResponse) {}
+
+  // Backup command
+  rpc Backup (BackupRequest) returns (BackupResponse) {}
 }
 
 // Initial connect request with information about console logged-in user
@@ -94,3 +97,11 @@ message WriteConfigResponse {
   bool DidSucceed = 1;
   string ErrMsg = 2;
 }
+
+message BackupRequest {}
+
+message BackupResponse {
+  bool IsStarting = 1;
+  string ErrMsg = 2;
+}
+

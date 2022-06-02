@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
 	"github.com/spf13/viper"
@@ -18,6 +19,7 @@ var (
 	gCfg         *util.CfgSettings
 	gUsername    string
 	gUserHomeDir string
+	gKey         []byte
 )
 
 func initConfig() {
@@ -58,6 +60,19 @@ func initConfig() {
 		Dirs:            viper.GetStringSlice("backups.dirs"),
 		ExcludePaths:    viper.GetStringSlice("backups.excludes"),
 	}
+	gGlobalsLock.Unlock()
+
+	// Derive the key and store in gKey
+	gGlobalsLock.Lock()
+	salt := gCfg.Salt
+	masterPassword := gCfg.MasterPassword
+	gGlobalsLock.Unlock()
+	tempKey, err := cryptography.DeriveKey(salt, masterPassword)
+	if err != nil {
+		log.Fatalf("Could not derive key: %v", err)
+	}
+	gGlobalsLock.Lock()
+	gKey = tempKey
 	gGlobalsLock.Unlock()
 }
 

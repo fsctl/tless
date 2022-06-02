@@ -27,7 +27,7 @@ func (s *server) CheckConn(ctx context.Context, in *pb.CheckConnRequest) (*pb.Ch
 		log.Println("Busy: can't do CheckConn right now")
 		return &pb.CheckConnResponse{
 			Result:   pb.CheckConnResponse_ERROR,
-			ErrorMsg: "Busy with other work",
+			ErrorMsg: "busy with other work",
 		}, nil
 	}
 

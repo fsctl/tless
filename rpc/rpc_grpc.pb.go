@@ -32,6 +32,8 @@ type DaemonCtlClient interface {
 	// Commands to synchronize config between client and daemon
 	ReadDaemonConfig(ctx context.Context, in *ReadConfigRequest, opts ...grpc.CallOption) (*ReadConfigResponse, error)
 	WriteToDaemonConfig(ctx context.Context, in *WriteConfigRequest, opts ...grpc.CallOption) (*WriteConfigResponse, error)
+	// Backup command
+	Backup(ctx context.Context, in *BackupRequest, opts ...grpc.CallOption) (*BackupResponse, error)
 }
 
 type daemonCtlClient struct {
@@ -87,6 +89,15 @@ func (c *daemonCtlClient) WriteToDaemonConfig(ctx context.Context, in *WriteConf
 	return out, nil
 }
 
+func (c *daemonCtlClient) Backup(ctx context.Context, in *BackupRequest, opts ...grpc.CallOption) (*BackupResponse, error) {
+	out := new(BackupResponse)
+	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/Backup", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonCtlServer is the server API for DaemonCtl service.
 // All implementations must embed UnimplementedDaemonCtlServer
 // for forward compatibility
@@ -101,6 +112,8 @@ type DaemonCtlServer interface {
 	// Commands to synchronize config between client and daemon
 	ReadDaemonConfig(context.Context, *ReadConfigRequest) (*ReadConfigResponse, error)
 	WriteToDaemonConfig(context.Context, *WriteConfigRequest) (*WriteConfigResponse, error)
+	// Backup command
+	Backup(context.Context, *BackupRequest) (*BackupResponse, error)
 	mustEmbedUnimplementedDaemonCtlServer()
 }
 
@@ -122,6 +135,9 @@ func (UnimplementedDaemonCtlServer) ReadDaemonConfig(context.Context, *ReadConfi
 }
 func (UnimplementedDaemonCtlServer) WriteToDaemonConfig(context.Context, *WriteConfigRequest) (*WriteConfigResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method WriteToDaemonConfig not implemented")
+}
+func (UnimplementedDaemonCtlServer) Backup(context.Context, *BackupRequest) (*BackupResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Backup not implemented")
 }
 func (UnimplementedDaemonCtlServer) mustEmbedUnimplementedDaemonCtlServer() {}
 
@@ -226,6 +242,24 @@ func _DaemonCtl_WriteToDaemonConfig_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonCtl_Backup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BackupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonCtlServer).Backup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/rpc.DaemonCtl/Backup",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonCtlServer).Backup(ctx, req.(*BackupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonCtl_ServiceDesc is the grpc.ServiceDesc for DaemonCtl service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -252,6 +286,10 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WriteToDaemonConfig",
 			Handler:    _DaemonCtl_WriteToDaemonConfig_Handler,
+		},
+		{
+			MethodName: "Backup",
+			Handler:    _DaemonCtl_Backup_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

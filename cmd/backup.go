@@ -129,7 +129,7 @@ func backupMain() {
 		// Any remaining prevPaths represent deleted files, so upload keys to mark them deleted and remove from
 		// dirents table
 		if err = createDeletedPathsKeysAndPurgeFromDb(ctx, objst, cfgBucket, db, encKey, backupDirName, snapshotName, prevPaths, cfgVerbose); err != nil {
-			log.Println("error: failed creatingn deleted paths keys")
+			log.Println("error: failed creating deleted paths keys")
 		}
 
 		// Work through the queue

@@ -3,6 +3,8 @@ package daemon
 import (
 	"context"
 	"log"
+	"sync"
+	"time"
 
 	pb "github.com/fsctl/tless/rpc"
 )
@@ -32,15 +34,14 @@ var (
 
 // Callback for rpc.DaemonCtlServer.Status requests
 func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.DaemonStatusResponse, error) {
-	log.Println(">> GOT & COMPLETED COMMAND: Status")
-
-	gGlobalsLock.Lock()
-	isNeedingHello := gUsername == "" || gUserHomeDir == "" || gCfg == nil || gDb == nil
-	gGlobalsLock.Unlock()
+	//log.Println(">> GOT & COMPLETED COMMAND: Status")
 
 	// If daemon has restarted we need to tell the client we need a new Hello to boot us up
+	gGlobalsLock.Lock()
+	isNeedingHello := gUsername == "" || gUserHomeDir == "" || gCfg == nil || gDb == nil || gKey == nil
+	gGlobalsLock.Unlock()
 	if isNeedingHello {
-		log.Println(">>   Status: we responded that we need a Hello")
+		log.Println(">> Status: we responded that we need a Hello")
 		return &pb.DaemonStatusResponse{
 			Status:     pb.DaemonStatusResponse_NEED_HELLO,
 			Msg:        "",
@@ -77,4 +78,23 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 			Msg:        gStatus.msg,
 			Percentage: gStatus.percentage}, nil
 	}
+}
+
+func getLastBackupTimeFormatted(globalsLock *sync.Mutex) string {
+	globalsLock.Lock()
+	lastBackupUnixtime, err := gDb.GetLastCompletedBackupUnixTime()
+	globalsLock.Unlock()
+	if err != nil {
+		log.Printf("error: could not get last completed backup time: %v", err)
+	}
+
+	var lastBackupTimeFormatted string
+	if lastBackupUnixtime <= int64(0) {
+		lastBackupTimeFormatted = "none"
+	} else {
+		tmUnixUTC := time.Unix(lastBackupUnixtime, 0)
+		lastBackupTimeFormatted = tmUnixUTC.Local().Format("Jan 2, 2006 3:04pm")
+	}
+
+	return lastBackupTimeFormatted
 }

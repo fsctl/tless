@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/util"
@@ -74,19 +73,7 @@ func initDbConn() {
 	}
 
 	// Get the last completed backup time
-	gGlobalsLock.Lock()
-	lastBackupUnixtime, err := gDb.GetLastCompletedBackupUnixTime()
-	gGlobalsLock.Unlock()
-	if err != nil {
-		log.Printf("error: could not get last completed backup time: %v", err)
-	}
-	var lastBackupTimeFormatted string
-	if lastBackupUnixtime <= int64(0) {
-		lastBackupTimeFormatted = "none"
-	} else {
-		tmUnixUTC := time.Unix(lastBackupUnixtime, 0)
-		lastBackupTimeFormatted = tmUnixUTC.Local().Format("Jan 2, 2006 3:04pm")
-	}
+	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
 
 	// Set status message to last backup time if status is Idle
 	gGlobalsLock.Lock()

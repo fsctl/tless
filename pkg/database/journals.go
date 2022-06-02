@@ -274,7 +274,7 @@ func (db *DB) GetLastCompletedBackupUnixTime() (unixtime int64, err error) {
 	if count > 0 {
 		stmt, err = db.dbConn.Prepare(`SELECT MAX(backup_info.snapshot_time) FROM backup_info 
 			WHERE backup_info.id 
-			<> 
+			NOT IN
 			(SELECT backup_journal.backup_info_id FROM backup_journal);`)
 	} else {
 		stmt, err = db.dbConn.Prepare(`SELECT MAX(backup_info.snapshot_time) FROM backup_info`)
