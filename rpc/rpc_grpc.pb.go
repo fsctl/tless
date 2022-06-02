@@ -24,7 +24,7 @@ const _ = grpc.SupportPackageIsVersion7
 type DaemonCtlClient interface {
 	// Sends the console user's username+homedir to establish connectivity
 	// and initialize the daemon with correct config.toml path
-	Hello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloReply, error)
+	Hello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResponse, error)
 	// Gets the status of the daemon
 	Status(ctx context.Context, in *DaemonStatusRequest, opts ...grpc.CallOption) (*DaemonStatusResponse, error)
 	// Commands daemon to check connection to object store and report back
@@ -42,8 +42,8 @@ func NewDaemonCtlClient(cc grpc.ClientConnInterface) DaemonCtlClient {
 	return &daemonCtlClient{cc}
 }
 
-func (c *daemonCtlClient) Hello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloReply, error) {
-	out := new(HelloReply)
+func (c *daemonCtlClient) Hello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResponse, error) {
+	out := new(HelloResponse)
 	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/Hello", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func (c *daemonCtlClient) WriteToDaemonConfig(ctx context.Context, in *WriteConf
 type DaemonCtlServer interface {
 	// Sends the console user's username+homedir to establish connectivity
 	// and initialize the daemon with correct config.toml path
-	Hello(context.Context, *HelloRequest) (*HelloReply, error)
+	Hello(context.Context, *HelloRequest) (*HelloResponse, error)
 	// Gets the status of the daemon
 	Status(context.Context, *DaemonStatusRequest) (*DaemonStatusResponse, error)
 	// Commands daemon to check connection to object store and report back
@@ -108,7 +108,7 @@ type DaemonCtlServer interface {
 type UnimplementedDaemonCtlServer struct {
 }
 
-func (UnimplementedDaemonCtlServer) Hello(context.Context, *HelloRequest) (*HelloReply, error) {
+func (UnimplementedDaemonCtlServer) Hello(context.Context, *HelloRequest) (*HelloResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Hello not implemented")
 }
 func (UnimplementedDaemonCtlServer) Status(context.Context, *DaemonStatusRequest) (*DaemonStatusResponse, error) {

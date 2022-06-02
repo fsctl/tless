@@ -8,7 +8,7 @@ package rpc;
 service DaemonCtl {
   // Sends the console user's username+homedir to establish connectivity
   // and initialize the daemon with correct config.toml path
-  rpc Hello (HelloRequest) returns (HelloReply) {}
+  rpc Hello (HelloRequest) returns (HelloResponse) {}
 
   // Gets the status of the daemon
   rpc Status (DaemonStatusRequest) returns (DaemonStatusResponse) {}
@@ -28,7 +28,7 @@ message HelloRequest {
 }
 
 // TODO:  return last backup timestamp
-message HelloReply {
+message HelloResponse {
   string message = 1;
 }
 

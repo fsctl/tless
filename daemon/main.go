@@ -26,12 +26,12 @@ type server struct {
 }
 
 // Callback for rpc.DaemonCtlServer.Hello requests
-func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
+func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloResponse, error) {
 	log.Printf("Received Hello from: '%v' (with homedir '%v')", in.GetUsername(), in.GetUserHomeDir())
 	gUsername = in.GetUsername()
 	gUserHomeDir = in.GetUserHomeDir()
 	initConfig()
-	return &pb.HelloReply{Message: "Hello there, " + in.GetUsername() + " (with homedir '" + in.GetUserHomeDir() + "')"}, nil
+	return &pb.HelloResponse{Message: "Hello there, " + in.GetUsername() + " (with homedir '" + in.GetUserHomeDir() + "')"}, nil
 }
 
 func DaemonMain() {

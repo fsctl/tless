@@ -60,23 +60,23 @@ func daemonClientMain() {
 	// Contact the server and print out its response.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	r, err := c.Hello(ctx, &pb.HelloRequest{
+	resp, err := c.Hello(ctx, &pb.HelloRequest{
 		Username:    user.Username,
 		UserHomeDir: user.HomeDir})
 	if err != nil {
 		log.Fatalf("error: could not initiate connection: %v", err)
 	}
-	log.Printf("Hello response received: %s", r.GetMessage())
+	log.Printf("Hello response received: %s", resp.GetMessage())
 
 	go func() {
 		for {
-			r, err := c.Status(ctx, &pb.DaemonStatusRequest{})
+			resp, err := c.Status(ctx, &pb.DaemonStatusRequest{})
 			if err != nil {
 				log.Fatalf("error: could not get daemon status: %v", err)
 			}
-			log.Printf("Status response: %v\n", r.GetStatus())
-			if r.GetMsg() != "" {
-				log.Printf("  Message: %s\n\n", r.GetMsg())
+			log.Printf("Status response: %v\n", resp.GetStatus())
+			if resp.GetMsg() != "" {
+				log.Printf("  Message: %s\n\n", resp.GetMsg())
 			}
 
 			time.Sleep(time.Second)
