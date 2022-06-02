@@ -198,7 +198,7 @@ func MakeLogSafe(s string) string {
 func MkdirUserConfig(username string, userHomeDir string) (string, error) {
 	if username == "" || userHomeDir == "" {
 		if u, err := user.Current(); err != nil {
-			return "", fmt.Errorf("error: could not lookup current user: %v\n", err)
+			return "", fmt.Errorf("error: could not lookup current user: %v", err)
 		} else {
 			username = u.Username
 			userHomeDir = u.HomeDir
@@ -208,27 +208,27 @@ func MkdirUserConfig(username string, userHomeDir string) (string, error) {
 	// get the user's numeric uid and primary group's gid
 	u, err := user.Lookup(username)
 	if err != nil {
-		return "", fmt.Errorf("error: could not lookup user '%s': %v\n", username, err)
+		return "", fmt.Errorf("error: could not lookup user '%s': %v", username, err)
 	}
 	uid, err := strconv.Atoi(u.Uid)
 	if err != nil {
-		return "", fmt.Errorf("error: could not convert uid string '%s' to int: %v\n", u.Uid, err)
+		return "", fmt.Errorf("error: could not convert uid string '%s' to int: %v", u.Uid, err)
 	}
 	gid, err := strconv.Atoi(u.Gid)
 	if err != nil {
-		return "", fmt.Errorf("error: could not convert gid string '%s' to int: %v\n", u.Gid, err)
+		return "", fmt.Errorf("error: could not convert gid string '%s' to int: %v", u.Gid, err)
 	}
 
 	// make the config file dir
 	configDir := filepath.Join(userHomeDir, ".tless")
 	if err := os.Mkdir(configDir, 0755); err != nil && !errors.Is(err, fs.ErrExist) {
-		return "", fmt.Errorf("error: mkdir failed: %v\n", err)
+		return "", fmt.Errorf("error: mkdir failed: %v", err)
 	}
 	if err := os.Chmod(configDir, 0755); err != nil {
-		return "", fmt.Errorf("error: chmod on created config dir failed: %v\n", err)
+		return "", fmt.Errorf("error: chmod on created config dir failed: %v", err)
 	}
 	if err := os.Chown(configDir, uid, gid); err != nil {
-		return "", fmt.Errorf("error: could not chown dir to '%d/%d': %v\n", uid, gid, err)
+		return "", fmt.Errorf("error: could not chown dir to '%d/%d': %v", uid, gid, err)
 	}
 
 	return configDir, nil
