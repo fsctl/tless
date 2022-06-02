@@ -3,8 +3,15 @@ package util
 
 import (
 	"crypto/rand"
+	"errors"
+	"fmt"
+	"io/fs"
 	"log"
 	"math/big"
+	"os"
+	"os/user"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/sethvargo/go-diceware/diceware"
@@ -183,4 +190,46 @@ func MakeLogSafe(s string) string {
 		ret += "*"
 	}
 	return ret
+}
+
+// Makes the directory $HOME/.tless, where $HOME is either for current user or overridden with
+// arguments (if both are non-empty strings).  The correct owner and group are set for the new dir.
+// Returns path to new dir $HOME/.tless
+func MkdirUserConfig(username string, userHomeDir string) (string, error) {
+	if username == "" || userHomeDir == "" {
+		if u, err := user.Current(); err != nil {
+			return "", fmt.Errorf("error: could not lookup current user: %v\n", err)
+		} else {
+			username = u.Username
+			userHomeDir = u.HomeDir
+		}
+	}
+
+	// get the user's numeric uid and primary group's gid
+	u, err := user.Lookup(username)
+	if err != nil {
+		return "", fmt.Errorf("error: could not lookup user '%s': %v\n", username, err)
+	}
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return "", fmt.Errorf("error: could not convert uid string '%s' to int: %v\n", u.Uid, err)
+	}
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return "", fmt.Errorf("error: could not convert gid string '%s' to int: %v\n", u.Gid, err)
+	}
+
+	// make the config file dir
+	configDir := filepath.Join(userHomeDir, ".tless")
+	if err := os.Mkdir(configDir, 0755); err != nil && !errors.Is(err, fs.ErrExist) {
+		return "", fmt.Errorf("error: mkdir failed: %v\n", err)
+	}
+	if err := os.Chmod(configDir, 0755); err != nil {
+		return "", fmt.Errorf("error: chmod on created config dir failed: %v\n", err)
+	}
+	if err := os.Chown(configDir, uid, gid); err != nil {
+		return "", fmt.Errorf("error: could not chown dir to '%d/%d': %v\n", uid, gid, err)
+	}
+
+	return configDir, nil
 }

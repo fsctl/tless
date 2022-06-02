@@ -2,8 +2,6 @@ package daemon
 
 import (
 	"context"
-	"errors"
-	"io/fs"
 	"log"
 	"os"
 	"os/user"
@@ -71,15 +69,9 @@ func makeTemplateConfigFile(username string, userHomeDir string, configValues *u
 	}
 
 	// make the config file dir
-	configFileDir := filepath.Join(userHomeDir, ".tless")
-	if err := os.Mkdir(configFileDir, 0755); err != nil && !errors.Is(err, fs.ErrExist) {
-		log.Fatalf("error: mkdir failed: %v\n", err)
-	}
-	if err := os.Chmod(configFileDir, 0755); err != nil {
-		log.Fatalf("error: chmod on created config dir failed: %v\n", err)
-	}
-	if err := os.Chown(configFileDir, uid, gid); err != nil {
-		log.Fatalf("error: could not chown dir to '%d/%d': %v\n", uid, gid, err)
+	configFileDir, err := util.MkdirUserConfig(username, userHomeDir)
+	if err != nil {
+		log.Fatalf("error: making config dir: %v", err)
 	}
 	log.Printf("Created config directory at '%s'\n", configFileDir)
 

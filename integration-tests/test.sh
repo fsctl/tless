@@ -21,7 +21,7 @@ fi
 #
 # Clean up from last run
 #
-rm tless-state.db
+rm $HOME/.tless/state.db
 rm -rf $TEMPDIR/test-backup-src
 rm -rf $TEMPDIR/test-restore-dst
 ./tless extras wipe-server --force

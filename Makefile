@@ -25,7 +25,7 @@ clean:
 	@rm rpc/rpc_grpc.pb.go
 
 clean-state:
-	@rm tless-state.db
+	@rm $(HOME)/.tless/state.db
 
 test:
 	@integration-tests/test.sh

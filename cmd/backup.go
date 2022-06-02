@@ -16,6 +16,7 @@ import (
 	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/fstraverse"
 	"github.com/fsctl/tless/pkg/objstore"
+	"github.com/fsctl/tless/pkg/util"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -70,7 +71,11 @@ func backupMain() {
 	}
 
 	// open and prepare sqlite database
-	db, err := database.NewDB("./tless-state.db")
+	sqliteDir, err := util.MkdirUserConfig("", "")
+	if err != nil {
+		log.Fatalf("error: making sqlite dir: %v", err)
+	}
+	db, err := database.NewDB(filepath.Join(sqliteDir, "state.db"))
 	if err != nil {
 		log.Fatalf("Error: cannot open database: %v", err)
 	}
