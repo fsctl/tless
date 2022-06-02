@@ -15,14 +15,14 @@ func (s *server) CheckConn(ctx context.Context, in *pb.CheckConnRequest) (*pb.Ch
 	defer log.Println(">> COMPLETED COMMAND: CheckConn")
 
 	isBusy := false
-	Status.lock.Lock()
-	if Status.state == Idle {
-		Status.state = CheckingConn
-		Status.msg = ""
+	gGlobalsLock.Lock()
+	if gStatus.state == Idle {
+		gStatus.state = CheckingConn
+		gStatus.msg = ""
 	} else {
 		isBusy = true
 	}
-	Status.lock.Unlock()
+	gGlobalsLock.Unlock()
 	if isBusy {
 		log.Println("Busy: can't do CheckConn right now")
 		return &pb.CheckConnResponse{
@@ -39,10 +39,10 @@ func (s *server) CheckConn(ctx context.Context, in *pb.CheckConnRequest) (*pb.Ch
 	objst := objstore.NewObjStore(ctx, in.GetEndpoint(), in.GetAccessKey(), in.GetSecretKey())
 	isSuccessful, err := objst.IsReachableWithRetries(context.Background(), 5, in.GetBucketName())
 
-	Status.lock.Lock()
-	Status.state = Idle
-	Status.msg = ""
-	Status.lock.Unlock()
+	gGlobalsLock.Lock()
+	gStatus.state = Idle
+	gStatus.msg = ""
+	gGlobalsLock.Unlock()
 
 	if isSuccessful {
 		log.Println("CheckConn succeeded")

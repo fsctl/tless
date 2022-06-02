@@ -21,16 +21,21 @@ var (
 )
 
 func initConfig() {
+	gGlobalsLock.Lock()
+	username := gUsername
+	userHomeDir := gUserHomeDir
+	gGlobalsLock.Unlock()
+
 	viper.SetConfigType("toml")
 	viper.SetConfigName("config")
-	viper.AddConfigPath(filepath.Join(gUserHomeDir, ".tless"))
+	viper.AddConfigPath(filepath.Join(userHomeDir, ".tless"))
 
 	if err := viper.ReadInConfig(); err == nil {
 		log.Println("Using config file:", viper.ConfigFileUsed())
 	} else {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// Config file could not be found, make one and read it in
-			makeTemplateConfigFile(gUsername, gUserHomeDir, nil)
+			makeTemplateConfigFile(username, userHomeDir, nil)
 			if err := viper.ReadInConfig(); err == nil {
 				log.Println("Using config file:", viper.ConfigFileUsed())
 			} else {
@@ -41,6 +46,8 @@ func initConfig() {
 			log.Fatalf("Error reading config file: %v\n", err)
 		}
 	}
+
+	gGlobalsLock.Lock()
 	gCfg = &util.CfgSettings{
 		Endpoint:        viper.GetString("objectstore.endpoint"),
 		AccessKeyId:     viper.GetString("objectstore.access_key_id"),
@@ -51,6 +58,7 @@ func initConfig() {
 		Dirs:            viper.GetStringSlice("backups.dirs"),
 		ExcludePaths:    viper.GetStringSlice("backups.excludes"),
 	}
+	gGlobalsLock.Unlock()
 }
 
 func makeTemplateConfigFile(username string, userHomeDir string, configValues *util.CfgSettings) {
@@ -95,7 +103,11 @@ func (s *server) ReadDaemonConfig(ctx context.Context, in *pb.ReadConfigRequest)
 	log.Println(">> GOT COMMAND: ReadDaemonConfig")
 	defer log.Println(">> COMPLETED COMMAND: ReadDaemonConfig")
 
-	if gCfg == nil {
+	gGlobalsLock.Lock()
+	cfgIsNil := gCfg == nil
+	gGlobalsLock.Unlock()
+
+	if cfgIsNil {
 		log.Println("Config not available for reading yet, returning nothing")
 		return &pb.ReadConfigResponse{
 			IsValid: false,
@@ -103,7 +115,8 @@ func (s *server) ReadDaemonConfig(ctx context.Context, in *pb.ReadConfigRequest)
 		}, nil
 	} else {
 		log.Println("Returning all config file settings")
-		return &pb.ReadConfigResponse{
+		gGlobalsLock.Lock()
+		resp := &pb.ReadConfigResponse{
 			IsValid:        true,
 			ErrMsg:         "",
 			Endpoint:       gCfg.Endpoint,
@@ -114,7 +127,9 @@ func (s *server) ReadDaemonConfig(ctx context.Context, in *pb.ReadConfigRequest)
 			Salt:           gCfg.Salt,
 			Dirs:           gCfg.Dirs,
 			Excludes:       gCfg.ExcludePaths,
-		}, nil
+		}
+		gGlobalsLock.Unlock()
+		return resp, nil
 	}
 }
 
@@ -123,7 +138,11 @@ func (s *server) WriteToDaemonConfig(ctx context.Context, in *pb.WriteConfigRequ
 	log.Println(">> GOT COMMAND: WriteToDaemonConfig")
 	defer log.Println(">> COMPLETED COMMAND: WriteToDaemonConfig")
 
-	if gCfg == nil {
+	gGlobalsLock.Lock()
+	cfgIsNil := gCfg == nil
+	gGlobalsLock.Unlock()
+
+	if cfgIsNil {
 		log.Println("Config not available yet, took no action")
 
 		return &pb.WriteConfigResponse{
@@ -143,7 +162,13 @@ func (s *server) WriteToDaemonConfig(ctx context.Context, in *pb.WriteConfigRequ
 			Dirs:            in.GetDirs(),
 			ExcludePaths:    in.GetExcludes(),
 		}
-		makeTemplateConfigFile(gUsername, gUserHomeDir, configToWrite)
+
+		gGlobalsLock.Lock()
+		username := gUsername
+		userHomeDir := gUserHomeDir
+		gGlobalsLock.Unlock()
+
+		makeTemplateConfigFile(username, userHomeDir, configToWrite)
 
 		// read this new config back into daemon
 		initConfig()

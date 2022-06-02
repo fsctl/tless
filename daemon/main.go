@@ -9,8 +9,13 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sync"
 	"syscall"
+	"time"
 
+	"github.com/fsctl/tless/pkg/database"
+	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
 	"google.golang.org/grpc"
 )
@@ -18,6 +23,11 @@ import (
 const (
 	unixSocketPath         = "/tmp/tless.sock"
 	standardConfigFileName = "config.toml"
+)
+
+var (
+	gGlobalsLock sync.Mutex
+	gDb          *database.DB
 )
 
 // server is used to implement helloworld.GreeterServer.
@@ -28,10 +38,62 @@ type server struct {
 // Callback for rpc.DaemonCtlServer.Hello requests
 func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloResponse, error) {
 	log.Printf("Received Hello from: '%v' (with homedir '%v')", in.GetUsername(), in.GetUserHomeDir())
+
+	gGlobalsLock.Lock()
 	gUsername = in.GetUsername()
 	gUserHomeDir = in.GetUserHomeDir()
+	gGlobalsLock.Unlock()
 	initConfig()
+	initDbConn()
+
 	return &pb.HelloResponse{Message: "Hello there, " + in.GetUsername() + " (with homedir '" + in.GetUserHomeDir() + "')"}, nil
+}
+
+func initDbConn() {
+	gGlobalsLock.Lock()
+	username := gUsername
+	userHomeDir := gUserHomeDir
+	gGlobalsLock.Unlock()
+
+	// open and prepare sqlite database
+	sqliteDir, err := util.MkdirUserConfig(username, userHomeDir)
+	if err != nil {
+		log.Fatalf("error: making sqlite dir: %v", err)
+	}
+	gGlobalsLock.Lock()
+	gDb, err = database.NewDB(filepath.Join(sqliteDir, "state.db"))
+	gGlobalsLock.Unlock()
+	if err != nil {
+		log.Fatalf("error: cannot open database: %v", err)
+	}
+	gGlobalsLock.Lock()
+	err = gDb.CreateTablesIfNotExist()
+	gGlobalsLock.Unlock()
+	if err != nil {
+		log.Fatalf("error: cannot initialize database: %v", err)
+	}
+
+	// Get the last completed backup time
+	gGlobalsLock.Lock()
+	lastBackupUnixtime, err := gDb.GetLastCompletedBackupUnixTime()
+	gGlobalsLock.Unlock()
+	if err != nil {
+		log.Printf("error: could not get last completed backup time: %v", err)
+	}
+	var lastBackupTimeFormatted string
+	if lastBackupUnixtime <= int64(0) {
+		lastBackupTimeFormatted = "none"
+	} else {
+		tmUnixUTC := time.Unix(lastBackupUnixtime, 0)
+		lastBackupTimeFormatted = tmUnixUTC.Local().Format("Jan 2, 2006 3:04pm")
+	}
+
+	// Set status message to last backup time if status is Idle
+	gGlobalsLock.Lock()
+	if gStatus.state == Idle {
+		gStatus.msg = "Last backup: " + lastBackupTimeFormatted
+	}
+	gGlobalsLock.Unlock()
 }
 
 func DaemonMain() {
@@ -66,12 +128,25 @@ func DaemonMain() {
 			}
 		}()
 
+		// TODO:  check for and handle dirty journals here
+		//....
+
+		// TODO:  go routine that wakes up periodically and checks if its time for a backup
+		//....
+
 		// Go into a blocking wait for the requested signal notifications
 		<-signals
 		fmt.Println() // line break after ^C
 
 		// do cleanup here before terminating
 		s.GracefulStop()
+
+		// other cleanup
+		gGlobalsLock.Lock()
+		if gDb != nil {
+			gDb.Close()
+		}
+		gGlobalsLock.Unlock()
 
 		// tell main routine we are ready to exit
 		done <- true
