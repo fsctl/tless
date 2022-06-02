@@ -37,7 +37,7 @@ func (s *server) CheckConn(ctx context.Context, in *pb.CheckConnRequest) (*pb.Ch
 	log.Printf("    Secret Key: '%s'\n", util.MakeLogSafe(in.GetSecretKey()))
 	log.Printf("    Bucket:     '%s'\n", in.GetBucketName())
 	objst := objstore.NewObjStore(ctx, in.GetEndpoint(), in.GetAccessKey(), in.GetSecretKey())
-	isSuccessful := objst.IsReachableWithRetries(context.Background(), 5, in.GetBucketName())
+	isSuccessful, err := objst.IsReachableWithRetries(context.Background(), 5, in.GetBucketName())
 
 	Status.lock.Lock()
 	Status.state = Idle
@@ -54,7 +54,7 @@ func (s *server) CheckConn(ctx context.Context, in *pb.CheckConnRequest) (*pb.Ch
 		log.Println("CheckConn failed")
 		return &pb.CheckConnResponse{
 			Result:   pb.CheckConnResponse_ERROR,
-			ErrorMsg: "Unable to connect",
+			ErrorMsg: err.Error(),
 		}, nil
 	}
 }

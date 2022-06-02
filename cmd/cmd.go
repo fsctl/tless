@@ -178,8 +178,8 @@ func validateConfigVars() error {
 	if !cfgForce {
 		ctx := context.Background()
 		objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
-		if !objst.IsReachableWithRetries(context.Background(), 10, cfgBucket) {
-			log.Fatalln("error: exiting because server not reachable")
+		if ok, err := objst.IsReachableWithRetries(context.Background(), 10, cfgBucket); !ok {
+			log.Fatalln("error: exiting because server not reachable: ", err)
 		}
 
 		var err error

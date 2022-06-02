@@ -50,19 +50,20 @@ func NewObjStore(ctx context.Context, endpoint string, accessKeyId string, secre
 	}
 }
 
-func (os *ObjStore) IsReachableWithRetries(ctx context.Context, maxWaitSeconds int, bucket string) bool {
+func (os *ObjStore) IsReachableWithRetries(ctx context.Context, maxWaitSeconds int, bucket string) (bool, error) {
 	waitSeconds := 1
+	var err error
 	for waitSeconds < maxWaitSeconds {
-		if _, err := os.GetObjList(ctx, bucket, ""); err != nil {
+		if _, err = os.GetObjList(ctx, bucket, ""); err != nil {
 			log.Printf("warning: server unreachable: %v\n", err)
 			log.Printf("trying again in %d seconds...\n", waitSeconds)
 			time.Sleep(time.Duration(waitSeconds * 1e9))
 			waitSeconds *= 2
 		} else {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, err
 }
 
 func (os *ObjStore) UploadObjFromBuffer(ctx context.Context, bucket string, objectName string, buffer []byte, expectedETag string) error {

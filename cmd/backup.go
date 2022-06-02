@@ -81,8 +81,8 @@ func backupMain() {
 
 	// open connection to cloud server
 	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
-	if !objst.IsReachableWithRetries(ctx, 10, cfgBucket) {
-		log.Fatalln("error: exiting because server not reachable")
+	if ok, err := objst.IsReachableWithRetries(ctx, 10, cfgBucket); !ok {
+		log.Fatalln("error: exiting because server not reachable: ", err)
 	}
 
 	// initialize progress bar container
