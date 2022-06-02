@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log"
 	"path/filepath"
@@ -100,8 +101,6 @@ func Backup(completion func()) {
 		gStatus.msg = backupDirName
 		gGlobalsLock.Unlock()
 
-		snapshotName := time.Now().UTC().Format("2006-01-02_15:04:05")
-
 		// Traverse the filesystem looking for changed directory entries
 		gGlobalsLock.Lock()
 		prevPaths, err := gDb.GetAllKnownPaths(backupDirName)
@@ -115,7 +114,7 @@ func Backup(completion func()) {
 
 		// Iterate over the queue of dirent id's inserting them into journal
 		gGlobalsLock.Lock()
-		insertBJTxn, err := gDb.NewInsertBackupJournalStmt()
+		insertBJTxn, err := gDb.NewInsertBackupJournalStmt(backupDirPath)
 		gGlobalsLock.Unlock()
 		if err != nil {
 			log.Printf("Error: could not bulk insert into journal: %v", err)
@@ -129,6 +128,19 @@ func Backup(completion func()) {
 		gGlobalsLock.Lock()
 		insertBJTxn.Close()
 		gGlobalsLock.Unlock()
+
+		// Get the snapshot name from timestamp in backup_info
+		gGlobalsLock.Lock()
+		_, snapshotUnixtime, err := gDb.GetJournaledBackupInfo()
+		gGlobalsLock.Unlock()
+		if errors.Is(err, sql.ErrNoRows) {
+			// If no rows were just inserted into journal, then nothing to backup for this snapshot
+			goto done
+		} else if err != nil {
+			log.Printf("error: gDb.GetJournaledBackupInfo(): %v", err)
+			goto done
+		}
+		snapshotName := time.Unix(snapshotUnixtime, 0).UTC().Format("2006-01-02_15:04:05")
 
 		// Set the initial progress bar
 		gGlobalsLock.Lock()
@@ -160,6 +172,76 @@ func Backup(completion func()) {
 
 	// Finally set the status back to Idle since we are done with backup
 done:
+	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
+	gGlobalsLock.Lock()
+	gStatus.state = Idle
+	gStatus.percentage = -1.0
+	gStatus.msg = "Last backup: " + lastBackupTimeFormatted
+	gGlobalsLock.Unlock()
+}
+
+func replayBackupJournal() {
+	// Reset all InProgress -> Unstarted
+	gGlobalsLock.Lock()
+	err := gDb.ResetAllInProgressBackupJournalTasks()
+	gGlobalsLock.Unlock()
+	if err != nil {
+		log.Println("error: gDb.ResetAllInProgressBackupJournalTasks: ", err)
+	}
+
+	// Reconstruct backupDirPath, backupDirName and snapshotName from backup_info table
+	gGlobalsLock.Lock()
+	backupDirPath, snapshotUnixtime, err := gDb.GetJournaledBackupInfo()
+	gGlobalsLock.Unlock()
+	if err != nil {
+		log.Printf("error: gDb.GetJournaledBackupInfo(): %v", err)
+	}
+	backupDirName := filepath.Base(backupDirPath)
+	snapshotName := time.Unix(snapshotUnixtime, 0).UTC().Format("2006-01-02_15:04:05")
+
+	// Set the gStatus for backing up, with correct percentage done to start
+	gGlobalsLock.Lock()
+	finished, total, err := gDb.GetBackupJournalCounts()
+	gGlobalsLock.Unlock()
+	if err != nil {
+		log.Printf("error: db.GetBackupJournalCounts: %v", err)
+	}
+	percentDone := (float32(finished)/float32(total))*float32(100) + 0.1
+	gGlobalsLock.Lock()
+	gStatus.state = BackingUp
+	gStatus.msg = backupDirName
+	gStatus.percentage = percentDone
+	gGlobalsLock.Unlock()
+
+	// Reconstruct obj store handle
+	ctx := context.Background()
+	gGlobalsLock.Lock()
+	endpoint := gCfg.Endpoint
+	accessKey := gCfg.AccessKeyId
+	secretKey := gCfg.SecretAccessKey
+	bucket := gCfg.Bucket
+	gGlobalsLock.Unlock()
+	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey)
+	if ok, err := objst.IsReachableWithRetries(ctx, 10, bucket); !ok {
+		log.Println("error: exiting because server not reachable: ", err)
+		gGlobalsLock.Lock()
+		gStatus.state = Idle
+		gStatus.percentage = -1.0
+		gStatus.msg = "Cannot connect to cloud"
+		gGlobalsLock.Unlock()
+		return
+	}
+
+	// Get a copy of the encryption key
+	encKey := make([]byte, 32)
+	gGlobalsLock.Lock()
+	copy(encKey, gKey)
+	gGlobalsLock.Unlock()
+
+	// Roll the journal forward
+	playBackupJournal(ctx, encKey, gDb, &gGlobalsLock, backupDirPath, snapshotName, objst, bucket)
+
+	// Finally set the status back to Idle since we are done with backup
 	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
 	gGlobalsLock.Lock()
 	gStatus.state = Idle

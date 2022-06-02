@@ -27,16 +27,16 @@ type InsertBackupJournalStmt struct {
 	backupsInfoId int64
 }
 
-func (db *DB) NewInsertBackupJournalStmt() (*InsertBackupJournalStmt, error) {
+func (db *DB) NewInsertBackupJournalStmt(backupDirPath string) (*InsertBackupJournalStmt, error) {
 	// First insert the backup_info row so we have its id
-	stmtInfoInsert, err := db.dbConn.Prepare("INSERT INTO backup_info (snapshot_time) VALUES (strftime('%s','now'))")
+	stmtInfoInsert, err := db.dbConn.Prepare("INSERT INTO backup_info (dirpath, snapshot_time) VALUES (?, strftime('%s','now'))")
 	if err != nil {
 		log.Printf("Error: NewInsertBackupJournalStmt: %v", err)
 		return nil, err
 	}
 	defer stmtInfoInsert.Close()
 
-	result, err := stmtInfoInsert.Exec()
+	result, err := stmtInfoInsert.Exec(backupDirPath)
 	if err != nil {
 		log.Printf("Error: NewInsertBackupJournalStmt: %v", err)
 		return nil, err
@@ -293,4 +293,43 @@ func (db *DB) GetLastCompletedBackupUnixTime() (unixtime int64, err error) {
 	} else {
 		return unixtime, nil
 	}
+}
+
+func (db *DB) HasDirtyBackupJournal() (bool, error) {
+	stmt, err := db.dbConn.Prepare(`SELECT COUNT(*) FROM backup_journal;`)
+	if err != nil {
+		log.Printf("Error: HasDirtyBackupJournal: %v", err)
+		return false, err
+	}
+	defer stmt.Close()
+
+	var count int64 = 0
+	err = stmt.QueryRow().Scan(&count)
+	if err != nil {
+		log.Printf("Error: HasDirtyBackupJournal: %v", err)
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
+func (db *DB) GetJournaledBackupInfo() (backupDirPath string, snapshotUnixTime int64, err error) {
+	stmt, err := db.dbConn.Prepare(`SELECT dirpath, snapshot_time FROM backup_info WHERE backup_info.id IN (SELECT backup_journal.backup_info_id FROM backup_journal);`)
+	if err != nil {
+		log.Printf("Error: GetJournaledBackupInfo: %v", err)
+		return "", 0, err
+	}
+	defer stmt.Close()
+
+	err = stmt.QueryRow().Scan(&backupDirPath, &snapshotUnixTime)
+	if errors.Is(err, sql.ErrNoRows) {
+		// Sometimes we get called when backup_journal is empty, so just suppress any error message
+		// and return the error for caller to handle
+		return "", 0, err
+	} else if err != nil {
+		log.Printf("Error: GetJournaledBackupInfo: %v", err)
+		return "", 0, err
+	}
+
+	return backupDirPath, snapshotUnixTime, nil
 }

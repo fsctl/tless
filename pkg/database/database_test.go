@@ -104,7 +104,7 @@ func TestBackupJournalFunctions(t *testing.T) {
 	assert.Equal(t, int64(0), unixtime)
 
 	// Test bulk insert txn
-	insertBJTxn, err := db.NewInsertBackupJournalStmt()
+	insertBJTxn, err := db.NewInsertBackupJournalStmt("/dir/subdir")
 	assert.NoError(t, err)
 	for i := 0; i < 32; i++ {
 		insertBJTxn.InsertBackupJournalRow(int64(i), Unstarted)
@@ -115,6 +115,17 @@ func TestBackupJournalFunctions(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, int64(32), total)
 	assert.Equal(t, int64(0), finished)
+
+	// Test GetJournaledBackupInfo()
+	dirPath, snapshotUnixtime, err := db.GetJournaledBackupInfo()
+	assert.NoError(t, err)
+	assert.Equal(t, "/dir/subdir", dirPath)
+	assert.GreaterOrEqual(t, snapshotUnixtime+5, time.Now().Unix())
+
+	// Verify that HasDirtyBackupJournal is returns true when it sees items in backup_journal
+	hasDirty, err := db.HasDirtyBackupJournal()
+	assert.NoError(t, err)
+	assert.Equal(t, true, hasDirty)
 
 	// Simulate 3 threads all working through queue. Assert that last one marks everything complete
 	// and deletes all database rows.
@@ -172,4 +183,9 @@ func TestBackupJournalFunctions(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEqual(t, int64(0), unixtime)
 	assert.GreaterOrEqual(t, unixtime+5, time.Now().Unix())
+
+	// Verify that HasDirtyBackupJournal now returns false since table is empty
+	hasDirty, err = db.HasDirtyBackupJournal()
+	assert.NoError(t, err)
+	assert.Equal(t, false, hasDirty)
 }

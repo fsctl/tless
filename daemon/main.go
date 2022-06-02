@@ -38,6 +38,7 @@ type server struct {
 func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloResponse, error) {
 	log.Printf("Received Hello from: '%v' (with homedir '%v')", in.GetUsername(), in.GetUserHomeDir())
 
+	// Set up global state
 	gGlobalsLock.Lock()
 	gUsername = in.GetUsername()
 	gUserHomeDir = in.GetUserHomeDir()
@@ -45,6 +46,24 @@ func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRespo
 	initConfig()
 	initDbConn()
 
+	// Replay dirty journals
+	go func() {
+		for {
+			gGlobalsLock.Lock()
+			hasDirtyBackupJournal, err := gDb.HasDirtyBackupJournal()
+			gGlobalsLock.Unlock()
+			if err != nil {
+				log.Println("error: gDb.HasDirtyBackupJournal: ", err)
+			}
+			if hasDirtyBackupJournal {
+				replayBackupJournal()
+			} else {
+				return
+			}
+		}
+	}()
+
+	// Return useless response
 	return &pb.HelloResponse{Message: "Hello there, " + in.GetUsername() + " (with homedir '" + in.GetUserHomeDir() + "')"}, nil
 }
 
@@ -114,9 +133,6 @@ func DaemonMain() {
 				log.Fatalf("failed to serve: %v", err)
 			}
 		}()
-
-		// TODO:  check for and handle dirty journals here
-		//....
 
 		// TODO:  go routine that wakes up periodically and checks if its time for a backup
 		//....

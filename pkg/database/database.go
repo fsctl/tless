@@ -98,7 +98,8 @@ func (db *DB) createTables() error {
 	drop table if exists backup_info;
 	create table backup_info (
 		id integer primary key autoincrement,
-		snapshot_time integer         /* epoch seconds when we started snapshot */
+		snapshot_time integer,        /* epoch seconds when we started snapshot */
+		dirpath text                  /* full path to directory this backup is for */
 	);
 
 	drop table if exists backup_journal;
