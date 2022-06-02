@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"log"
 	"os"
 	"os/user"
@@ -70,7 +72,7 @@ func makeTemplateConfigFile(username string, userHomeDir string, configValues *u
 
 	// make the config file dir
 	configFileDir := filepath.Join(userHomeDir, ".tless")
-	if err := os.Mkdir(configFileDir, 0755); err != nil {
+	if err := os.Mkdir(configFileDir, 0755); err != nil && !errors.Is(err, fs.ErrExist) {
 		log.Fatalf("error: mkdir failed: %v\n", err)
 	}
 	if err := os.Chmod(configFileDir, 0755); err != nil {
