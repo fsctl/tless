@@ -8,6 +8,7 @@ import (
 	"log"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/util"
@@ -36,7 +37,7 @@ type dirEntryInsert struct {
 	lastBackupUnixtime int64
 }
 
-func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, backupIdsQueue *BackupIdsQueue, excludePathPrefixes []string) error {
+func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLock *sync.Mutex, backupIdsQueue *BackupIdsQueue, excludePathPrefixes []string) error {
 	rootPath = util.StripTrailingSlashes(rootPath)
 	rootDirName := filepath.Base(rootPath)
 
@@ -80,7 +81,13 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, backu
 		// If not:
 		//   - Insert it into dirents with last_backup set to 0
 		//   - Enqueue it for backup.
+		if dbLock != nil {
+			dbLock.Lock()
+		}
 		hasDirEnt, lastBackupUnix, id, err := db.HasDirEnt(rootDirName, relPath)
+		if dbLock != nil {
+			dbLock.Unlock()
+		}
 		if err != nil {
 			log.Printf("Error while searching for %s/%s, skipping this dirent", rootDirName, relPath)
 			return nil
@@ -106,12 +113,18 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, backu
 	}
 
 	// Do all the dir entry inserts, get the ids and enqueue them for backup
-	err = doPendingDirEntryInserts(db, pendingDirEntryInserts)
+	err = doPendingDirEntryInserts(db, dbLock, pendingDirEntryInserts)
 	if err != nil {
 		log.Printf("error: Traverse: doPendingDirEntryInserts: %v\n", err)
 	}
 	for _, ins := range pendingDirEntryInserts {
+		if dbLock != nil {
+			dbLock.Lock()
+		}
 		_, _, id, err := db.HasDirEnt(ins.rootPath, ins.relPath)
+		if dbLock != nil {
+			dbLock.Unlock()
+		}
 		if err != nil {
 			log.Printf("error: Traverse: db.HasDirEnt: %v\n", err)
 		}
@@ -130,21 +143,39 @@ func isInExcludePathPrefixes(path string, excludePathPrefixes []string) bool {
 	return false
 }
 
-func doPendingDirEntryInserts(db *database.DB, pendingDirEntryInserts []dirEntryInsert) error {
+func doPendingDirEntryInserts(db *database.DB, dbLock *sync.Mutex, pendingDirEntryInserts []dirEntryInsert) error {
+	if dbLock != nil {
+		dbLock.Lock()
+	}
 	dirEntStmt, err := database.NewInsertDirEntStmt(db)
+	if dbLock != nil {
+		dbLock.Unlock()
+	}
 	if err != nil {
 		log.Printf("error: doPendingDirEntryInserts: %v", err)
 		return err
 	}
 
 	for _, ins := range pendingDirEntryInserts {
+		if dbLock != nil {
+			dbLock.Lock()
+		}
 		err = dirEntStmt.InsertDirEnt(ins.rootPath, ins.relPath, ins.lastBackupUnixtime)
+		if dbLock != nil {
+			dbLock.Unlock()
+		}
 		if err != nil {
 			log.Printf("error: doPendingDirEntryInserts: %v", err)
 			return err
 		}
 	}
 
+	if dbLock != nil {
+		dbLock.Lock()
+	}
 	dirEntStmt.Close()
+	if dbLock != nil {
+		dbLock.Unlock()
+	}
 	return nil
 }

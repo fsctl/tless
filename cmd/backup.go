@@ -104,7 +104,7 @@ func backupMain() {
 			log.Fatalf("Error: cannot get paths list: %v", err)
 		}
 		var backupIdsQueue fstraverse.BackupIdsQueue
-		fstraverse.Traverse(backupDirPath, prevPaths, db, &backupIdsQueue, cfgExcludePaths)
+		fstraverse.Traverse(backupDirPath, prevPaths, db, nil, &backupIdsQueue, cfgExcludePaths)
 
 		// create the progress bar
 		var progressBarTotalItems int
