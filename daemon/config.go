@@ -7,6 +7,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strconv"
+	"sync"
 
 	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/util"
@@ -22,11 +23,11 @@ var (
 	gKey         []byte
 )
 
-func initConfig() {
-	gGlobalsLock.Lock()
+func initConfig(globalsLock *sync.Mutex) {
+	globalsLock.Lock()
 	username := gUsername
 	userHomeDir := gUserHomeDir
-	gGlobalsLock.Unlock()
+	globalsLock.Unlock()
 
 	viper.SetConfigType("toml")
 	viper.SetConfigName("config")
@@ -49,7 +50,7 @@ func initConfig() {
 		}
 	}
 
-	gGlobalsLock.Lock()
+	globalsLock.Lock()
 	gCfg = &util.CfgSettings{
 		Endpoint:        viper.GetString("objectstore.endpoint"),
 		AccessKeyId:     viper.GetString("objectstore.access_key_id"),
@@ -60,20 +61,20 @@ func initConfig() {
 		Dirs:            viper.GetStringSlice("backups.dirs"),
 		ExcludePaths:    viper.GetStringSlice("backups.excludes"),
 	}
-	gGlobalsLock.Unlock()
+	globalsLock.Unlock()
 
 	// Derive the key and store in gKey
-	gGlobalsLock.Lock()
+	globalsLock.Lock()
 	salt := gCfg.Salt
 	masterPassword := gCfg.MasterPassword
-	gGlobalsLock.Unlock()
+	globalsLock.Unlock()
 	tempKey, err := cryptography.DeriveKey(salt, masterPassword)
 	if err != nil {
 		log.Fatalf("Could not derive key: %v", err)
 	}
-	gGlobalsLock.Lock()
+	globalsLock.Lock()
 	gKey = tempKey
-	gGlobalsLock.Unlock()
+	globalsLock.Unlock()
 }
 
 func makeTemplateConfigFile(username string, userHomeDir string, configValues *util.CfgSettings) {
@@ -186,7 +187,7 @@ func (s *server) WriteToDaemonConfig(ctx context.Context, in *pb.WriteConfigRequ
 		makeTemplateConfigFile(username, userHomeDir, configToWrite)
 
 		// read this new config back into daemon
-		initConfig()
+		initConfig(&gGlobalsLock)
 
 		return &pb.WriteConfigResponse{
 			DidSucceed: true,

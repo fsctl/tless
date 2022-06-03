@@ -43,8 +43,8 @@ func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRespo
 	gUsername = in.GetUsername()
 	gUserHomeDir = in.GetUserHomeDir()
 	gGlobalsLock.Unlock()
-	initConfig()
-	initDbConn()
+	initConfig(&gGlobalsLock)
+	initDbConn(&gGlobalsLock)
 
 	// Replay dirty journals
 	go func() {
@@ -67,26 +67,26 @@ func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRespo
 	return &pb.HelloResponse{Message: "Hello there, " + in.GetUsername() + " (with homedir '" + in.GetUserHomeDir() + "')"}, nil
 }
 
-func initDbConn() {
-	gGlobalsLock.Lock()
+func initDbConn(globalsLock *sync.Mutex) {
+	globalsLock.Lock()
 	username := gUsername
 	userHomeDir := gUserHomeDir
-	gGlobalsLock.Unlock()
+	globalsLock.Unlock()
 
 	// open and prepare sqlite database
 	sqliteDir, err := util.MkdirUserConfig(username, userHomeDir)
 	if err != nil {
 		log.Fatalf("error: making sqlite dir: %v", err)
 	}
-	gGlobalsLock.Lock()
+	globalsLock.Lock()
 	gDb, err = database.NewDB(filepath.Join(sqliteDir, "state.db"))
-	gGlobalsLock.Unlock()
+	globalsLock.Unlock()
 	if err != nil {
 		log.Fatalf("error: cannot open database: %v", err)
 	}
-	gGlobalsLock.Lock()
+	globalsLock.Lock()
 	err = gDb.CreateTablesIfNotExist()
-	gGlobalsLock.Unlock()
+	globalsLock.Unlock()
 	if err != nil {
 		log.Fatalf("error: cannot initialize database: %v", err)
 	}
@@ -95,11 +95,11 @@ func initDbConn() {
 	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
 
 	// Set status message to last backup time if status is Idle
-	gGlobalsLock.Lock()
+	globalsLock.Lock()
 	if gStatus.state == Idle {
 		gStatus.msg = "Last backup: " + lastBackupTimeFormatted
 	}
-	gGlobalsLock.Unlock()
+	globalsLock.Unlock()
 }
 
 func DaemonMain() {
