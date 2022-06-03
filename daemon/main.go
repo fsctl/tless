@@ -79,7 +79,8 @@ func initDbConn(globalsLock *sync.Mutex) {
 		log.Fatalf("error: making sqlite dir: %v", err)
 	}
 	globalsLock.Lock()
-	gDb, err = database.NewDB(filepath.Join(sqliteDir, "state.db"))
+	sqliteFilePath := filepath.Join(sqliteDir, "state.db")
+	gDb, err = database.NewDB(sqliteFilePath)
 	globalsLock.Unlock()
 	if err != nil {
 		log.Fatalf("error: cannot open database: %v", err)
@@ -89,6 +90,15 @@ func initDbConn(globalsLock *sync.Mutex) {
 	globalsLock.Unlock()
 	if err != nil {
 		log.Fatalf("error: cannot initialize database: %v", err)
+	}
+
+	// in case we just created a new db file, set its permissions to console user as owner
+	uid, gid, err := util.GetUidGid(username)
+	if err != nil {
+		log.Println("error: cannot get user's UID/GID: ", err)
+	}
+	if err := os.Chown(sqliteFilePath, uid, gid); err != nil {
+		log.Printf("error: could not chown db file '%s' to '%d/%d': %v", sqliteFilePath, uid, gid, err)
 	}
 
 	// Get the last completed backup time

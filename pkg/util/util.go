@@ -206,17 +206,9 @@ func MkdirUserConfig(username string, userHomeDir string) (string, error) {
 	}
 
 	// get the user's numeric uid and primary group's gid
-	u, err := user.Lookup(username)
+	uid, gid, err := GetUidGid(username)
 	if err != nil {
-		return "", fmt.Errorf("error: could not lookup user '%s': %v", username, err)
-	}
-	uid, err := strconv.Atoi(u.Uid)
-	if err != nil {
-		return "", fmt.Errorf("error: could not convert uid string '%s' to int: %v", u.Uid, err)
-	}
-	gid, err := strconv.Atoi(u.Gid)
-	if err != nil {
-		return "", fmt.Errorf("error: could not convert gid string '%s' to int: %v", u.Gid, err)
+		return "", err
 	}
 
 	// make the config file dir
@@ -232,4 +224,21 @@ func MkdirUserConfig(username string, userHomeDir string) (string, error) {
 	}
 
 	return configDir, nil
+}
+
+// Get the specified user's numeric uid and primary group's numeric gid
+func GetUidGid(username string) (uid int, gid int, err error) {
+	u, err := user.Lookup(username)
+	if err != nil {
+		return 0, 0, fmt.Errorf("error: could not lookup user '%s': %v", username, err)
+	}
+	uid, err = strconv.Atoi(u.Uid)
+	if err != nil {
+		return 0, 0, fmt.Errorf("error: could not convert uid string '%s' to int: %v", u.Uid, err)
+	}
+	gid, err = strconv.Atoi(u.Gid)
+	if err != nil {
+		return 0, 0, fmt.Errorf("error: could not convert gid string '%s' to int: %v", u.Gid, err)
+	}
+	return uid, gid, nil
 }
