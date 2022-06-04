@@ -18,6 +18,19 @@ func (s *server) ReadAllSnapshots(ctx context.Context, in *pb.ReadAllSnapshotsRe
 	log.Println(">> GOT COMMAND: ReadAllSnapshots")
 	defer log.Println(">> COMPLETED COMMAND: ReadAllSnapshots")
 
+	// Make sure the global config we need is initialized
+	gGlobalsLock.Lock()
+	isGlobalConfigReady := gCfg != nil && gKey != nil
+	gGlobalsLock.Unlock()
+	if !isGlobalConfigReady {
+		log.Printf("ReadAllSnapshots: global config not yet initialized")
+		return &pb.ReadAllSnapshotsResponse{
+			DidSucceed: false,
+			ErrMsg:     "global config not yet initialized",
+			Backups:    nil,
+		}, nil
+	}
+
 	ctxBkg := context.Background()
 	gGlobalsLock.Lock()
 	endpoint := gCfg.Endpoint
