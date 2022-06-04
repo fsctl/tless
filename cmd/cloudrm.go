@@ -2,13 +2,11 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"log"
-	"strings"
 
-	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/objstorefs"
+	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/spf13/cobra"
 )
 
@@ -50,7 +48,7 @@ func cloudrmMain() {
 	ctx := context.Background()
 	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
 
-	backupDirName, snapshotTimestamp, err := splitSnapshotName(cloudrmCfgSnapshot)
+	backupDirName, snapshotTimestamp, err := snapshots.SplitSnapshotName(cloudrmCfgSnapshot)
 	if err != nil {
 		log.Fatalf("Cannot split '%s' into backupDirName/snapshotTimestamp", cloudrmCfgSnapshot)
 	}
@@ -60,62 +58,8 @@ func cloudrmMain() {
 		log.Fatalf("Could not get grouped snapshots: %v", err)
 	}
 
-	backupDirSnapshotsOnly := groupedObjects[backupDirName].Snapshots
-
-	deleteObjs, renameObjs, err := objstorefs.ComputeSnapshotDelete(backupDirSnapshotsOnly, snapshotTimestamp)
+	err = snapshots.DeleteSnapshot(ctx, encKey, groupedObjects, backupDirName, snapshotTimestamp, objst, cfgBucket)
 	if err != nil {
-		log.Fatalln("error: could not compute plan for deleting snapshot")
+		log.Fatalf("Failed to delete snapshot: %v", err)
 	}
-
-	// get the encrypted representation of backupDirName and snapshotName
-	encryptedSnapshotName, err := cryptography.EncryptFilename(encKey, snapshotTimestamp)
-	if err != nil {
-		log.Fatalf("error: cloudrmMain(): could not encrypt snapshot name (%s): %v\n", snapshotTimestamp, err)
-	}
-	encryptedBackupDirName, err := cryptography.EncryptFilename(encKey, backupDirName)
-	if err != nil {
-		log.Fatalf("error: cloudrmMain(): could not encrypt backup dir name (%s): %v\n", backupDirName, err)
-	}
-
-	// Object deletes
-	for _, m := range deleteObjs {
-		for encRelPath := range m {
-			objName := encryptedBackupDirName + "/" + encryptedSnapshotName + "/" + encRelPath
-			//fmt.Printf("  %s\n", objName)
-			err = objst.DeleteObj(ctx, cfgBucket, objName)
-			if err != nil {
-				log.Fatalf("error: cloudrmMain(): could not rename object (%s): %v\n", objName, err)
-			}
-		}
-	}
-
-	// Object renames
-	for _, renObj := range renameObjs {
-		encryptedOldSnapshotName, err := cryptography.EncryptFilename(encKey, renObj.OldSnapshot)
-		if err != nil {
-			log.Fatalf("error: cloudrmMain(): could not encrypt snapshot name (%s): %v\n", renObj.OldSnapshot, err)
-		}
-		encryptedNewSnapshotName, err := cryptography.EncryptFilename(encKey, renObj.NewSnapshot)
-		if err != nil {
-			log.Fatalf("error: cloudrmMain(): could not encrypt snapshot name (%s): %v\n", renObj.NewSnapshot, err)
-		}
-		oldObjName := encryptedBackupDirName + "/" + encryptedOldSnapshotName + "/" + renObj.RelPath
-		newObjName := encryptedBackupDirName + "/" + encryptedNewSnapshotName + "/" + renObj.RelPath
-		//fmt.Printf("'%s' -> '%s'\n", oldObjName, newObjName)
-		err = objst.RenameObj(ctx, cfgBucket, oldObjName, newObjName)
-		if err != nil {
-			log.Fatalf("error: cloudrmMain(): could not rename object (%s): %v\n", oldObjName, err)
-		}
-	}
-}
-
-func splitSnapshotName(snapshotName string) (backupDirName string, snapshotTime string, err error) {
-	snapshotNameParts := strings.Split(snapshotName, "/")
-	if len(snapshotNameParts) != 2 {
-		return "", "", fmt.Errorf("should be slash-splitable into 2 parts")
-	}
-
-	backupDirName = snapshotNameParts[0]
-	snapshotTime = snapshotNameParts[1]
-	return backupDirName, snapshotTime, nil
 }

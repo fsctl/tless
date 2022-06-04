@@ -34,6 +34,9 @@ type DaemonCtlClient interface {
 	WriteToDaemonConfig(ctx context.Context, in *WriteConfigRequest, opts ...grpc.CallOption) (*WriteConfigResponse, error)
 	// Backup command
 	Backup(ctx context.Context, in *BackupRequest, opts ...grpc.CallOption) (*BackupResponse, error)
+	// Commands for retrieving and pruning snapshots
+	ReadAllSnapshots(ctx context.Context, in *ReadAllSnapshotsRequest, opts ...grpc.CallOption) (*ReadAllSnapshotsResponse, error)
+	DeleteSnapshot(ctx context.Context, in *DeleteSnapshotRequest, opts ...grpc.CallOption) (*DeleteSnapshotResponse, error)
 }
 
 type daemonCtlClient struct {
@@ -98,6 +101,24 @@ func (c *daemonCtlClient) Backup(ctx context.Context, in *BackupRequest, opts ..
 	return out, nil
 }
 
+func (c *daemonCtlClient) ReadAllSnapshots(ctx context.Context, in *ReadAllSnapshotsRequest, opts ...grpc.CallOption) (*ReadAllSnapshotsResponse, error) {
+	out := new(ReadAllSnapshotsResponse)
+	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/ReadAllSnapshots", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonCtlClient) DeleteSnapshot(ctx context.Context, in *DeleteSnapshotRequest, opts ...grpc.CallOption) (*DeleteSnapshotResponse, error) {
+	out := new(DeleteSnapshotResponse)
+	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/DeleteSnapshot", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonCtlServer is the server API for DaemonCtl service.
 // All implementations must embed UnimplementedDaemonCtlServer
 // for forward compatibility
@@ -114,6 +135,9 @@ type DaemonCtlServer interface {
 	WriteToDaemonConfig(context.Context, *WriteConfigRequest) (*WriteConfigResponse, error)
 	// Backup command
 	Backup(context.Context, *BackupRequest) (*BackupResponse, error)
+	// Commands for retrieving and pruning snapshots
+	ReadAllSnapshots(context.Context, *ReadAllSnapshotsRequest) (*ReadAllSnapshotsResponse, error)
+	DeleteSnapshot(context.Context, *DeleteSnapshotRequest) (*DeleteSnapshotResponse, error)
 	mustEmbedUnimplementedDaemonCtlServer()
 }
 
@@ -138,6 +162,12 @@ func (UnimplementedDaemonCtlServer) WriteToDaemonConfig(context.Context, *WriteC
 }
 func (UnimplementedDaemonCtlServer) Backup(context.Context, *BackupRequest) (*BackupResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Backup not implemented")
+}
+func (UnimplementedDaemonCtlServer) ReadAllSnapshots(context.Context, *ReadAllSnapshotsRequest) (*ReadAllSnapshotsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReadAllSnapshots not implemented")
+}
+func (UnimplementedDaemonCtlServer) DeleteSnapshot(context.Context, *DeleteSnapshotRequest) (*DeleteSnapshotResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteSnapshot not implemented")
 }
 func (UnimplementedDaemonCtlServer) mustEmbedUnimplementedDaemonCtlServer() {}
 
@@ -260,6 +290,42 @@ func _DaemonCtl_Backup_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonCtl_ReadAllSnapshots_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReadAllSnapshotsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonCtlServer).ReadAllSnapshots(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/rpc.DaemonCtl/ReadAllSnapshots",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonCtlServer).ReadAllSnapshots(ctx, req.(*ReadAllSnapshotsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonCtl_DeleteSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteSnapshotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonCtlServer).DeleteSnapshot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/rpc.DaemonCtl/DeleteSnapshot",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonCtlServer).DeleteSnapshot(ctx, req.(*DeleteSnapshotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonCtl_ServiceDesc is the grpc.ServiceDesc for DaemonCtl service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -290,6 +356,14 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Backup",
 			Handler:    _DaemonCtl_Backup_Handler,
+		},
+		{
+			MethodName: "ReadAllSnapshots",
+			Handler:    _DaemonCtl_ReadAllSnapshots_Handler,
+		},
+		{
+			MethodName: "DeleteSnapshot",
+			Handler:    _DaemonCtl_DeleteSnapshot_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

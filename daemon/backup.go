@@ -96,6 +96,9 @@ func Backup(completion func()) {
 	for _, backupDirPath := range dirs {
 		backupDirName := filepath.Base(backupDirPath)
 
+		// log what iteration of the loop we're in
+		log.Printf("Inspecting %s...\n", backupDirPath)
+
 		// Display the backup dir we're doing this iteration of the loop
 		gGlobalsLock.Lock()
 		gStatus.msg = backupDirName
@@ -135,7 +138,8 @@ func Backup(completion func()) {
 		gGlobalsLock.Unlock()
 		if errors.Is(err, sql.ErrNoRows) {
 			// If no rows were just inserted into journal, then nothing to backup for this snapshot
-			goto done
+			log.Printf("nothing inserted in journal => nothing to back up")
+			continue
 		} else if err != nil {
 			log.Printf("error: gDb.GetJournaledBackupInfo(): %v", err)
 			goto done
@@ -257,6 +261,7 @@ func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 		globalsLock.Unlock()
 		if err != nil {
 			if errors.Is(err, database.ErrNoWork) {
+				log.Println("playBackupJournal: no work found in journal... done")
 				return
 			} else {
 				log.Println("error: db.ClaimNextBackupJournalTask: ", err)
