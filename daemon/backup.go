@@ -256,6 +256,9 @@ func replayBackupJournal() {
 
 func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string) {
 	for {
+		// Sleep this go routine for 100ms on every iteration of the for loop
+		time.Sleep(time.Millisecond * 100)
+
 		globalsLock.Lock()
 		bjt, err := db.ClaimNextBackupJournalTask()
 		globalsLock.Unlock()
