@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/fsctl/tless/pkg/database"
+	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
 	"google.golang.org/grpc"
@@ -46,6 +47,28 @@ func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRespo
 	initConfig(&gGlobalsLock)
 	initDbConn(&gGlobalsLock)
 
+	// Do crypto config check and report any failures back to user rather than continuing
+	gGlobalsLock.Lock()
+	endpoint := gCfg.Endpoint
+	accessKey := gCfg.AccessKeyId
+	secretKey := gCfg.SecretAccessKey
+	bucket := gCfg.Bucket
+	salt := gCfg.Salt
+	key := gKey
+	gGlobalsLock.Unlock()
+	ctxBkg := context.Background()
+	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey)
+	if ok, err := objst.IsReachableWithRetries(context.Background(), 5, bucket); !ok {
+		errMsg := fmt.Sprintf("server not reachable: %v", err)
+		log.Println(errMsg)
+		return &pb.HelloResponse{DidSucceed: false, ErrMsg: errMsg}, nil
+	}
+	if ok, err := objst.CheckCryptoConfigMatchesServerDaemon(ctx, key, bucket, salt); !ok {
+		errMsg := fmt.Sprintf("cannot continue due to cryptographic config error: %v", err)
+		log.Println(errMsg)
+		return &pb.HelloResponse{DidSucceed: false, ErrMsg: errMsg}, nil
+	}
+
 	// Replay dirty journals
 	go func() {
 		for {
@@ -64,7 +87,7 @@ func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRespo
 	}()
 
 	// Return useless response
-	return &pb.HelloResponse{Message: "Hello there, " + in.GetUsername() + " (with homedir '" + in.GetUserHomeDir() + "')"}, nil
+	return &pb.HelloResponse{DidSucceed: true, ErrMsg: ""}, nil
 }
 
 func initDbConn(globalsLock *sync.Mutex) {

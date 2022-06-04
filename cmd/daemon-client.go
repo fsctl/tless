@@ -66,7 +66,7 @@ func daemonClientMain() {
 	if err != nil {
 		log.Fatalf("error: could not initiate connection: %v", err)
 	}
-	log.Printf("Hello response received: %s", resp.GetMessage())
+	log.Printf("Hello response received: didSucceed=%v (%v)", resp.GetDidSucceed(), resp.GetErrMsg())
 
 	go func() {
 		for {

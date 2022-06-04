@@ -15,6 +15,7 @@ var (
 	ErrMultipleSalts       = errors.New("there is more than one SALT-xxxx file on server")
 	ErrCantDecryptSaltFile = errors.New("the salt file could not be decrypted with your master password")
 	ErrNoSaltOnServer      = errors.New("there is no salt file on server")
+	ErrMismatchedSalts     = errors.New("the local salt does not match the salt saved on cloud server")
 )
 
 // Here is the basic logic of the server SALT-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx file:
@@ -66,6 +67,36 @@ backup.`)
 	}
 
 	return true
+}
+
+// Same as CheckCryptoConfigMatchesServer() except printing and error return designed for daemon mode
+func (os *ObjStore) CheckCryptoConfigMatchesServerDaemon(ctx context.Context, key []byte, bucket string, expectedSalt string) (bool, error) {
+	salt, err := os.tryReadSalt(ctx, key, bucket, false)
+	if err != nil {
+		if errors.Is(err, ErrMultipleSalts) {
+			log.Println(`warning: there are multiple SALT-xxxx files in the bucket. You need to delete
+the wrong one(s) manually.`)
+			return false, err
+		} else if errors.Is(err, ErrCantDecryptSaltFile) {
+			log.Println(`warning: cannot decrypt the SALT-xxxx files in the bucket. Did you change your
+master password in config.toml?`)
+			return false, err
+		} else if errors.Is(err, ErrNoSaltOnServer) {
+			log.Println("warning: no SALT-xxxx file on server; saving the salt from your config.toml")
+			if err = os.tryWriteSalt(ctx, key, bucket, expectedSalt); err != nil {
+				log.Printf("warning: failed to write salt to server for backup: %v\n", err)
+			}
+			return true, nil
+		}
+	} else {
+		// Warn if salt on server != salt in config file
+		if salt != expectedSalt {
+			log.Printf("warning: local salt ('%s') =/= server saved salt ('%s')", expectedSalt, salt)
+			return false, ErrMismatchedSalts
+		}
+	}
+
+	return true, nil
 }
 
 func (os *ObjStore) tryReadSalt(ctx context.Context, key []byte, bucket string, isVerbose bool) (string, error) {
