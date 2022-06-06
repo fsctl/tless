@@ -54,7 +54,7 @@ func (os *ObjStore) IsReachableWithRetries(ctx context.Context, maxWaitSeconds i
 	waitSeconds := 1
 	var err error
 	for waitSeconds < maxWaitSeconds {
-		if _, err = os.GetObjList(ctx, bucket, ""); err != nil {
+		if _, err = os.GetObjList(ctx, bucket, "doesnotexist"); err != nil {
 			log.Printf("warning: server unreachable: %v\n", err)
 			log.Printf("trying again in %d seconds...\n", waitSeconds)
 			time.Sleep(time.Duration(waitSeconds * 1e9))

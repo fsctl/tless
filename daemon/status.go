@@ -68,7 +68,7 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 			Percentage: gStatus.percentage}, nil
 	} else if gStatus.state == Restoring {
 		return &pb.DaemonStatusResponse{
-			Status:     pb.DaemonStatusResponse_BACKING_UP,
+			Status:     pb.DaemonStatusResponse_RESTORING,
 			Msg:        gStatus.msg,
 			Percentage: gStatus.percentage}, nil
 	} else {

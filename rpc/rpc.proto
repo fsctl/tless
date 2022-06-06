@@ -28,7 +28,7 @@ service DaemonCtl {
   rpc DeleteSnapshot (DeleteSnapshotRequest) returns (DeleteSnapshotResponse) {}
 
   // Restore command
-  //rpc Restore (RestoreRequest) returns (RestoreResponse) {}
+  rpc Restore (RestoreRequest) returns (RestoreResponse) {}
 }
 
 // Initial connect request with information about console logged-in user
@@ -136,4 +136,15 @@ message DeleteSnapshotRequest {
 message DeleteSnapshotResponse {
   bool DidSucceed = 1;
   string ErrMsg = 2;  
+}
+
+message RestoreRequest {
+  string SnapshotRawName = 1;
+  string RestorePath = 2;
+  repeated string SelectedRelPaths = 3;
+}
+
+message RestoreResponse {
+  bool isStarting = 1;
+  string ErrMsg = 2;
 }

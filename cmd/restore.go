@@ -74,7 +74,7 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 	progressBarContainer := mpb.New()
 
 	// get all the relpaths for this snapshot
-	mRelPathsObjsMap, err := objstorefs.ReconstructSnapshotFileList(ctx, objst, cfgBucket, encKey, backupName, snapshotName, cfgPartialRestore)
+	mRelPathsObjsMap, err := objstorefs.ReconstructSnapshotFileList(ctx, objst, cfgBucket, encKey, backupName, snapshotName, cfgPartialRestore, nil)
 	if err != nil {
 		log.Fatalln("error: reconstructSnapshotFileList failed: ", err)
 	}
@@ -105,14 +105,14 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 		if len(mRelPathsObjsMap[relPath]) > 1 {
 			relPathChunks := mRelPathsObjsMap[relPath]
 
-			err = backup.RestoreDirEntryFromChunks(ctx, encKey, pathToRestoreInto, relPathChunks, backupName, snapshotName, relPath, objst, cfgBucket, cfgVerbose)
+			err = backup.RestoreDirEntryFromChunks(ctx, encKey, pathToRestoreInto, relPathChunks, backupName, snapshotName, relPath, objst, cfgBucket, cfgVerbose, -1, -1)
 			if err != nil {
 				log.Printf("error: could not restore a dir entry '%s'", relPath)
 			}
 		} else if len(mRelPathsObjsMap[relPath]) == 1 {
 			objName := mRelPathsObjsMap[relPath][0]
 
-			err = backup.RestoreDirEntry(ctx, encKey, pathToRestoreInto, objName, backupName, snapshotName, relPath, objst, cfgBucket, cfgVerbose, &dirChmodQueue)
+			err = backup.RestoreDirEntry(ctx, encKey, pathToRestoreInto, objName, backupName, snapshotName, relPath, objst, cfgBucket, cfgVerbose, &dirChmodQueue, -1, -1)
 			if err != nil {
 				log.Printf("error: could not restore a dir entry '%s'", relPath)
 			}

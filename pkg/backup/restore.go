@@ -20,7 +20,7 @@ type DirChmodQueueItem struct {
 	FinalMode fs.FileMode
 }
 
-func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string, objName string, rootDirName string, snapshotName string, relPath string, objst *objstore.ObjStore, bucket string, printOnSuccess bool, dirChmodQueue *[]DirChmodQueueItem) error {
+func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string, objName string, rootDirName string, snapshotName string, relPath string, objst *objstore.ObjStore, bucket string, printOnSuccess bool, dirChmodQueue *[]DirChmodQueueItem, uid int, gid int) error {
 	// Strip any trailing slashes on destination path
 	restoreIntoDirPath = util.StripTrailingSlashes(restoreIntoDirPath)
 
@@ -50,7 +50,7 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 		dir, linkName := filepath.Split(relPath)
 		// We can create the dir(s) initially as 0755 b/c they'll get fixed later when we process
 		// the dirs' entry themselves.
-		err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, dir, 0755)
+		err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, dir, 0755, uid, gid)
 		if err != nil {
 			log.Printf("error: could not create dir '%s': %v\n",
 				filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, dir), err)
@@ -67,7 +67,7 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 		// We initially create dirs with mode=0755 (because real mode might be too restrictive for child
 		// restores) and enqueue an item to set dir to its correct, final mode after all files restored.
 		dirFullPath := filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, relPath)
-		err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, relPath, 0755)
+		err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, relPath, 0755, uid, gid)
 		if err != nil {
 			log.Printf("error: could not create dir '%s': %v\n", dirFullPath, err)
 			return err
@@ -81,7 +81,7 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 		dir, filename := filepath.Split(relPath)
 		// We can create the dir(s) initially as 0755 b/c they'll get fixed later when we process
 		// the dirs' entry themselves.
-		err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, dir, 0755)
+		err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, dir, 0755, uid, gid)
 		if err != nil {
 			log.Printf("error: could not create dir '%s': %v\n",
 				filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, dir), err)
@@ -98,6 +98,10 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 			log.Printf("error: could not set xattrs on file '%s': %v\n", filenameAbsPath, err)
 			return err
 		}
+		if err := os.Chown(filenameAbsPath, uid, gid); err != nil {
+			log.Printf("error: could not chown file '%s' to '%d/%d': %v", filenameAbsPath, uid, gid, err)
+			return err
+		}
 	}
 
 	if printOnSuccess {
@@ -107,7 +111,8 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 	return nil
 }
 
-func createFullPath(basePath string, backupRootDirName string, snapshotName string, relPath string, mode os.FileMode) error {
+// If uid and gid are -1, we don't try to set an owner/group and just let it default to whoever is running the program
+func createFullPath(basePath string, backupRootDirName string, snapshotName string, relPath string, mode os.FileMode, uid int, gid int) error {
 	joinedDirs := filepath.Join(basePath, backupRootDirName, snapshotName, relPath)
 
 	// If directory does not exist, create it.  If it does exist, correct its mode bits if necessary.
@@ -125,6 +130,22 @@ func createFullPath(basePath string, backupRootDirName string, snapshotName stri
 			}
 		}
 	}
+
+	if uid != -1 && gid != -1 {
+		if err := os.Chown(basePath, uid, gid); err != nil {
+			log.Printf("error: os.Chown failed to set uid/gid (%d/%d) on %s", uid, gid, basePath)
+		}
+		if err := os.Chown(filepath.Join(basePath, backupRootDirName), uid, gid); err != nil {
+			log.Printf("error: os.Chown failed to set uid/gid (%d/%d) on %s", uid, gid, filepath.Join(basePath, backupRootDirName))
+		}
+		if err := os.Chown(filepath.Join(basePath, backupRootDirName, snapshotName), uid, gid); err != nil {
+			log.Printf("error: os.Chown failed to set uid/gid (%d/%d) on %s", uid, gid, filepath.Join(basePath, backupRootDirName, snapshotName))
+		}
+		if err := os.Chown(filepath.Join(basePath, backupRootDirName, snapshotName, relPath), uid, gid); err != nil {
+			log.Printf("error: os.Chown failed to set uid/gid (%d/%d) on %s", uid, gid, filepath.Join(basePath, backupRootDirName, snapshotName, relPath))
+		}
+	}
+
 	return nil
 }
 
@@ -169,7 +190,7 @@ func isNonceOneMoreThanPrev(nonce []byte, prevNonce []byte) bool {
 	return z.Cmp(y) == 0
 }
 
-func RestoreDirEntryFromChunks(ctx context.Context, key []byte, restoreIntoDirPath string, objNames []string, rootDirName string, snapshotName string, relPath string, objst *objstore.ObjStore, bucket string, printOnSuccess bool) error {
+func RestoreDirEntryFromChunks(ctx context.Context, key []byte, restoreIntoDirPath string, objNames []string, rootDirName string, snapshotName string, relPath string, objst *objstore.ObjStore, bucket string, printOnSuccess bool, uid int, gid int) error {
 	// Strip any trailing slashes on destination path
 	restoreIntoDirPath = util.StripTrailingSlashes(restoreIntoDirPath)
 
@@ -195,7 +216,7 @@ func RestoreDirEntryFromChunks(ctx context.Context, key []byte, restoreIntoDirPa
 
 	// create the directory containing this file in case it does not exist yet
 	dir, filename := filepath.Split(relPath)
-	err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, dir, 0755) // TODO: fix hardcoded mode
+	err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, dir, 0755, uid, gid) // TODO: fix hardcoded mode
 	if err != nil {
 		log.Printf("error: could not create dir '%s': %v\n",
 			filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, dir), err)
@@ -211,6 +232,11 @@ func RestoreDirEntryFromChunks(ctx context.Context, key []byte, restoreIntoDirPa
 		return err
 	}
 	defer file.Close()
+
+	if err := os.Chown(filenameAbsPath, uid, gid); err != nil {
+		log.Printf("error: could not chown file '%s' to '%d/%d': %v", filenameAbsPath, uid, gid, err)
+		return err
+	}
 
 	_, err = file.Write(fileContents)
 	if err != nil {

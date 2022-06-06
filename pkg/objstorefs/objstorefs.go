@@ -155,7 +155,11 @@ func decryptNamesTriplet(key []byte, encBackupName string, encSnapshotName strin
 //  - One object key in the slice is the case where the entire file fits in a single chunk.
 //  - Multiple object keys are of the form xxxxxxxxxxxx.000, xxxxxxxxxxxx.001, xxxxxxxxxxxx.002, etc.
 // and need to be concatenated after decryption.
-func ReconstructSnapshotFileList(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, backupName string, snapshotName string, partialRestorePath string) (map[string][]string, error) {
+//
+// partialRestorePath is to restore a single prefix (like docs/October). Pass "" to ignore it.
+// preselectedRelPaths is when you have an exact list of the rel paths you want to restore. Pass nil to ignore it.
+// It is recommended to use one or the other but not both at the same time.
+func ReconstructSnapshotFileList(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, backupName string, snapshotName string, partialRestorePath string, preselectedRelPaths map[string]int) (map[string][]string, error) {
 	m := make(map[string][]string)
 
 	groupedObjects, err := GetGroupedSnapshots(ctx, objst, key, bucket)
@@ -197,6 +201,14 @@ func ReconstructSnapshotFileList(ctx context.Context, objst *objstore.ObjStore, 
 			// For a partial restore, check for prefix on each rel path and skip if no match.
 			if partialRestorePath != "" {
 				if !strings.HasPrefix(relPath, partialRestorePath) {
+					continue
+				}
+			}
+
+			// For a restore of specific rel paths from a list, skip if the list is non-empty and rel path
+			// isn't in it.
+			if preselectedRelPaths != nil {
+				if _, ok := preselectedRelPaths[relPath]; !ok {
 					continue
 				}
 			}
