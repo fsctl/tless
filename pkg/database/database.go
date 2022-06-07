@@ -289,3 +289,21 @@ func (db *DB) DeleteDirEntByPath(rootDirName string, relPath string) error {
 	}
 	return nil
 }
+
+// Resets the last backup time for every rel path in a particular backup to zero, thus ensuring
+// that a full backup will be done the next time a backup command runs.
+func (db *DB) ResetLastBackedUpTimeForEntireBackup(rootDirName string) error {
+	stmt, err := db.dbConn.Prepare("UPDATE dirents SET last_backup=0 WHERE rootdir = ?")
+	if err != nil {
+		log.Printf("Error: ResetLastBackedUpTimeForEntireBackup: %v", err)
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(rootDirName)
+	if err != nil {
+		log.Printf("Error: ResetLastBackedUpTimeForEntireBackup: %v", err)
+		return err
+	}
+	return nil
+}

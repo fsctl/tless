@@ -89,6 +89,58 @@ func TestGetDirEntRelPath(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestResetLastBackedUpTimeForEntireBackup(t *testing.T) {
+	db, err := NewDB("./test-state.db")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	assert.NoError(t, db.DropAllTables())
+
+	assert.NoError(t, db.CreateTablesIfNotExist())
+
+	dirEntStmt, err := NewInsertDirEntStmt(db)
+	assert.NoError(t, err)
+	err = dirEntStmt.InsertDirEnt("backup1", "dir/file1", time.Now().Unix()) // id = 1
+	assert.NoError(t, err)
+	err = dirEntStmt.InsertDirEnt("backup2", "dir/file2", time.Now().Unix()) // id = 2
+	assert.NoError(t, err)
+	err = dirEntStmt.InsertDirEnt("backup2", "dir/file3", time.Now().Unix()) // id = 3
+	assert.NoError(t, err)
+	dirEntStmt.Close()
+
+	// Verify initial state of the table
+	_, rootDirName, _, lastBackupUnix, err := db.getDirEntById(1)
+	assert.NoError(t, err)
+	assert.Equal(t, "backup1", rootDirName)
+	assert.NotEqual(t, int64(0), lastBackupUnix)
+	_, rootDirName, _, lastBackupUnix, err = db.getDirEntById(2)
+	assert.NoError(t, err)
+	assert.Equal(t, "backup2", rootDirName)
+	assert.NotEqual(t, int64(0), lastBackupUnix)
+	_, rootDirName, _, lastBackupUnix, err = db.getDirEntById(3)
+	assert.NoError(t, err)
+	assert.Equal(t, "backup2", rootDirName)
+	assert.NotEqual(t, int64(0), lastBackupUnix)
+
+	// Try to reset backup2 to zero mtime
+	err = db.ResetLastBackedUpTimeForEntireBackup("backup2")
+	assert.NoError(t, err)
+
+	// Verify that (only) the backup2 entries are now zero
+	_, rootDirName, _, lastBackupUnix, err = db.getDirEntById(1)
+	assert.NoError(t, err)
+	assert.Equal(t, "backup1", rootDirName)
+	assert.NotEqual(t, int64(0), lastBackupUnix)
+	_, rootDirName, _, lastBackupUnix, err = db.getDirEntById(2)
+	assert.NoError(t, err)
+	assert.Equal(t, "backup2", rootDirName)
+	assert.Equal(t, int64(0), lastBackupUnix)
+	_, rootDirName, _, lastBackupUnix, err = db.getDirEntById(3)
+	assert.NoError(t, err)
+	assert.Equal(t, "backup2", rootDirName)
+	assert.Equal(t, int64(0), lastBackupUnix)
+}
+
 func TestBackupJournalFunctions(t *testing.T) {
 	db, err := NewDB("./test-state.db")
 	assert.NoError(t, err)
