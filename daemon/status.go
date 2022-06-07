@@ -16,6 +16,7 @@ const (
 	CheckingConn
 	BackingUp
 	Restoring
+	CleaningUp
 )
 
 type Status struct {
@@ -69,6 +70,11 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 	} else if gStatus.state == Restoring {
 		return &pb.DaemonStatusResponse{
 			Status:     pb.DaemonStatusResponse_RESTORING,
+			Msg:        gStatus.msg,
+			Percentage: gStatus.percentage}, nil
+	} else if gStatus.state == CleaningUp {
+		return &pb.DaemonStatusResponse{
+			Status:     pb.DaemonStatusResponse_CLEANING_UP,
 			Msg:        gStatus.msg,
 			Percentage: gStatus.percentage}, nil
 	} else {

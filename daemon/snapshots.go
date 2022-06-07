@@ -171,6 +171,37 @@ func (s *server) DeleteSnapshot(ctx context.Context, in *pb.DeleteSnapshotReques
 	log.Printf(">> GOT COMMAND: DeleteSnapshot (%s)", in.SnapshotRawName)
 	defer log.Println(">> COMPLETED COMMAND: DeleteSnapshot")
 
+	gGlobalsLock.Lock()
+	isBusy := (gStatus.state != Idle)
+	gGlobalsLock.Unlock()
+	if isBusy {
+		msg := fmt.Sprintf("Cannot delete snapshot '%s' right now because a backup or other operation is running", in.SnapshotRawName)
+		log.Println(msg)
+		return &pb.DeleteSnapshotResponse{
+			DidSucceed: false,
+			ErrMsg:     msg,
+		}, nil
+	}
+
+	// Set the status for duration of this deletion
+	gGlobalsLock.Lock()
+	gStatus.state = CleaningUp
+	gStatus.msg = "Deleting snapshot"
+	gStatus.percentage = -1.0
+	gGlobalsLock.Unlock()
+
+	// When we exit this routine, we'll revert to Idle status
+	resetStatus := func() {
+		lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
+		gGlobalsLock.Lock()
+		gStatus.state = Idle
+		gStatus.percentage = -1.0
+		gStatus.msg = "Last backup: " + lastBackupTimeFormatted
+		gGlobalsLock.Unlock()
+	}
+	defer resetStatus()
+
+	// Now do the actual snapshot deletion
 	ctxBkg := context.Background()
 	gGlobalsLock.Lock()
 	endpoint := gCfg.Endpoint

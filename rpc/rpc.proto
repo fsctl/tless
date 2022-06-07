@@ -52,6 +52,7 @@ message DaemonStatusResponse {
     BACKING_UP = 2;
     RESTORING = 3;
     NEED_HELLO = 4;
+    CLEANING_UP = 5;
   }
   State status = 1;
   string msg = 2;
