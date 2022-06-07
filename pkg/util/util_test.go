@@ -64,3 +64,11 @@ func TestMakeLogSafe(t *testing.T) {
 	s = "abc"
 	assert.Equal(t, "***", MakeLogSafe(s))
 }
+
+func TestGetUnixTimeFromSnapshotName(t *testing.T) {
+	snapshotName := "1970-01-01_00:00:07"
+
+	unixTimestamp := GetUnixTimeFromSnapshotName(snapshotName)
+
+	assert.Equal(t, int64(7), unixTimestamp)
+}

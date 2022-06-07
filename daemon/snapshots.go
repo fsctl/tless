@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"time"
 
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/objstorefs"
 	"github.com/fsctl/tless/pkg/snapshots"
+	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
 )
 
@@ -115,7 +115,7 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 			// Update the snapshot name for next partial send
 			ret.PartialSnapshot.SnapshotName = snapshotName
 			ret.PartialSnapshot.SnapshotRawName = groupName + "/" + snapshotName
-			ret.PartialSnapshot.SnapshotTimestamp = getUnixTimeFromSnapshotName(snapshotName)
+			ret.PartialSnapshot.SnapshotTimestamp = util.GetUnixTimeFromSnapshotName(snapshotName)
 
 			relPathKeys := make([]string, 0, len(groupedObjects[groupName].Snapshots[snapshotName].RelPaths))
 			for relPath := range groupedObjects[groupName].Snapshots[snapshotName].RelPaths {
@@ -156,14 +156,6 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 	}
 
 	return nil
-}
-
-func getUnixTimeFromSnapshotName(snapshotName string) int64 {
-	tm, err := time.Parse("2006-01-02_15:04:05", snapshotName)
-	if err != nil {
-		log.Fatalln("error: getUnixTimeFromSnapshotName: ", err)
-	}
-	return tm.Unix()
 }
 
 // Callback for rpc.DaemonCtlServer.ReadAllSnapshots requests

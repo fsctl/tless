@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/sethvargo/go-diceware/diceware"
 )
@@ -241,4 +242,12 @@ func GetUidGid(username string) (uid int, gid int, err error) {
 		return 0, 0, fmt.Errorf("error: could not convert gid string '%s' to int: %v", u.Gid, err)
 	}
 	return uid, gid, nil
+}
+
+func GetUnixTimeFromSnapshotName(snapshotName string) int64 {
+	tm, err := time.Parse("2006-01-02_15:04:05", snapshotName)
+	if err != nil {
+		log.Fatalln("error: getUnixTimeFromSnapshotName: ", err)
+	}
+	return tm.Unix()
 }

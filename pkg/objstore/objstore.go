@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strings"
 	"time"
 
+	"github.com/fsctl/tless/pkg/util"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -141,6 +143,52 @@ func (os *ObjStore) GetObjList(ctx context.Context, bucket string, prefix string
 	}
 
 	return mAllObjects, nil
+}
+
+// Gets only the first two levels of the full object list, i.e., all backup_name/snapshot_name
+// but none of the objects within a snapshot
+func (os *ObjStore) GetObjListTopTwoLevels(ctx context.Context, bucket string, excludeTopLevelWithPrefixes []string) (map[string][]string, error) {
+	mObjects := make(map[string][]string, 0)
+
+	// Get the top level
+	opts := minio.ListObjectsOptions{
+		Recursive: false,
+		Prefix:    "",
+	}
+	for object := range os.minioClient.ListObjects(ctx, bucket, opts) {
+		if object.Err != nil {
+			log.Printf("warning: GetObjListTopTwoLevels: %v", object.Err)
+			return nil, object.Err
+		}
+
+		skip := false
+		for _, exclPrefix := range excludeTopLevelWithPrefixes {
+			if strings.HasPrefix(object.Key, exclPrefix) {
+				skip = true
+			}
+		}
+		if !skip {
+			mObjects[util.StripTrailingSlashes(object.Key)] = make([]string, 0)
+		}
+	}
+
+	// Loop over all top level objects and get everything at the next level
+	for topLevelName := range mObjects {
+		subOpts := minio.ListObjectsOptions{
+			Recursive: false,
+			Prefix:    topLevelName + "/",
+		}
+		for subObject := range os.minioClient.ListObjects(ctx, bucket, subOpts) {
+			if subObject.Err != nil {
+				log.Printf("warning: GetObjListTopTwoLevels: %v", subObject.Err)
+				return nil, subObject.Err
+			}
+			subObjKey := strings.TrimPrefix(subObject.Key, topLevelName+"/")
+			mObjects[topLevelName] = append(mObjects[topLevelName], util.StripTrailingSlashes(subObjKey))
+		}
+	}
+
+	return mObjects, nil
 }
 
 func (os *ObjStore) DeleteObj(ctx context.Context, bucket string, objectName string) error {

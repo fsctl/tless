@@ -1,15 +1,7 @@
 package daemon
 
 import (
-	"testing"
+	_ "testing"
 
-	"github.com/stretchr/testify/assert"
+	_ "github.com/stretchr/testify/assert"
 )
-
-func TestGetUnixTimeFromSnapshotName(t *testing.T) {
-	snapshotName := "1970-01-01_00:00:07"
-
-	unixTimestamp := getUnixTimeFromSnapshotName(snapshotName)
-
-	assert.Equal(t, int64(7), unixTimestamp)
-}
