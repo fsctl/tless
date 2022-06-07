@@ -118,7 +118,11 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 			ret.PartialSnapshot.SnapshotTimestamp = util.GetUnixTimeFromSnapshotName(snapshotName)
 
 			relPathKeys := make([]string, 0, len(groupedObjects[groupName].Snapshots[snapshotName].RelPaths))
-			for relPath := range groupedObjects[groupName].Snapshots[snapshotName].RelPaths {
+			mFilelist, err := objstorefs.ReconstructSnapshotFileList(ctxBkg, objst, bucket, key, groupName, snapshotName, "", nil, groupedObjects)
+			if err != nil {
+				log.Println("error: ReadAllSnapshots: objstorefs.ReconstructSnapshotFileList: ", err)
+			}
+			for relPath := range mFilelist {
 				relPathKeys = append(relPathKeys, relPath)
 			}
 			sort.Strings(relPathKeys)

@@ -159,12 +159,19 @@ func decryptNamesTriplet(key []byte, encBackupName string, encSnapshotName strin
 // partialRestorePath is to restore a single prefix (like docs/October). Pass "" to ignore it.
 // preselectedRelPaths is when you have an exact list of the rel paths you want to restore. Pass nil to ignore it.
 // It is recommended to use one or the other but not both at the same time.
-func ReconstructSnapshotFileList(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, backupName string, snapshotName string, partialRestorePath string, preselectedRelPaths map[string]int) (map[string][]string, error) {
+//
+// groupedObjects argument can be nil and it will be computed for you.  However, because compueting
+// it is slow, if caller already has a copy cached, then you can pass it in and your cached copy will
+// be used (read-only).
+func ReconstructSnapshotFileList(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, backupName string, snapshotName string, partialRestorePath string, preselectedRelPaths map[string]int, groupedObjects map[string]BackupDir) (map[string][]string, error) {
 	m := make(map[string][]string)
+	var err error
 
-	groupedObjects, err := GetGroupedSnapshots(ctx, objst, key, bucket)
-	if err != nil {
-		log.Fatalf("Could not get grouped snapshots: %v", err)
+	if groupedObjects == nil {
+		groupedObjects, err = GetGroupedSnapshots(ctx, objst, key, bucket)
+		if err != nil {
+			log.Fatalf("Could not get grouped snapshots: %v", err)
+		}
 	}
 
 	// Get the BackupDir struct for this backup name group

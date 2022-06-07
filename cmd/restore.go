@@ -74,7 +74,7 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 	progressBarContainer := mpb.New()
 
 	// get all the relpaths for this snapshot
-	mRelPathsObjsMap, err := objstorefs.ReconstructSnapshotFileList(ctx, objst, cfgBucket, encKey, backupName, snapshotName, cfgPartialRestore, nil)
+	mRelPathsObjsMap, err := objstorefs.ReconstructSnapshotFileList(ctx, objst, cfgBucket, encKey, backupName, snapshotName, cfgPartialRestore, nil, nil)
 	if err != nil {
 		log.Fatalln("error: reconstructSnapshotFileList failed: ", err)
 	}
