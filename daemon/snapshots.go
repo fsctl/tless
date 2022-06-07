@@ -13,8 +13,12 @@ import (
 	pb "github.com/fsctl/tless/rpc"
 )
 
+const (
+	SendPartialResponseEveryNRelPaths int = 5_000
+)
+
 // Callback for rpc.DaemonCtlServer.ReadAllSnapshots requests
-func (s *server) ReadAllSnapshots(ctx context.Context, in *pb.ReadAllSnapshotsRequest) (*pb.ReadAllSnapshotsResponse, error) {
+func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonCtl_ReadAllSnapshotsServer) error {
 	log.Println(">> GOT COMMAND: ReadAllSnapshots")
 	defer log.Println(">> COMPLETED COMMAND: ReadAllSnapshots")
 
@@ -24,11 +28,15 @@ func (s *server) ReadAllSnapshots(ctx context.Context, in *pb.ReadAllSnapshotsRe
 	gGlobalsLock.Unlock()
 	if !isGlobalConfigReady {
 		log.Printf("ReadAllSnapshots: global config not yet initialized")
-		return &pb.ReadAllSnapshotsResponse{
-			DidSucceed: false,
-			ErrMsg:     "global config not yet initialized",
-			Backups:    nil,
-		}, nil
+		resp := pb.ReadAllSnapshotsResponse{
+			DidSucceed:      false,
+			ErrMsg:          "global config not yet initialized",
+			PartialSnapshot: nil,
+		}
+		if err := srv.Send(&resp); err != nil {
+			log.Println("error: server.Send failed: ", err)
+		}
+		return nil
 	}
 
 	ctxBkg := context.Background()
@@ -41,29 +49,47 @@ func (s *server) ReadAllSnapshots(ctx context.Context, in *pb.ReadAllSnapshotsRe
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey)
 
-	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctx, objst, key, bucket)
+	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctxBkg, objst, key, bucket)
 	if err != nil {
 		log.Printf("Could not get grouped snapshots: %v", err)
-		return &pb.ReadAllSnapshotsResponse{
-			DidSucceed: false,
-			ErrMsg:     err.Error(),
-			Backups:    nil,
-		}, nil
+		resp := pb.ReadAllSnapshotsResponse{
+			DidSucceed:      false,
+			ErrMsg:          err.Error(),
+			PartialSnapshot: nil,
+		}
+		if err := srv.Send(&resp); err != nil {
+			log.Println("error: server.Send failed: ", err)
+		}
+		return nil
 	}
 
 	if len(groupedObjects) == 0 {
 		err = fmt.Errorf("no objects found in cloud")
 		log.Println(err)
-		return &pb.ReadAllSnapshotsResponse{
-			DidSucceed: true,
-			ErrMsg:     "",
-			Backups:    nil,
-		}, nil
+		resp := pb.ReadAllSnapshotsResponse{
+			DidSucceed:      false,
+			ErrMsg:          "no objects found in cloud",
+			PartialSnapshot: nil,
+		}
+		if err := srv.Send(&resp); err != nil {
+			log.Println("error: server.Send failed: ", err)
+		}
+		return nil
 	}
 
+	// Set up a blank partial response object
 	ret := pb.ReadAllSnapshotsResponse{
-		Backups: make([]*pb.Snapshot, 0),
+		DidSucceed: true,
+		ErrMsg:     "",
+		PartialSnapshot: &pb.PartialSnapshot{
+			BackupName:        "",
+			SnapshotName:      "",
+			SnapshotTimestamp: -1,
+			SnapshotRawName:   "",
+			RawRelPaths:       make([]string, 0),
+		},
 	}
+	relPathsSinceLastSend := 0
 
 	groupNameKeys := make([]string, 0, len(groupedObjects))
 	for groupName := range groupedObjects {
@@ -74,6 +100,9 @@ func (s *server) ReadAllSnapshots(ctx context.Context, in *pb.ReadAllSnapshotsRe
 	for _, groupName := range groupNameKeys {
 		fmt.Printf("Processing objects>> backup '%s':\n", groupName)
 
+		// Update the backup name for next partial return
+		ret.PartialSnapshot.BackupName = groupName
+
 		snapshotKeys := make([]string, 0, len(groupedObjects[groupName].Snapshots))
 		for snapshotName := range groupedObjects[groupName].Snapshots {
 			snapshotKeys = append(snapshotKeys, snapshotName)
@@ -83,13 +112,17 @@ func (s *server) ReadAllSnapshots(ctx context.Context, in *pb.ReadAllSnapshotsRe
 		for _, snapshotName := range snapshotKeys {
 			fmt.Printf("Processing objects>>  %s\n", snapshotName)
 
+			// Update the snapshot name for next partial send
+			ret.PartialSnapshot.SnapshotName = snapshotName
+			ret.PartialSnapshot.SnapshotRawName = groupName + "/" + snapshotName
+			ret.PartialSnapshot.SnapshotTimestamp = getUnixTimeFromSnapshotName(snapshotName)
+
 			relPathKeys := make([]string, 0, len(groupedObjects[groupName].Snapshots[snapshotName].RelPaths))
 			for relPath := range groupedObjects[groupName].Snapshots[snapshotName].RelPaths {
 				relPathKeys = append(relPathKeys, relPath)
 			}
 			sort.Strings(relPathKeys)
 
-			rawRelPaths := make([]string, 0)
 			for _, relPath := range relPathKeys {
 				val := groupedObjects[groupName].Snapshots[snapshotName].RelPaths[relPath]
 				deletedMsg := ""
@@ -99,24 +132,30 @@ func (s *server) ReadAllSnapshots(ctx context.Context, in *pb.ReadAllSnapshotsRe
 				fmt.Printf("Processing objects>>    %s%s\n", relPath, deletedMsg)
 
 				if !val.IsDeleted {
-					rawRelPaths = append(rawRelPaths, relPath)
+					ret.PartialSnapshot.RawRelPaths = append(ret.PartialSnapshot.RawRelPaths, relPath)
+					relPathsSinceLastSend += 1
+
+					// time for partial send?
+					if relPathsSinceLastSend >= SendPartialResponseEveryNRelPaths {
+						if err := srv.Send(&ret); err != nil {
+							log.Println("error: server.Send failed: ", err)
+						}
+						ret.PartialSnapshot.RawRelPaths = make([]string, 0)
+						relPathsSinceLastSend = 0
+					}
 				}
 			}
 
-			pbSnapshot := pb.Snapshot{
-				BackupName:        groupName,
-				SnapshotName:      snapshotName,
-				SnapshotTimestamp: getUnixTimeFromSnapshotName(snapshotName),
-				SnapshotRawName:   groupName + "/" + snapshotName,
-				RawRelPaths:       rawRelPaths,
+			// send last partial for this snapshot
+			if err := srv.Send(&ret); err != nil {
+				log.Println("error: server.Send failed: ", err)
 			}
-			ret.Backups = append(ret.Backups, &pbSnapshot)
+			ret.PartialSnapshot.RawRelPaths = make([]string, 0)
+			relPathsSinceLastSend = 0
 		}
 	}
 
-	ret.DidSucceed = true
-	ret.ErrMsg = ""
-	return &ret, nil
+	return nil
 }
 
 func getUnixTimeFromSnapshotName(snapshotName string) int64 {

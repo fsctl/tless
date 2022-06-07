@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"math"
 	"net"
 	"os"
 	"os/signal"
@@ -156,7 +157,7 @@ func DaemonMain() {
 		if err != nil {
 			log.Fatalf("failed to chmod the socket: %v", err)
 		}
-		s := grpc.NewServer()
+		s := grpc.NewServer(grpc.MaxSendMsgSize(math.MaxInt32 * 1024))
 
 		// spawn a go routine to listen on socket
 		go func() {

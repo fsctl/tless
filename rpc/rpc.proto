@@ -24,7 +24,7 @@ service DaemonCtl {
   rpc Backup (BackupRequest) returns (BackupResponse) {}
 
   // Commands for retrieving and pruning snapshots
-  rpc ReadAllSnapshots (ReadAllSnapshotsRequest) returns (ReadAllSnapshotsResponse) {}
+  rpc ReadAllSnapshots (ReadAllSnapshotsRequest) returns (stream ReadAllSnapshotsResponse) {}
   rpc DeleteSnapshot (DeleteSnapshotRequest) returns (DeleteSnapshotResponse) {}
 
   // Restore command
@@ -115,18 +115,18 @@ message BackupResponse {
 
 message ReadAllSnapshotsRequest { }
 
-message Snapshot {
+message PartialSnapshot {
   string BackupName = 1;
   string SnapshotName = 2;
   int64 SnapshotTimestamp = 3;
   string SnapshotRawName = 4;
-  repeated string rawRelPaths = 5;
+  repeated string RawRelPaths = 5;
 }
 
 message ReadAllSnapshotsResponse {
   bool DidSucceed = 1;
   string ErrMsg = 2;
-  repeated Snapshot Backups = 3;
+  PartialSnapshot PartialSnapshot = 3;
 }
 
 message DeleteSnapshotRequest {

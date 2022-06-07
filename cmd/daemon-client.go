@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"log"
 	"os/user"
 	"time"
@@ -49,7 +51,7 @@ func daemonClientMain() {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
-	c := pb.NewDaemonCtlClient(conn)
+	client := pb.NewDaemonCtlClient(conn)
 
 	// Get information on user running this process
 	user, err := user.Current()
@@ -60,7 +62,7 @@ func daemonClientMain() {
 	// Contact the server and print out its response.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	resp, err := c.Hello(ctx, &pb.HelloRequest{
+	resp, err := client.Hello(ctx, &pb.HelloRequest{
 		Username:    user.Username,
 		UserHomeDir: user.HomeDir})
 	if err != nil {
@@ -70,7 +72,7 @@ func daemonClientMain() {
 
 	go func() {
 		for {
-			resp, err := c.Status(ctx, &pb.DaemonStatusRequest{})
+			resp, err := client.Status(ctx, &pb.DaemonStatusRequest{})
 			if err != nil {
 				log.Fatalf("error: could not get daemon status: %v", err)
 			}
@@ -83,7 +85,7 @@ func daemonClientMain() {
 		}
 	}()
 
-	checkConnResp, err := c.CheckConn(ctx, &pb.CheckConnRequest{
+	checkConnResp, err := client.CheckConn(ctx, &pb.CheckConnRequest{
 		Endpoint:   cfgEndpoint,
 		AccessKey:  cfgAccessKeyId,
 		SecretKey:  cfgSecretAccessKey,
@@ -98,6 +100,24 @@ func daemonClientMain() {
 		log.Printf("Connection check FAILED (with error '%s')\n", checkConnResp.ErrorMsg)
 	}
 
-	// Wait 2 seconds then exit program
+	// Wait 2 seconds (idle check is still running)
 	time.Sleep(time.Second * 2)
+
+	// Now try a streaming RPC
+	stream, err := client.ReadAllSnapshots(ctx, &pb.ReadAllSnapshotsRequest{})
+	if err != nil {
+		log.Fatalf("error: cannot open stream %v", err)
+	}
+	allRelPaths := make([]string, 0)
+	for {
+		partialResp, err := stream.Recv()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			log.Fatalf("error: stream.Recv() failed: %v", err)
+		}
+		log.Printf("Partial response rcvd: for %s with %d rel paths\n", partialResp.PartialSnapshot.SnapshotRawName, len(partialResp.PartialSnapshot.RawRelPaths))
+		allRelPaths = append(allRelPaths, partialResp.PartialSnapshot.RawRelPaths...)
+	}
+	fmt.Printf("Got streaming response with %d total rel paths\n", len(allRelPaths))
 }
