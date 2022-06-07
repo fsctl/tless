@@ -169,8 +169,8 @@ func DaemonMain() {
 			}
 		}()
 
-		// TODO:  go routine that wakes up periodically and checks if its time for a backup
-		//....
+		// go routine that wakes up periodically and checks if its time for a backup
+		go timerLoop(signals, &server{})
 
 		// Go into a blocking wait for the requested signal notifications
 		<-signals
