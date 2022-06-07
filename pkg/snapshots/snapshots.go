@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 
 	"github.com/fsctl/tless/pkg/cryptography"
@@ -71,4 +72,20 @@ func SplitSnapshotName(snapshotName string) (backupDirName string, snapshotTime 
 	backupDirName = snapshotNameParts[0]
 	snapshotTime = snapshotNameParts[1]
 	return backupDirName, snapshotTime, nil
+}
+
+// Returns true if the specified backupName+snapshotName is the most recent snapshot existing for backup backupName
+func IsMostRecentSnapshotForBackup(ctx context.Context, objst *objstore.ObjStore, bucket string, groupedObjects map[string]objstorefs.BackupDir, backupDirName string, snapshotTimestamp string) bool {
+	backupDirSnapshotsOnly := groupedObjects[backupDirName].Snapshots
+
+	// Get an ordered list of all snapshots from earliest to most recent
+	snapshotKeys := make([]string, 0, len(backupDirSnapshotsOnly))
+	for k := range backupDirSnapshotsOnly {
+		snapshotKeys = append(snapshotKeys, k)
+	}
+	sort.Strings(snapshotKeys)
+
+	mostRecentSnapshotName := snapshotKeys[len(snapshotKeys)-1]
+
+	return snapshotTimestamp == mostRecentSnapshotName
 }

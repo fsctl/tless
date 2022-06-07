@@ -199,16 +199,31 @@ func (s *server) DeleteSnapshot(ctx context.Context, in *pb.DeleteSnapshotReques
 		}, nil
 	}
 
+	// If we're about to delete the most recent snapshot, make sure next backup of this backup dir is a FULL backup
+	isMostRecent := snapshots.IsMostRecentSnapshotForBackup(ctx, objst, bucket, groupedObjects, backupDirName, snapshotTimestamp)
+	if isMostRecent {
+		gGlobalsLock.Lock()
+		err = gDb.ResetLastBackedUpTimeForEntireBackup(backupDirName)
+		gGlobalsLock.Unlock()
+		if err != nil {
+			log.Printf("Could not reset last backup times on backup '%s': %v", backupDirName, err)
+			return &pb.DeleteSnapshotResponse{
+				DidSucceed: false,
+				ErrMsg:     "could not reset last backup times. You should manually perform a full backup.",
+			}, nil
+		}
+	}
+
 	err = snapshots.DeleteSnapshot(ctx, key, groupedObjects, backupDirName, snapshotTimestamp, objst, bucket)
 	if err != nil {
 		return &pb.DeleteSnapshotResponse{
 			DidSucceed: false,
 			ErrMsg:     err.Error(),
 		}, nil
-	} else {
-		return &pb.DeleteSnapshotResponse{
-			DidSucceed: true,
-			ErrMsg:     "",
-		}, nil
 	}
+
+	return &pb.DeleteSnapshotResponse{
+		DidSucceed: true,
+		ErrMsg:     "",
+	}, nil
 }
