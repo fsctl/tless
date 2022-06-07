@@ -15,6 +15,8 @@ import (
 	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/fstraverse"
 	"github.com/fsctl/tless/pkg/objstore"
+	"github.com/fsctl/tless/pkg/objstorefs"
+	"github.com/fsctl/tless/pkg/snapshots"
 	pb "github.com/fsctl/tless/rpc"
 )
 
@@ -165,7 +167,10 @@ func Backup(completion func()) {
 			goto done
 		}
 
-		playBackupJournal(ctx, encKey, gDb, &gGlobalsLock, backupDirPath, snapshotName, objst, bucket)
+		breakFromLoop := playBackupJournal(ctx, encKey, gDb, &gGlobalsLock, backupDirPath, snapshotName, objst, bucket)
+		if breakFromLoop {
+			break
+		}
 
 		// Bring percentage up to 100% for 2 seconds for aesthetics
 		gGlobalsLock.Lock()
@@ -243,7 +248,7 @@ func replayBackupJournal() {
 	gGlobalsLock.Unlock()
 
 	// Roll the journal forward
-	playBackupJournal(ctx, encKey, gDb, &gGlobalsLock, backupDirPath, snapshotName, objst, bucket)
+	_ = playBackupJournal(ctx, encKey, gDb, &gGlobalsLock, backupDirPath, snapshotName, objst, bucket)
 
 	// Finally set the status back to Idle since we are done with backup
 	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
@@ -254,10 +259,25 @@ func replayBackupJournal() {
 	gGlobalsLock.Unlock()
 }
 
-func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string) {
+func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string) (breakFromLoop bool) {
+	// By default, don't signal we want to break out of caller's loop over backups
+	breakFromLoop = false
+
 	for {
 		// Sleep this go routine briefly on every iteration of the for loop
 		time.Sleep(time.Millisecond * 50)
+
+		// Has cancelation been requested?
+		globalsLock.Lock()
+		isCancelRequested := gCancelRequested
+		globalsLock.Unlock()
+		if isCancelRequested {
+			cancelBackup(ctx, key, db, globalsLock, backupDirPath, snapshotName, objst, bucket)
+			globalsLock.Lock()
+			gCancelRequested = false
+			globalsLock.Unlock()
+			return true
+		}
 
 		globalsLock.Lock()
 		bjt, err := db.ClaimNextBackupJournalTask()
@@ -319,6 +339,50 @@ func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 	}
 }
 
+func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string) {
+	log.Printf("CANCEL: Starting unwind")
+
+	// Update status to cleaning up, no percentage
+	globalsLock.Lock()
+	gStatus.state = CleaningUp
+	gStatus.msg = "Canceling..."
+	gStatus.percentage = 0.0
+	globalsLock.Unlock()
+
+	// Delete the snapshot we've been creating
+	log.Printf("CANCEL: Deleting partially created snapshot")
+	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctx, objst, key, bucket)
+	if err != nil {
+		log.Printf("Could not get grouped snapshots for cancelation: %v", err)
+	}
+	err = snapshots.DeleteSnapshot(ctx, key, groupedObjects, filepath.Base(backupDirPath), snapshotName, objst, bucket)
+	if err != nil {
+		log.Printf("Could not delete partially created snapshot: %v", err)
+	}
+
+	// Get all completed items in journal and set their dirents.last_backup time to 0
+	log.Printf("CANCEL: Resetting last_backup times to zero for processed dirents")
+	globalsLock.Lock()
+	err = db.CancelationResetLastBackupTime()
+	globalsLock.Unlock()
+	if err != nil {
+		log.Println("error: cancelBackup: db.CancelationResetLastBackupTime failed")
+	}
+
+	// Delete all items in journal + delete backup_info row so this doesn't look like a completed backup
+	log.Printf("CANCEL: Clearing journal and deleting backup_info row")
+	globalsLock.Lock()
+	err = db.CancelationCleanupJournal()
+	globalsLock.Unlock()
+	if err != nil {
+		log.Println("error: cancelBackup: db.CancelationCleanupJournal failed")
+	}
+
+	log.Println(">> COMPLETED COMMAND: CancelBackup")
+
+	// (When we return, status will be set back to Idle)
+}
+
 func createDeletedPathsKeysAndPurgeFromDb(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, dbLock *sync.Mutex, key []byte, backupDirName string, snapshotName string, deletedPaths map[string]int) error {
 	// get the encrypted representation of backupDirName and snapshotName
 	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotName)
@@ -368,4 +432,18 @@ func createDeletedPathsKeysAndPurgeFromDb(ctx context.Context, objst *objstore.O
 	}
 
 	return nil
+}
+
+func (s *server) CancelBackup(ctx context.Context, in *pb.CancelRequest) (*pb.CancelResponse, error) {
+	log.Println(">> GOT COMMAND: CancelBackup")
+
+	gGlobalsLock.Lock()
+	gCancelRequested = true
+	gStatus.msg = "Canceling..."
+	gGlobalsLock.Unlock()
+
+	return &pb.CancelResponse{
+		IsStarting: true,
+		ErrMsg:     "",
+	}, nil
 }

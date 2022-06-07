@@ -333,3 +333,48 @@ func (db *DB) GetJournaledBackupInfo() (backupDirPath string, snapshotUnixTime i
 
 	return backupDirPath, snapshotUnixTime, nil
 }
+
+// Resets the dirents.last_backup time stamps to 0 for all InProgress and Finished items in journal
+func (db *DB) CancelationResetLastBackupTime() error {
+	stmt, err := db.dbConn.Prepare("UPDATE dirents SET last_backup=0 WHERE id in (SELECT dirent_id FROM backup_journal WHERE status = ? OR status = ?)")
+	if err != nil {
+		log.Printf("Error: CancelationResetLastBackupTime: %v", err)
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(InProgress, Finished)
+	if err != nil {
+		log.Printf("Error: CancelationResetLastBackupTime: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+// Wipes out the journal and removes the backup row from backup_info so it doesn't get
+// remembered as a successful backup
+func (db *DB) CancelationCleanupJournal() error {
+	// Delete backup_info row so this doesn't look like a completed backup
+	stmt, err := db.dbConn.Prepare("DELETE FROM backup_info WHERE id in (SELECT DISTINCT(backup_info_id) FROM backup_journal)")
+	if err != nil {
+		log.Printf("Error: CancelationResetLastBackupTime: %v", err)
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec()
+	if err != nil {
+		log.Printf("Error: CancelationResetLastBackupTime: %v", err)
+		return err
+	}
+
+	// Delete all items in journal
+	err = db.deleteAllRowsBackupJournal()
+	if err != nil {
+		log.Printf("Error: CancelationResetLastBackupTime: %v", err)
+		return err
+	}
+
+	return nil
+}

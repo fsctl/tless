@@ -22,6 +22,7 @@ service DaemonCtl {
 
   // Backup command
   rpc Backup (BackupRequest) returns (BackupResponse) {}
+  rpc CancelBackup (CancelRequest) returns (CancelResponse) {}
 
   // Commands for retrieving and pruning snapshots
   rpc ReadAllSnapshots (ReadAllSnapshotsRequest) returns (stream ReadAllSnapshotsResponse) {}
@@ -110,6 +111,13 @@ message WriteConfigResponse {
 message BackupRequest {}
 
 message BackupResponse {
+  bool IsStarting = 1;
+  string ErrMsg = 2;
+}
+
+message CancelRequest {}
+
+message CancelResponse {
   bool IsStarting = 1;
   string ErrMsg = 2;
 }

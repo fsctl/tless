@@ -34,6 +34,7 @@ type DaemonCtlClient interface {
 	WriteToDaemonConfig(ctx context.Context, in *WriteConfigRequest, opts ...grpc.CallOption) (*WriteConfigResponse, error)
 	// Backup command
 	Backup(ctx context.Context, in *BackupRequest, opts ...grpc.CallOption) (*BackupResponse, error)
+	CancelBackup(ctx context.Context, in *CancelRequest, opts ...grpc.CallOption) (*CancelResponse, error)
 	// Commands for retrieving and pruning snapshots
 	ReadAllSnapshots(ctx context.Context, in *ReadAllSnapshotsRequest, opts ...grpc.CallOption) (DaemonCtl_ReadAllSnapshotsClient, error)
 	DeleteSnapshot(ctx context.Context, in *DeleteSnapshotRequest, opts ...grpc.CallOption) (*DeleteSnapshotResponse, error)
@@ -97,6 +98,15 @@ func (c *daemonCtlClient) WriteToDaemonConfig(ctx context.Context, in *WriteConf
 func (c *daemonCtlClient) Backup(ctx context.Context, in *BackupRequest, opts ...grpc.CallOption) (*BackupResponse, error) {
 	out := new(BackupResponse)
 	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/Backup", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonCtlClient) CancelBackup(ctx context.Context, in *CancelRequest, opts ...grpc.CallOption) (*CancelResponse, error) {
+	out := new(CancelResponse)
+	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/CancelBackup", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -169,6 +179,7 @@ type DaemonCtlServer interface {
 	WriteToDaemonConfig(context.Context, *WriteConfigRequest) (*WriteConfigResponse, error)
 	// Backup command
 	Backup(context.Context, *BackupRequest) (*BackupResponse, error)
+	CancelBackup(context.Context, *CancelRequest) (*CancelResponse, error)
 	// Commands for retrieving and pruning snapshots
 	ReadAllSnapshots(*ReadAllSnapshotsRequest, DaemonCtl_ReadAllSnapshotsServer) error
 	DeleteSnapshot(context.Context, *DeleteSnapshotRequest) (*DeleteSnapshotResponse, error)
@@ -198,6 +209,9 @@ func (UnimplementedDaemonCtlServer) WriteToDaemonConfig(context.Context, *WriteC
 }
 func (UnimplementedDaemonCtlServer) Backup(context.Context, *BackupRequest) (*BackupResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Backup not implemented")
+}
+func (UnimplementedDaemonCtlServer) CancelBackup(context.Context, *CancelRequest) (*CancelResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelBackup not implemented")
 }
 func (UnimplementedDaemonCtlServer) ReadAllSnapshots(*ReadAllSnapshotsRequest, DaemonCtl_ReadAllSnapshotsServer) error {
 	return status.Errorf(codes.Unimplemented, "method ReadAllSnapshots not implemented")
@@ -329,6 +343,24 @@ func _DaemonCtl_Backup_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonCtl_CancelBackup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonCtlServer).CancelBackup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/rpc.DaemonCtl/CancelBackup",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonCtlServer).CancelBackup(ctx, req.(*CancelRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _DaemonCtl_ReadAllSnapshots_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(ReadAllSnapshotsRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -416,6 +448,10 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Backup",
 			Handler:    _DaemonCtl_Backup_Handler,
+		},
+		{
+			MethodName: "CancelBackup",
+			Handler:    _DaemonCtl_CancelBackup_Handler,
 		},
 		{
 			MethodName: "DeleteSnapshot",

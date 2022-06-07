@@ -18,7 +18,7 @@ func DeleteSnapshot(ctx context.Context, key []byte, groupedObjects map[string]o
 
 	deleteObjs, renameObjs, err := objstorefs.ComputeSnapshotDelete(backupDirSnapshotsOnly, snapshotTimestamp)
 	if err != nil {
-		return fmt.Errorf("error: DeleteSnapshot(): could not compute plan for deleting snapshot")
+		return fmt.Errorf("error: DeleteSnapshot(): could not compute plan for deleting snapshot: %v", err)
 	}
 
 	// get the encrypted representation of backupDirName and snapshotName

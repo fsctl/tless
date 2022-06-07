@@ -27,8 +27,9 @@ const (
 )
 
 var (
-	gGlobalsLock sync.Mutex
-	gDb          *database.DB
+	gGlobalsLock     sync.Mutex
+	gDb              *database.DB
+	gCancelRequested bool
 )
 
 // server is used to implement helloworld.GreeterServer.
