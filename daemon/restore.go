@@ -115,10 +115,17 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 	snapshotName := parts[1]
 
 	// get all the relpaths for this snapshot
-	selectedRelPathsMap := make(map[string]int, len(selectedRelPaths))
-	for _, rp := range selectedRelPaths {
-		selectedRelPathsMap[rp] = 1
+	var selectedRelPathsMap map[string]int
+	log.Printf("RESTORE: selectedRelPaths = %v\n", selectedRelPaths)
+	if len(selectedRelPaths) == 0 {
+		selectedRelPathsMap = nil
+	} else {
+		selectedRelPathsMap := make(map[string]int, len(selectedRelPaths))
+		for _, rp := range selectedRelPaths {
+			selectedRelPathsMap[rp] = 1
+		}
 	}
+	log.Printf("RESTORE: selectedRelPathsMap = %v\n", selectedRelPathsMap)
 	mRelPathsObjsMap, err := objstorefs.ReconstructSnapshotFileList(ctx, objst, bucket, encKey, backupName, snapshotName, "", selectedRelPathsMap)
 	if err != nil {
 		log.Println("error: reconstructSnapshotFileList failed: ", err)
@@ -127,6 +134,7 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 	}
 	totalItems := len(mRelPathsObjsMap)
 	doneItems := 0
+	log.Printf("RESTORE: have %d items to restore", totalItems)
 
 	// Get uid/gid for user at the console daemon is working on behalf of
 	gGlobalsLock.Lock()
