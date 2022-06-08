@@ -39,18 +39,18 @@ Example:
 		},
 	}
 
-	wipeServerCmd = &cobra.Command{
-		Use:   "wipe-server",
+	wipeCloudCmd = &cobra.Command{
+		Use:   "wipe-cloud",
 		Short: "Clears all objects in bucket",
 		Long: `Run this command to delete all the contents of the bucket.
 
 Example:
 
-	tless extras wipe-server
+	tless extras wipe-cloud
 `,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			wipeServerMain()
+			wipeCloudMain()
 		},
 	}
 
@@ -107,7 +107,7 @@ Example:
 
 func init() {
 	extrasCmd.AddCommand(checkConnCmd)
-	extrasCmd.AddCommand(wipeServerCmd)
+	extrasCmd.AddCommand(wipeCloudCmd)
 	extrasCmd.AddCommand(genTemplateCmd)
 	extrasCmd.AddCommand(decObjNameCmd)
 	rootCmd.AddCommand(extrasCmd)
@@ -122,7 +122,7 @@ func checkConnMain() {
 	}
 }
 
-func wipeServerMain() {
+func wipeCloudMain() {
 	objst := objstore.NewObjStore(context.Background(), cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
 	ctx := context.Background()
 
@@ -131,7 +131,7 @@ func wipeServerMain() {
 
 	allObjects, err := objst.GetObjList(ctx, cfgBucket, "")
 	if err != nil {
-		log.Printf("error: wipeServerMain: GetObjList failed: %v", err)
+		log.Printf("error: wipeCloudMain: GetObjList failed: %v", err)
 	}
 
 	// create the progress bar
@@ -157,7 +157,7 @@ func wipeServerMain() {
 	for objName := range allObjects {
 		err = objst.DeleteObj(ctx, cfgBucket, objName)
 		if err != nil {
-			log.Printf("error: wipeServerMain: objst.DeleteObj failed: %v", err)
+			log.Printf("error: wipeCloudMain: objst.DeleteObj failed: %v", err)
 		} else {
 			if cfgVerbose {
 				log.Printf("deleted %s\n", objName)
