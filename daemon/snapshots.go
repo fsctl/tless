@@ -19,6 +19,8 @@ const (
 
 // Callback for rpc.DaemonCtlServer.ReadAllSnapshots requests
 func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonCtl_ReadAllSnapshotsServer) error {
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg != nil && gCfg.VerboseDaemon })
+
 	log.Println(">> GOT COMMAND: ReadAllSnapshots")
 	defer log.Println(">> COMPLETED COMMAND: ReadAllSnapshots")
 
@@ -98,7 +100,7 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 	sort.Strings(groupNameKeys)
 
 	for _, groupName := range groupNameKeys {
-		fmt.Printf("Processing objects>> backup '%s':\n", groupName)
+		vlog.Printf("Processing objects>> backup '%s':\n", groupName)
 
 		// Update the backup name for next partial return
 		ret.PartialSnapshot.BackupName = groupName
@@ -110,7 +112,7 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 		sort.Strings(snapshotKeys)
 
 		for _, snapshotName := range snapshotKeys {
-			fmt.Printf("Processing objects>>  %s\n", snapshotName)
+			vlog.Printf("Processing objects>>  %s\n", snapshotName)
 
 			// Update the snapshot name for next partial send
 			ret.PartialSnapshot.SnapshotName = snapshotName
@@ -133,7 +135,7 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 				if val.IsDeleted {
 					deletedMsg = " (deleted)"
 				}
-				fmt.Printf("Processing objects>>    %s%s\n", relPath, deletedMsg)
+				vlog.Printf("Processing objects>>    %s%s\n", relPath, deletedMsg)
 
 				if !val.IsDeleted {
 					ret.PartialSnapshot.RawRelPaths = append(ret.PartialSnapshot.RawRelPaths, relPath)
