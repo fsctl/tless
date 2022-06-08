@@ -39,7 +39,7 @@ type DaemonCtlClient interface {
 	ReadAllSnapshots(ctx context.Context, in *ReadAllSnapshotsRequest, opts ...grpc.CallOption) (DaemonCtl_ReadAllSnapshotsClient, error)
 	DeleteSnapshot(ctx context.Context, in *DeleteSnapshotRequest, opts ...grpc.CallOption) (*DeleteSnapshotResponse, error)
 	// Restore command
-	Restore(ctx context.Context, in *RestoreRequest, opts ...grpc.CallOption) (*RestoreResponse, error)
+	Restore(ctx context.Context, opts ...grpc.CallOption) (DaemonCtl_RestoreClient, error)
 }
 
 type daemonCtlClient struct {
@@ -154,13 +154,38 @@ func (c *daemonCtlClient) DeleteSnapshot(ctx context.Context, in *DeleteSnapshot
 	return out, nil
 }
 
-func (c *daemonCtlClient) Restore(ctx context.Context, in *RestoreRequest, opts ...grpc.CallOption) (*RestoreResponse, error) {
-	out := new(RestoreResponse)
-	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/Restore", in, out, opts...)
+func (c *daemonCtlClient) Restore(ctx context.Context, opts ...grpc.CallOption) (DaemonCtl_RestoreClient, error) {
+	stream, err := c.cc.NewStream(ctx, &DaemonCtl_ServiceDesc.Streams[1], "/rpc.DaemonCtl/Restore", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &daemonCtlRestoreClient{stream}
+	return x, nil
+}
+
+type DaemonCtl_RestoreClient interface {
+	Send(*RestoreRequest) error
+	CloseAndRecv() (*RestoreResponse, error)
+	grpc.ClientStream
+}
+
+type daemonCtlRestoreClient struct {
+	grpc.ClientStream
+}
+
+func (x *daemonCtlRestoreClient) Send(m *RestoreRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *daemonCtlRestoreClient) CloseAndRecv() (*RestoreResponse, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(RestoreResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // DaemonCtlServer is the server API for DaemonCtl service.
@@ -184,7 +209,7 @@ type DaemonCtlServer interface {
 	ReadAllSnapshots(*ReadAllSnapshotsRequest, DaemonCtl_ReadAllSnapshotsServer) error
 	DeleteSnapshot(context.Context, *DeleteSnapshotRequest) (*DeleteSnapshotResponse, error)
 	// Restore command
-	Restore(context.Context, *RestoreRequest) (*RestoreResponse, error)
+	Restore(DaemonCtl_RestoreServer) error
 	mustEmbedUnimplementedDaemonCtlServer()
 }
 
@@ -219,8 +244,8 @@ func (UnimplementedDaemonCtlServer) ReadAllSnapshots(*ReadAllSnapshotsRequest, D
 func (UnimplementedDaemonCtlServer) DeleteSnapshot(context.Context, *DeleteSnapshotRequest) (*DeleteSnapshotResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteSnapshot not implemented")
 }
-func (UnimplementedDaemonCtlServer) Restore(context.Context, *RestoreRequest) (*RestoreResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Restore not implemented")
+func (UnimplementedDaemonCtlServer) Restore(DaemonCtl_RestoreServer) error {
+	return status.Errorf(codes.Unimplemented, "method Restore not implemented")
 }
 func (UnimplementedDaemonCtlServer) mustEmbedUnimplementedDaemonCtlServer() {}
 
@@ -400,22 +425,30 @@ func _DaemonCtl_DeleteSnapshot_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DaemonCtl_Restore_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RestoreRequest)
-	if err := dec(in); err != nil {
+func _DaemonCtl_Restore_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaemonCtlServer).Restore(&daemonCtlRestoreServer{stream})
+}
+
+type DaemonCtl_RestoreServer interface {
+	SendAndClose(*RestoreResponse) error
+	Recv() (*RestoreRequest, error)
+	grpc.ServerStream
+}
+
+type daemonCtlRestoreServer struct {
+	grpc.ServerStream
+}
+
+func (x *daemonCtlRestoreServer) SendAndClose(m *RestoreResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *daemonCtlRestoreServer) Recv() (*RestoreRequest, error) {
+	m := new(RestoreRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	if interceptor == nil {
-		return srv.(DaemonCtlServer).Restore(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/rpc.DaemonCtl/Restore",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonCtlServer).Restore(ctx, req.(*RestoreRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return m, nil
 }
 
 // DaemonCtl_ServiceDesc is the grpc.ServiceDesc for DaemonCtl service.
@@ -457,16 +490,17 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "DeleteSnapshot",
 			Handler:    _DaemonCtl_DeleteSnapshot_Handler,
 		},
-		{
-			MethodName: "Restore",
-			Handler:    _DaemonCtl_Restore_Handler,
-		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "ReadAllSnapshots",
 			Handler:       _DaemonCtl_ReadAllSnapshots_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "Restore",
+			Handler:       _DaemonCtl_Restore_Handler,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "rpc/rpc.proto",

@@ -29,7 +29,7 @@ service DaemonCtl {
   rpc DeleteSnapshot (DeleteSnapshotRequest) returns (DeleteSnapshotResponse) {}
 
   // Restore command
-  rpc Restore (RestoreRequest) returns (RestoreResponse) {}
+  rpc Restore (stream RestoreRequest) returns (RestoreResponse) {}
 }
 
 // Initial connect request with information about console logged-in user

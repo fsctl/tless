@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -14,10 +15,30 @@ import (
 )
 
 // Callback for rpc.DaemonCtlServer.Restore requests
-func (s *server) Restore(ctx context.Context, in *pb.RestoreRequest) (*pb.RestoreResponse, error) {
-	log.Printf(">> GOT COMMAND: Restore (%s) into dir %s", in.GetSnapshotRawName(), in.GetRestorePath())
+func (s *server) Restore(stream pb.DaemonCtl_RestoreServer) error {
+	// Read in all the RestoreRequest records from the client
+	snapshotRawName := ""
+	restorePath := ""
+	selRelPaths := make([]string, 0)
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			goto EofReached
+		}
+		if err != nil {
+			return err
+		}
+		snapshotRawName = req.SnapshotRawName
+		restorePath = req.RestorePath
+		selRelPaths = append(selRelPaths, req.SelectedRelPaths...)
 
-	// Can we start a backup right now?  Judge from the current status
+		log.Printf("Got batch of %d paths", len(req.SelectedRelPaths))
+	}
+
+EofReached:
+	log.Printf(">> GOT COMMAND: Restore (%s) into dir %s with %d rel paths selected", snapshotRawName, restorePath, len(selRelPaths))
+
+	// Can we start a restore right now?  Judge from the current status
 	gGlobalsLock.Lock()
 	state := gStatus.state
 	gGlobalsLock.Unlock()
@@ -26,17 +47,17 @@ func (s *server) Restore(ctx context.Context, in *pb.RestoreRequest) (*pb.Restor
 		if state == Restoring {
 			log.Println("Cannot start restore right b/c we are already doing a restore")
 			log.Println(">> COMPLETED COMMAND: Restore")
-			return &pb.RestoreResponse{
+			return stream.SendAndClose(&pb.RestoreResponse{
 				IsStarting: false,
 				ErrMsg:     "already doing a restore right now",
-			}, nil
+			})
 		} else {
 			log.Println("Cannot start restore right now because we are not in Idle state")
 			log.Println(">> COMPLETED COMMAND: Restore")
-			return &pb.RestoreResponse{
+			return stream.SendAndClose(&pb.RestoreResponse{
 				IsStarting: false,
 				ErrMsg:     "busy with other work",
-			}, nil
+			})
 		}
 	} else {
 		gGlobalsLock.Lock()
@@ -46,7 +67,6 @@ func (s *server) Restore(ctx context.Context, in *pb.RestoreRequest) (*pb.Restor
 		gGlobalsLock.Unlock()
 
 		// Diagnostic print out of the rel paths to restore
-		selRelPaths := in.GetSelectedRelPaths()
 		if len(selRelPaths) == 0 {
 			log.Printf("Restoring:  entire snapshot")
 		} else {
@@ -57,16 +77,14 @@ func (s *server) Restore(ctx context.Context, in *pb.RestoreRequest) (*pb.Restor
 		}
 	}
 
-	go Restore(in.GetSnapshotRawName(),
-		in.GetRestorePath(),
-		in.GetSelectedRelPaths(),
+	go Restore(snapshotRawName, restorePath, selRelPaths,
 		func() { log.Println(">> COMPLETED COMMAND: Restore") })
 
 	log.Println("Starting restore")
-	return &pb.RestoreResponse{
+	return stream.SendAndClose(&pb.RestoreResponse{
 		IsStarting: true,
 		ErrMsg:     "",
-	}, nil
+	})
 }
 
 func Restore(snapshotRawName string, restorePath string, selectedRelPaths []string, completion func()) {
@@ -120,12 +138,12 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 	if len(selectedRelPaths) == 0 {
 		selectedRelPathsMap = nil
 	} else {
-		selectedRelPathsMap := make(map[string]int, len(selectedRelPaths))
+		selectedRelPathsMap = make(map[string]int, len(selectedRelPaths))
 		for _, rp := range selectedRelPaths {
 			selectedRelPathsMap[rp] = 1
 		}
 	}
-	log.Printf("RESTORE: selectedRelPathsMap = %v\n", selectedRelPathsMap)
+	log.Printf("RESTORE: selectedRelPathsMap (%d) = %v\n", len(selectedRelPathsMap), selectedRelPathsMap)
 	mRelPathsObjsMap, err := objstorefs.ReconstructSnapshotFileList(ctx, objst, bucket, encKey, backupName, snapshotName, "", selectedRelPathsMap, nil)
 	if err != nil {
 		log.Println("error: reconstructSnapshotFileList failed: ", err)
