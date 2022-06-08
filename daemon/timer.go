@@ -91,11 +91,10 @@ func timerLoop(signals chan os.Signal, server *server) {
 			gGlobalsLock.Unlock()
 
 			if isIdle {
-				//
-				// TODO TODO TODO
-				//
-
-				lastAutomaticPruneStarted = secondsCnt
+				err := PruneSnapshots()
+				if err == nil {
+					lastAutomaticPruneStarted = secondsCnt
+				}
 			} else {
 				log.Println("PERIODIC> cannot prune snapshots b/c we're not in Idle state")
 			}
