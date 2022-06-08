@@ -153,7 +153,7 @@ func (s *server) ReadDaemonConfig(ctx context.Context, in *pb.ReadConfigRequest)
 
 // Callback for rpc.DaemonCtlServer.ReadDaemonConfig requests
 func (s *server) WriteToDaemonConfig(ctx context.Context, in *pb.WriteConfigRequest) (*pb.WriteConfigResponse, error) {
-	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg.VerboseDaemon })
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg != nil && gCfg.VerboseDaemon })
 
 	log.Println(">> GOT COMMAND: WriteToDaemonConfig")
 	defer log.Println(">> COMPLETED COMMAND: WriteToDaemonConfig")

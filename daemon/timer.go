@@ -17,7 +17,7 @@ const (
 )
 
 func timerLoop(signals chan os.Signal, server *server) {
-	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg.VerboseDaemon })
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg != nil && gCfg.VerboseDaemon })
 
 	var (
 		secondsCnt                 int = 0

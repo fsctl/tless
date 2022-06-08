@@ -16,7 +16,7 @@ import (
 
 // Callback for rpc.DaemonCtlServer.Restore requests
 func (s *server) Restore(stream pb.DaemonCtl_RestoreServer) error {
-	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg.VerboseDaemon })
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg != nil && gCfg.VerboseDaemon })
 
 	// Read in all the RestoreRequest records from the client
 	snapshotRawName := ""
