@@ -159,7 +159,7 @@ func Backup(vlog *util.VLog, completion func()) {
 		gGlobalsLock.Unlock()
 		if errors.Is(err, sql.ErrNoRows) {
 			// If no rows were just inserted into journal, then nothing to backup for this snapshot
-			log.Printf("error: nothing inserted in journal => nothing to back up")
+			vlog.Printf("nothing inserted in journal => nothing to back up")
 			continue
 		} else if err != nil {
 			log.Printf("error: gDb.GetJournaledBackupInfo(): %v", err)
