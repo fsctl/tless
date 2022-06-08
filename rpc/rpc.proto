@@ -87,6 +87,7 @@ message ReadConfigResponse {
   string Salt = 6;
   repeated string Dirs = 7;
   repeated string Excludes = 8;
+  bool Verbose = 11;
 
   bool IsValid = 9;
   string ErrMsg = 10;
@@ -101,6 +102,7 @@ message WriteConfigRequest {
   string Salt = 6;
   repeated string Dirs = 7;
   repeated string Excludes = 8;
+  bool Verbose = 9;
 }
 
 message WriteConfigResponse {

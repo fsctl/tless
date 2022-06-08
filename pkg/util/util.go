@@ -43,6 +43,7 @@ type CfgSettings struct {
 	Salt            string
 	Dirs            []string
 	ExcludePaths    []string
+	VerboseDaemon   bool
 }
 
 func GenerateConfigTemplate(configValues *CfgSettings) string {
@@ -137,10 +138,29 @@ master_password = "`
 salt = "`
 
 	if configValues != nil && configValues.Salt != "" {
-		template += configValues.Salt + "\"\n"
+		template += configValues.Salt
 	} else {
-		template += GenerateRandomSalt() + "\"\n"
+		template += GenerateRandomSalt()
 	}
+
+	template += `"
+
+[daemon]
+# This section affects only the daemon.
+verbose = "`
+
+	if configValues != nil {
+		if configValues.VerboseDaemon {
+			template += "true"
+		} else {
+			template += "false"
+		}
+	} else {
+		template += "true"
+	}
+
+	template += `"
+`
 
 	return template
 }

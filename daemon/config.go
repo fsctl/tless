@@ -60,6 +60,7 @@ func initConfig(globalsLock *sync.Mutex) {
 		Salt:            viper.GetString("backups.salt"),
 		Dirs:            viper.GetStringSlice("backups.dirs"),
 		ExcludePaths:    viper.GetStringSlice("backups.excludes"),
+		VerboseDaemon:   viper.GetBool("daemon.verbose"),
 	}
 	globalsLock.Unlock()
 
@@ -143,6 +144,7 @@ func (s *server) ReadDaemonConfig(ctx context.Context, in *pb.ReadConfigRequest)
 			Salt:           gCfg.Salt,
 			Dirs:           gCfg.Dirs,
 			Excludes:       gCfg.ExcludePaths,
+			Verbose:        gCfg.VerboseDaemon,
 		}
 		gGlobalsLock.Unlock()
 		return resp, nil
@@ -177,6 +179,7 @@ func (s *server) WriteToDaemonConfig(ctx context.Context, in *pb.WriteConfigRequ
 			Salt:            in.GetSalt(),
 			Dirs:            in.GetDirs(),
 			ExcludePaths:    in.GetExcludes(),
+			VerboseDaemon:   in.GetVerbose(),
 		}
 
 		gGlobalsLock.Lock()
