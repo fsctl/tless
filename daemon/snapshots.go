@@ -67,8 +67,8 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 		err = fmt.Errorf("no objects found in cloud")
 		log.Println(err)
 		resp := pb.ReadAllSnapshotsResponse{
-			DidSucceed:      false,
-			ErrMsg:          "no objects found in cloud",
+			DidSucceed:      true,
+			ErrMsg:          "",
 			PartialSnapshot: nil,
 		}
 		if err := srv.Send(&resp); err != nil {
