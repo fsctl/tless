@@ -66,6 +66,7 @@ func timerLoop(signals chan os.Signal, server *server) {
 
 			if isIdle {
 				in := &pb.BackupRequest{}
+				in.ForceFullBackup = false
 				response, err := server.Backup(context.Background(), in)
 				if err != nil {
 					log.Printf("PERIODIC> error: periodic backup failed: %v", err)

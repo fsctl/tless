@@ -53,6 +53,22 @@ func (s *server) Backup(ctx context.Context, in *pb.BackupRequest) (*pb.BackupRe
 		gGlobalsLock.Unlock()
 	}
 
+	// Force full backup?
+	isForceFullBackup := in.ForceFullBackup
+	if isForceFullBackup {
+		gGlobalsLock.Lock()
+		err := gDb.ResetLastBackedUpTimeForAllDirents()
+		gGlobalsLock.Unlock()
+		if err != nil {
+			log.Println("error: failed to reset dirents last_backup times to zero: ", err)
+			return &pb.BackupResponse{
+				IsStarting: false,
+				ErrMsg:     "internal database failure",
+			}, nil
+		}
+		log.Println(">> Forcing full backup now")
+	}
+
 	go Backup(func() { log.Println(">> COMPLETED COMMAND: Backup") })
 
 	log.Println("Starting backup")

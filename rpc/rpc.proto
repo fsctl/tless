@@ -108,7 +108,9 @@ message WriteConfigResponse {
   string ErrMsg = 2;
 }
 
-message BackupRequest {}
+message BackupRequest {
+  bool ForceFullBackup = 1;
+}
 
 message BackupResponse {
   bool IsStarting = 1;

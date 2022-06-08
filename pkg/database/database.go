@@ -307,3 +307,21 @@ func (db *DB) ResetLastBackedUpTimeForEntireBackup(rootDirName string) error {
 	}
 	return nil
 }
+
+// Resets the last backup time for every rel path across all backups to zero.
+// Forces a full backup of everything on next backup run.
+func (db *DB) ResetLastBackedUpTimeForAllDirents() error {
+	stmt, err := db.dbConn.Prepare("UPDATE dirents SET last_backup=0")
+	if err != nil {
+		log.Printf("Error: ResetLastBackedUpTimeForAllDirents: %v", err)
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec()
+	if err != nil {
+		log.Printf("Error: ResetLastBackedUpTimeForAllDirents: %v", err)
+		return err
+	}
+	return nil
+}
