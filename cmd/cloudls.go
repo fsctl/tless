@@ -30,7 +30,7 @@ Example:
 
 	tless cloudls
 	tless cloudls --verbose
-	tless cloudls --snapshot=Documents/2020-01-01_04:56:01
+	tless cloudls --snapshot=Documents/2020-01-01_04.56.01
 
 The available snapshot times are displayed in 'tless cloudls' with no arguments.
 `,
@@ -50,7 +50,7 @@ The available snapshot times are displayed in 'tless cloudls' with no arguments.
 func init() {
 	cloudlsCmd.Flags().BoolVar(&cloudlsCfgShowChunks, "show-chunks", false, "show the chunk(s) making up each file; implies -v (default: false)")
 	cloudlsCmd.Flags().BoolVar(&cloudlsCfgGreppableSnapshots, "grep", false, "show a grep-friendly snapshot list (default: false)")
-	cloudlsCmd.Flags().StringVar(&cloudlsCfgSnapshot, "snapshot", "", "snapshot to display (eg, 'Documents/2020-01-01_01:02:03'); implies -v")
+	cloudlsCmd.Flags().StringVar(&cloudlsCfgSnapshot, "snapshot", "", "snapshot to display (eg, 'Documents/2020-01-01_01.02.03'); implies -v")
 	rootCmd.AddCommand(cloudlsCmd)
 }
 

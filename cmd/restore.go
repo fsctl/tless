@@ -30,13 +30,13 @@ tless restore [snapshot] [/restore/into/dir]
 
 Example:
 
-	tless restore Documents/2020-01-15_04:56:00 /home/myname/Recovered-Documents
+	tless restore Documents/2020-01-15_04.56.00 /home/myname/Recovered-Documents
 
 This command will restore the entire backup of the 'Documents' hierarchy at the time
 4:56:00am on 2020-01-15. To restore just a subset of Documents, try the next two commands.
 
-	tless restore Documents/2020-01-15_04:56:00 /home/myname/Recovered-Documents --partial Journal
-	tless restore Documents/2020-01-15_04:56:00 /home/myname/Recovered-Documents --partial Journal/Feb.docx
+	tless restore Documents/2020-01-15_04.56.00 /home/myname/Recovered-Documents --partial Journal
+	tless restore Documents/2020-01-15_04.56.00 /home/myname/Recovered-Documents --partial Journal/Feb.docx
 
 These two commands show how to do a partial restore. The same backup set ('Documents') and
 snapshot will be used, but in the first example only the files under Documents/Journal

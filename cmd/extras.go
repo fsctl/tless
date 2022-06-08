@@ -80,13 +80,13 @@ or individual components.  See below for some examples.
 Example:
 
 	tless extras dec-objname KVNWnYqs9WjINZhAU6UCWCEGoJcqNpKgbOWVEs7IBlCKzaFkbih4i9sYRyMyZurFohPDGUypMA==/4EyQgOMGXAyubu52fp5wpG_AVR5n3XLE1-fBtn_p9klvMiiC35S_i8N-3EW9HEBsikhRvGl4ZUoQI8c=/KOguujOV6osTNUcQUx6_XBCG50JhsjX8Vx8iAXzM/g7TiJMogCcRqVFLV9j0BGseTtLLid7NYIZ-7EO4=.003
-	=> test-backup-src / 2020-10-16_12:23:41 / subdir1/subdir2/file1.txt
+	=> test-backup-src / 2020-10-16_12.23.41 / subdir1/subdir2/file1.txt
 
 	tless extras dec-objname KVNWnYqs9WjINZhAU6UCWCEGoJcqNpKgbOWVEs7IBlCKzaFkbih4i9sYRyMyZurFohPDGUypMA==
 	=> test-backup-src
 
 	tless extras dec-objname 4EyQgOMGXAyubu52fp5wpG_AVR5n3XLE1-fBtn_p9klvMiiC35S_i8N-3EW9HEBsikhRvGl4ZUoQI8c=
-	=> 2020-10-16_12:23:41
+	=> 2020-10-16_12.23.41
 
 	tless extras dec-objname KOguujOV6osTNUcQUx6_XBCG50JhsjX8Vx8iAXzM/g7TiJMogCcRqVFLV9j0BGseTtLLid7NYIZ-7EO4=.003
 	=> subdir1/subdir2/file1.txt

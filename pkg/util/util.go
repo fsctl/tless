@@ -265,7 +265,7 @@ func GetUidGid(username string) (uid int, gid int, err error) {
 }
 
 func GetUnixTimeFromSnapshotName(snapshotName string) int64 {
-	tm, err := time.Parse("2006-01-02_15:04:05", snapshotName)
+	tm, err := time.Parse("2006-01-02_15.04.05", snapshotName)
 	if err != nil {
 		log.Fatalln("error: getUnixTimeFromSnapshotName: ", err)
 	}

@@ -96,7 +96,7 @@ func backupMain() {
 	for _, backupDirPath := range cfgDirs {
 		backupDirName := filepath.Base(backupDirPath)
 
-		snapshotName := time.Now().UTC().Format("2006-01-02_15:04:05")
+		snapshotName := time.Now().UTC().Format("2006-01-02_15.04.05")
 
 		// Traverse the filesystem looking for changed directory entries
 		prevPaths, err := db.GetAllKnownPaths(backupDirName)

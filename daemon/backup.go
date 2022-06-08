@@ -165,7 +165,7 @@ func Backup(vlog *util.VLog, completion func()) {
 			log.Printf("error: gDb.GetJournaledBackupInfo(): %v", err)
 			goto done
 		}
-		snapshotName := time.Unix(snapshotUnixtime, 0).UTC().Format("2006-01-02_15:04:05")
+		snapshotName := time.Unix(snapshotUnixtime, 0).UTC().Format("2006-01-02_15.04.05")
 
 		// Set the initial progress bar
 		gGlobalsLock.Lock()
@@ -227,7 +227,7 @@ func replayBackupJournal() {
 		log.Printf("error: gDb.GetJournaledBackupInfo(): %v", err)
 	}
 	backupDirName := filepath.Base(backupDirPath)
-	snapshotName := time.Unix(snapshotUnixtime, 0).UTC().Format("2006-01-02_15:04:05")
+	snapshotName := time.Unix(snapshotUnixtime, 0).UTC().Format("2006-01-02_15.04.05")
 
 	// Set the gStatus for backing up, with correct percentage done to start
 	gGlobalsLock.Lock()

@@ -24,7 +24,7 @@ fi
 rm $HOME/.tless/state.db
 rm -rf $TEMPDIR/test-backup-src
 rm -rf $TEMPDIR/test-restore-dst
-./tless extras wipe-server --force
+./tless extras wipe-cloud --force
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
     echo "$0: Halting test because could not wipe server (exit code $EXITCODE)"

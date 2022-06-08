@@ -24,7 +24,7 @@ would have been if you had only made one at that time.
 
 Example:
 
-	tless cloudrm --snapshot=Documents/2020-01-01_04:56:01
+	tless cloudrm --snapshot=Documents/2020-01-01_04.56.01
 
 The available snapshot times are displayed in 'tless cloudls' with no arguments.
 `,
@@ -40,7 +40,7 @@ The available snapshot times are displayed in 'tless cloudls' with no arguments.
 )
 
 func init() {
-	cloudrmCmd.Flags().StringVarP(&cloudrmCfgSnapshot, "snapshot", "S", "", "snapshot to delete (eg, 'Documents/2020-01-01_01:02:03')")
+	cloudrmCmd.Flags().StringVarP(&cloudrmCfgSnapshot, "snapshot", "S", "", "snapshot to delete (eg, 'Documents/2020-01-01_01.02.03')")
 	rootCmd.AddCommand(cloudrmCmd)
 }
 

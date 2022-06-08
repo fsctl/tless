@@ -118,7 +118,7 @@ func (db *DB) createTables() error {
 	create table rm_snapshot_info (
 		id integer primary key autoincrement,
 		rootdir text,
-		snapshot_time text            /* "YYYY-MM-DD_hh:mm:ss" in UTC */
+		snapshot_time text            /* "YYYY-MM-DD_hh.mm.ss" in UTC */
 	);
 
 	drop table if exists rm_snapshot_journal;

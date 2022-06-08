@@ -88,7 +88,7 @@ func GetGroupedSnapshots(ctx context.Context, objst *objstore.ObjStore, key []by
 		}
 
 		// Parse the snapshot datetime string
-		snapShotDateTime, err := time.Parse("2006-01-02_15:04:05", snapshotName)
+		snapShotDateTime, err := time.Parse("2006-01-02_15.04.05", snapshotName)
 		if err != nil {
 			log.Printf("error: getGroupedSnapshots: time.Parse failed on '%s': %v", snapshotName, err)
 			continue

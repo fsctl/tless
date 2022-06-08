@@ -8,19 +8,19 @@ import (
 
 func TestGetNextSnapshot(t *testing.T) {
 	snapshotKeys := make([]string, 0)
-	snapshotKeys = append(snapshotKeys, "2020-01-01_01:02:03")
-	snapshotKeys = append(snapshotKeys, "2021-01-01_01:02:03")
-	snapshotKeys = append(snapshotKeys, "2022-01-01_01:02:03")
-	snapshotKeys = append(snapshotKeys, "2023-01-01_01:02:03")
+	snapshotKeys = append(snapshotKeys, "2020-01-01_01.02.03")
+	snapshotKeys = append(snapshotKeys, "2021-01-01_01.02.03")
+	snapshotKeys = append(snapshotKeys, "2022-01-01_01.02.03")
+	snapshotKeys = append(snapshotKeys, "2023-01-01_01.02.03")
 
-	nextSnapshot := getNextSnapshot(snapshotKeys, "2020-01-01_01:02:03")
-	assert.Equal(t, "2021-01-01_01:02:03", nextSnapshot)
+	nextSnapshot := getNextSnapshot(snapshotKeys, "2020-01-01_01.02.03")
+	assert.Equal(t, "2021-01-01_01.02.03", nextSnapshot)
 
-	nextSnapshot = getNextSnapshot(snapshotKeys, "2021-01-01_01:02:03")
-	assert.Equal(t, "2022-01-01_01:02:03", nextSnapshot)
+	nextSnapshot = getNextSnapshot(snapshotKeys, "2021-01-01_01.02.03")
+	assert.Equal(t, "2022-01-01_01.02.03", nextSnapshot)
 
-	nextSnapshot = getNextSnapshot(snapshotKeys, "2022-01-01_01:02:03")
-	assert.Equal(t, "2023-01-01_01:02:03", nextSnapshot)
+	nextSnapshot = getNextSnapshot(snapshotKeys, "2022-01-01_01.02.03")
+	assert.Equal(t, "2023-01-01_01.02.03", nextSnapshot)
 }
 
 func SetupSnapshots() (snapshots map[string]Snapshot) {
@@ -95,9 +95,9 @@ func SetupSnapshots() (snapshots map[string]Snapshot) {
 		RelPaths: map[string]RelPath{"file1": file1RelPath2022, "file2": file2RelPath2022},
 	}
 	snapshots = map[string]Snapshot{
-		"2020-01-01_01:02:03": snapshot2020,
-		"2021-01-01_01:02:03": snapshot2021,
-		"2022-01-01_01:02:03": snapshot2022,
+		"2020-01-01_01.02.03": snapshot2020,
+		"2021-01-01_01.02.03": snapshot2021,
+		"2022-01-01_01.02.03": snapshot2022,
 	}
 	return snapshots
 }
@@ -105,52 +105,52 @@ func SetupSnapshots() (snapshots map[string]Snapshot) {
 func TestContainsRelPath(t *testing.T) {
 	snapshots := SetupSnapshots()
 
-	result := containsRelPath(snapshots["2020-01-01_01:02:03"], "file1")
+	result := containsRelPath(snapshots["2020-01-01_01.02.03"], "file1")
 	assert.Equal(t, true, result)
-	result = containsRelPath(snapshots["2020-01-01_01:02:03"], "file2")
+	result = containsRelPath(snapshots["2020-01-01_01.02.03"], "file2")
 	assert.Equal(t, true, result)
-	result = containsRelPath(snapshots["2020-01-01_01:02:03"], "file3")
+	result = containsRelPath(snapshots["2020-01-01_01.02.03"], "file3")
 	assert.Equal(t, false, result)
 
-	result = containsRelPath(snapshots["2021-01-01_01:02:03"], "file1")
+	result = containsRelPath(snapshots["2021-01-01_01.02.03"], "file1")
 	assert.Equal(t, true, result)
-	result = containsRelPath(snapshots["2021-01-01_01:02:03"], "file2")
+	result = containsRelPath(snapshots["2021-01-01_01.02.03"], "file2")
 	assert.Equal(t, true, result)
-	result = containsRelPath(snapshots["2021-01-01_01:02:03"], "file3")
+	result = containsRelPath(snapshots["2021-01-01_01.02.03"], "file3")
 	assert.Equal(t, false, result)
 
-	result = containsRelPath(snapshots["2021-01-01_01:02:03"], "file1")
+	result = containsRelPath(snapshots["2021-01-01_01.02.03"], "file1")
 	assert.Equal(t, true, result)
-	result = containsRelPath(snapshots["2021-01-01_01:02:03"], "file2")
+	result = containsRelPath(snapshots["2021-01-01_01.02.03"], "file2")
 	assert.Equal(t, true, result)
-	result = containsRelPath(snapshots["2021-01-01_01:02:03"], "file3")
+	result = containsRelPath(snapshots["2021-01-01_01.02.03"], "file3")
 	assert.Equal(t, false, result)
 }
 
 func TestRenameAllChunksIntoNextSnapshot(t *testing.T) {
 	snapshots := SetupSnapshots()
 
-	renameObjs := renameAllChunksIntoNextSnapshot(snapshots, "file3", "2020-01-01_01:02:03", "2021-01-01_01:02:03")
+	renameObjs := renameAllChunksIntoNextSnapshot(snapshots, "file3", "2020-01-01_01.02.03", "2021-01-01_01.02.03")
 	assert.Equal(t, 1, len(renameObjs))
 	assert.Equal(t, renameObjs[0].RelPath, "333333")
-	assert.Equal(t, renameObjs[0].OldSnapshot, "2020-01-01_01:02:03")
-	assert.Equal(t, renameObjs[0].NewSnapshot, "2021-01-01_01:02:03")
+	assert.Equal(t, renameObjs[0].OldSnapshot, "2020-01-01_01.02.03")
+	assert.Equal(t, renameObjs[0].NewSnapshot, "2021-01-01_01.02.03")
 
-	renameObjs = renameAllChunksIntoNextSnapshot(snapshots, "file4", "2020-01-01_01:02:03", "2021-01-01_01:02:03")
+	renameObjs = renameAllChunksIntoNextSnapshot(snapshots, "file4", "2020-01-01_01.02.03", "2021-01-01_01.02.03")
 	assert.Equal(t, 2, len(renameObjs))
 	assert.Equal(t, renameObjs[0].RelPath, "444444.001")
-	assert.Equal(t, renameObjs[0].OldSnapshot, "2020-01-01_01:02:03")
-	assert.Equal(t, renameObjs[0].NewSnapshot, "2021-01-01_01:02:03")
+	assert.Equal(t, renameObjs[0].OldSnapshot, "2020-01-01_01.02.03")
+	assert.Equal(t, renameObjs[0].NewSnapshot, "2021-01-01_01.02.03")
 	assert.Equal(t, renameObjs[1].RelPath, "444444.002")
-	assert.Equal(t, renameObjs[1].OldSnapshot, "2020-01-01_01:02:03")
-	assert.Equal(t, renameObjs[1].NewSnapshot, "2021-01-01_01:02:03")
+	assert.Equal(t, renameObjs[1].OldSnapshot, "2020-01-01_01.02.03")
+	assert.Equal(t, renameObjs[1].NewSnapshot, "2021-01-01_01.02.03")
 }
 
 func TestDeleteAllKeysInSnapshot(t *testing.T) {
 	snapshots := SetupSnapshots()
 
-	deleteObjs := deleteAllKeysInSnapshot(snapshots, "2020-01-01_01:02:03")
+	deleteObjs := deleteAllKeysInSnapshot(snapshots, "2020-01-01_01.02.03")
 	assert.Equal(t, 5, len(deleteObjs))
-	deleteObjs = deleteAllKeysInSnapshot(snapshots, "2021-01-01_01:02:03")
+	deleteObjs = deleteAllKeysInSnapshot(snapshots, "2021-01-01_01.02.03")
 	assert.Equal(t, 3, len(deleteObjs))
 }

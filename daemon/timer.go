@@ -27,13 +27,13 @@ func timerLoop(signals chan os.Signal, server *server) {
 
 	for {
 		// Loop wakes up periodically to do automatic tasks
-		vlog.Println("PERIODIC> going to sleep")
+		//vlog.Println("PERIODIC> going to sleep")
 		time.Sleep(time.Second * time.Duration(wakeEveryNSeconds))
 
 		// Wake up
 		secondsCnt += wakeEveryNSeconds
 
-		vlog.Println("PERIODIC> woke up")
+		//vlog.Println("PERIODIC> woke up")
 
 		// Check the signals channel to see if we should exit routine
 		select {

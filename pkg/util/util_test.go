@@ -66,7 +66,7 @@ func TestMakeLogSafe(t *testing.T) {
 }
 
 func TestGetUnixTimeFromSnapshotName(t *testing.T) {
-	snapshotName := "1970-01-01_00:00:07"
+	snapshotName := "1970-01-01_00.00.07"
 
 	unixTimestamp := GetUnixTimeFromSnapshotName(snapshotName)
 
