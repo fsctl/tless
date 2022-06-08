@@ -153,6 +153,8 @@ func (s *server) ReadDaemonConfig(ctx context.Context, in *pb.ReadConfigRequest)
 
 // Callback for rpc.DaemonCtlServer.ReadDaemonConfig requests
 func (s *server) WriteToDaemonConfig(ctx context.Context, in *pb.WriteConfigRequest) (*pb.WriteConfigResponse, error) {
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg.VerboseDaemon })
+
 	log.Println(">> GOT COMMAND: WriteToDaemonConfig")
 	defer log.Println(">> COMPLETED COMMAND: WriteToDaemonConfig")
 
@@ -161,14 +163,14 @@ func (s *server) WriteToDaemonConfig(ctx context.Context, in *pb.WriteConfigRequ
 	gGlobalsLock.Unlock()
 
 	if cfgIsNil {
-		log.Println("Config not available yet, took no action")
+		vlog.Println("Config not available yet, took no action")
 
 		return &pb.WriteConfigResponse{
 			DidSucceed: false,
 			ErrMsg:     "Not ready yet",
 		}, nil
 	} else {
-		log.Println("Overwriting old config file settings")
+		vlog.Println("Overwriting old config file settings")
 
 		configToWrite := &util.CfgSettings{
 			Endpoint:        in.GetEndpoint(),

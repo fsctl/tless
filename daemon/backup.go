@@ -17,11 +17,14 @@ import (
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/objstorefs"
 	"github.com/fsctl/tless/pkg/snapshots"
+	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
 )
 
 // Callback for rpc.DaemonCtlServer.CheckConn requests
 func (s *server) Backup(ctx context.Context, in *pb.BackupRequest) (*pb.BackupResponse, error) {
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg.VerboseDaemon })
+
 	log.Println(">> GOT COMMAND: Backup")
 
 	// Can we start a backup right now?  Judge from the current status
@@ -66,19 +69,19 @@ func (s *server) Backup(ctx context.Context, in *pb.BackupRequest) (*pb.BackupRe
 				ErrMsg:     "internal database failure",
 			}, nil
 		}
-		log.Println(">> Forcing full backup now")
+		vlog.Println(">> Forcing full backup now")
 	}
 
-	go Backup(func() { log.Println(">> COMPLETED COMMAND: Backup") })
+	go Backup(vlog, func() { log.Println(">> COMPLETED COMMAND: Backup") })
 
-	log.Println("Starting backup")
+	vlog.Println("Starting backup")
 	return &pb.BackupResponse{
 		IsStarting: true,
 		ErrMsg:     "",
 	}, nil
 }
 
-func Backup(completion func()) {
+func Backup(vlog *util.VLog, completion func()) {
 	// Last step:  call the completion routine
 	defer completion()
 
@@ -115,7 +118,7 @@ func Backup(completion func()) {
 		backupDirName := filepath.Base(backupDirPath)
 
 		// log what iteration of the loop we're in
-		log.Printf("Inspecting %s...\n", backupDirPath)
+		vlog.Printf("Inspecting %s...\n", backupDirPath)
 
 		// Display the backup dir we're doing this iteration of the loop
 		gGlobalsLock.Lock()
@@ -156,7 +159,7 @@ func Backup(completion func()) {
 		gGlobalsLock.Unlock()
 		if errors.Is(err, sql.ErrNoRows) {
 			// If no rows were just inserted into journal, then nothing to backup for this snapshot
-			log.Printf("nothing inserted in journal => nothing to back up")
+			log.Printf("error: nothing inserted in journal => nothing to back up")
 			continue
 		} else if err != nil {
 			log.Printf("error: gDb.GetJournaledBackupInfo(): %v", err)
@@ -183,7 +186,7 @@ func Backup(completion func()) {
 			goto done
 		}
 
-		breakFromLoop := playBackupJournal(ctx, encKey, gDb, &gGlobalsLock, backupDirPath, snapshotName, objst, bucket)
+		breakFromLoop := playBackupJournal(ctx, encKey, gDb, &gGlobalsLock, backupDirPath, snapshotName, objst, bucket, vlog)
 		if breakFromLoop {
 			break
 		}
@@ -206,6 +209,8 @@ done:
 }
 
 func replayBackupJournal() {
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg.VerboseDaemon })
+
 	// Reset all InProgress -> Unstarted
 	gGlobalsLock.Lock()
 	err := gDb.ResetAllInProgressBackupJournalTasks()
@@ -264,7 +269,7 @@ func replayBackupJournal() {
 	gGlobalsLock.Unlock()
 
 	// Roll the journal forward
-	_ = playBackupJournal(ctx, encKey, gDb, &gGlobalsLock, backupDirPath, snapshotName, objst, bucket)
+	_ = playBackupJournal(ctx, encKey, gDb, &gGlobalsLock, backupDirPath, snapshotName, objst, bucket, vlog)
 
 	// Finally set the status back to Idle since we are done with backup
 	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
@@ -275,7 +280,7 @@ func replayBackupJournal() {
 	gGlobalsLock.Unlock()
 }
 
-func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string) (breakFromLoop bool) {
+func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string, vlog *util.VLog) (breakFromLoop bool) {
 	// By default, don't signal we want to break out of caller's loop over backups
 	breakFromLoop = false
 
@@ -300,7 +305,7 @@ func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 		globalsLock.Unlock()
 		if err != nil {
 			if errors.Is(err, database.ErrNoWork) {
-				log.Println("playBackupJournal: no work found in journal... done")
+				vlog.Println("playBackupJournal: no work found in journal... done")
 				return
 			} else {
 				log.Println("error: db.ClaimNextBackupJournalTask: ", err)
@@ -314,7 +319,7 @@ func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 		if err != nil {
 			log.Printf("error: db.GetDirEntPaths(): could not get dirent id '%d'\n", bjt.DirEntId)
 		}
-		log.Printf("Backing up '%s/%s'", rootDirName, relPath)
+		vlog.Printf("Backing up '%s/%s'", rootDirName, relPath)
 
 		if err := backup.Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, false); err != nil {
 			log.Printf("error: backup.Backup(): %v", err)
@@ -335,7 +340,7 @@ func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 			log.Printf("error: db.CompleteBackupJournalTask: %v", err)
 		}
 		if isJournalComplete {
-			log.Printf("Finished the journal (re)play")
+			vlog.Printf("Finished the journal (re)play")
 			return
 		} else {
 			// Update the percentage on gStatus based on where we are now
@@ -349,14 +354,16 @@ func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 				globalsLock.Lock()
 				gStatus.percentage = percentDone
 				globalsLock.Unlock()
-				log.Printf("%.2f%% done", percentDone)
+				vlog.Printf("%.2f%% done", percentDone)
 			}
 		}
 	}
 }
 
 func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string) {
-	log.Printf("CANCEL: Starting unwind")
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg.VerboseDaemon })
+
+	vlog.Printf("CANCEL: Starting unwind")
 
 	// Update status to cleaning up, no percentage
 	globalsLock.Lock()
@@ -366,7 +373,7 @@ func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock 
 	globalsLock.Unlock()
 
 	// Delete the snapshot we've been creating
-	log.Printf("CANCEL: Deleting partially created snapshot")
+	vlog.Printf("CANCEL: Deleting partially created snapshot")
 	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctx, objst, key, bucket)
 	if err != nil {
 		log.Printf("Could not get grouped snapshots for cancelation: %v", err)
@@ -377,7 +384,7 @@ func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock 
 	}
 
 	// Get all completed items in journal and set their dirents.last_backup time to 0
-	log.Printf("CANCEL: Resetting last_backup times to zero for processed dirents")
+	vlog.Printf("CANCEL: Resetting last_backup times to zero for processed dirents")
 	globalsLock.Lock()
 	err = db.CancelationResetLastBackupTime()
 	globalsLock.Unlock()
@@ -386,7 +393,7 @@ func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock 
 	}
 
 	// Delete all items in journal + delete backup_info row so this doesn't look like a completed backup
-	log.Printf("CANCEL: Clearing journal and deleting backup_info row")
+	vlog.Printf("CANCEL: Clearing journal and deleting backup_info row")
 	globalsLock.Lock()
 	err = db.CancelationCleanupJournal()
 	globalsLock.Unlock()

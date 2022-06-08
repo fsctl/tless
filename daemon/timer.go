@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
 )
 
@@ -16,8 +17,7 @@ const (
 )
 
 func timerLoop(signals chan os.Signal, server *server) {
-	// temporary
-	isVerbose := false
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg.VerboseDaemon })
 
 	var (
 		secondsCnt                 int = 0
@@ -27,17 +27,13 @@ func timerLoop(signals chan os.Signal, server *server) {
 
 	for {
 		// Loop wakes up periodically to do automatic tasks
-		if isVerbose {
-			log.Println("PERIODIC> going to sleep")
-		}
+		vlog.Println("PERIODIC> going to sleep")
 		time.Sleep(time.Second * time.Duration(wakeEveryNSeconds))
 
 		// Wake up
 		secondsCnt += wakeEveryNSeconds
 
-		if isVerbose {
-			log.Println("PERIODIC> woke up")
-		}
+		vlog.Println("PERIODIC> woke up")
 
 		// Check the signals channel to see if we should exit routine
 		select {
@@ -77,7 +73,7 @@ func timerLoop(signals chan os.Signal, server *server) {
 					lastAutomaticBackupStarted = secondsCnt
 				}
 			} else {
-				log.Println("PERIODIC> cannot start backup b/c we're not in Idle state")
+				vlog.Println("PERIODIC> cannot start backup b/c we're not in Idle state")
 			}
 		}
 
@@ -96,7 +92,7 @@ func timerLoop(signals chan os.Signal, server *server) {
 					lastAutomaticPruneStarted = secondsCnt
 				}
 			} else {
-				log.Println("PERIODIC> cannot prune snapshots b/c we're not in Idle state")
+				vlog.Println("PERIODIC> cannot prune snapshots b/c we're not in Idle state")
 			}
 		}
 	}

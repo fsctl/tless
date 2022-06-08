@@ -16,6 +16,8 @@ import (
 
 // Callback for rpc.DaemonCtlServer.Restore requests
 func (s *server) Restore(stream pb.DaemonCtl_RestoreServer) error {
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg.VerboseDaemon })
+
 	// Read in all the RestoreRequest records from the client
 	snapshotRawName := ""
 	restorePath := ""
@@ -32,7 +34,7 @@ func (s *server) Restore(stream pb.DaemonCtl_RestoreServer) error {
 		restorePath = req.RestorePath
 		selRelPaths = append(selRelPaths, req.SelectedRelPaths...)
 
-		log.Printf("Got batch of %d paths", len(req.SelectedRelPaths))
+		vlog.Printf("Got batch of %d paths", len(req.SelectedRelPaths))
 	}
 
 EofReached:
@@ -68,9 +70,9 @@ EofReached:
 
 		// Diagnostic print out of the rel paths to restore
 		if len(selRelPaths) == 0 {
-			log.Printf("Restoring:  entire snapshot")
+			vlog.Printf("Restoring:  entire snapshot")
 		} else {
-			log.Printf("Restoring:  selected rel paths")
+			vlog.Printf("Restoring:  selected rel paths")
 			for _, relPath := range selRelPaths {
 				log.Printf("+ %s", relPath)
 			}
@@ -78,7 +80,7 @@ EofReached:
 	}
 
 	go Restore(snapshotRawName, restorePath, selRelPaths,
-		func() { log.Println(">> COMPLETED COMMAND: Restore") })
+		func() { log.Println(">> COMPLETED COMMAND: Restore") }, vlog)
 
 	log.Println("Starting restore")
 	return stream.SendAndClose(&pb.RestoreResponse{
@@ -87,7 +89,7 @@ EofReached:
 	})
 }
 
-func Restore(snapshotRawName string, restorePath string, selectedRelPaths []string, completion func()) {
+func Restore(snapshotRawName string, restorePath string, selectedRelPaths []string, completion func(), vlog *util.VLog) {
 	// Last step:  call the completion routine
 	defer completion()
 
@@ -152,7 +154,7 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 	}
 	totalItems := len(mRelPathsObjsMap)
 	doneItems := 0
-	log.Printf("RESTORE: have %d items to restore", totalItems)
+	vlog.Printf("RESTORE: have %d items to restore", totalItems)
 
 	// Get uid/gid for user at the console daemon is working on behalf of
 	gGlobalsLock.Lock()
@@ -166,7 +168,7 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 	// loop over all the relpaths and restore each
 	dirChmodQueue := make([]backup.DirChmodQueueItem, 0) // all directory mode bits are set at end
 	for relPath := range mRelPathsObjsMap {
-		log.Printf("RESTORING: '%s' from %s/%s", relPath, backupName, snapshotName)
+		vlog.Printf("RESTORING: '%s' from %s/%s", relPath, backupName, snapshotName)
 
 		if len(mRelPathsObjsMap[relPath]) > 1 {
 			relPathChunks := mRelPathsObjsMap[relPath]
