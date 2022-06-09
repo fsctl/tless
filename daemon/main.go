@@ -62,7 +62,7 @@ func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRespo
 	gGlobalsLock.Unlock()
 	ctxBkg := context.Background()
 	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey)
-	if ok, err := objst.IsReachableWithRetries(ctxBkg, 5, bucket, vlog); !ok {
+	if ok, err := objst.IsReachableWithRetries(ctxBkg, 2, bucket, vlog); !ok {
 		errMsg := fmt.Sprintf("server not reachable: %v", err)
 		vlog.Println(errMsg)
 		return &pb.HelloResponse{DidSucceed: false, ErrMsg: errMsg}, nil
