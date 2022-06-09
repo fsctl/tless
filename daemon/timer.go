@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	wakeEveryNSeconds            int = 1
+	wakeEveryNSeconds            int = 60
 	automaticBackupEveryNSeconds int = 1 * 60 * 60
-	automaticPruneEveryNSeconds  int = 6 * 60 * 60
+	automaticPruneEveryNSeconds  int = 2 * 60 * 60
 )
 
 func timerLoop(signals chan os.Signal, server *server) {
