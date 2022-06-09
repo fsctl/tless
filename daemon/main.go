@@ -39,7 +39,9 @@ type server struct {
 
 // Callback for rpc.DaemonCtlServer.Hello requests
 func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloResponse, error) {
-	log.Printf("Received Hello from: '%v' (with homedir '%v')", in.GetUsername(), in.GetUserHomeDir())
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg != nil && gCfg.VerboseDaemon })
+
+	log.Printf("HELLO> Rcvd Hello from '%v' (with homedir '%v')", in.GetUsername(), in.GetUserHomeDir())
 
 	// Set up global state
 	gGlobalsLock.Lock()
@@ -60,12 +62,12 @@ func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRespo
 	gGlobalsLock.Unlock()
 	ctxBkg := context.Background()
 	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey)
-	if ok, err := objst.IsReachableWithRetries(ctxBkg, 5, bucket); !ok {
+	if ok, err := objst.IsReachableWithRetries(ctxBkg, 5, bucket, vlog); !ok {
 		errMsg := fmt.Sprintf("server not reachable: %v", err)
-		log.Println(errMsg)
+		vlog.Println(errMsg)
 		return &pb.HelloResponse{DidSucceed: false, ErrMsg: errMsg}, nil
 	}
-	if ok, err := objst.CheckCryptoConfigMatchesServerDaemon(ctx, key, bucket, salt); !ok {
+	if ok, err := objst.CheckCryptoConfigMatchesServerDaemon(ctx, key, bucket, salt, vlog); !ok {
 		errMsg := fmt.Sprintf("cannot continue due to cryptographic config error: %v", err)
 		log.Println(errMsg)
 		return &pb.HelloResponse{DidSucceed: false, ErrMsg: errMsg}, nil

@@ -24,6 +24,8 @@ var (
 )
 
 func initConfig(globalsLock *sync.Mutex) {
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg != nil && gCfg.VerboseDaemon })
+
 	globalsLock.Lock()
 	username := gUsername
 	userHomeDir := gUserHomeDir
@@ -34,7 +36,7 @@ func initConfig(globalsLock *sync.Mutex) {
 	viper.AddConfigPath(filepath.Join(userHomeDir, ".tless"))
 
 	if err := viper.ReadInConfig(); err == nil {
-		log.Println("Using config file:", viper.ConfigFileUsed())
+		vlog.Println("Using config file:", viper.ConfigFileUsed())
 	} else {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// Config file could not be found, make one and read it in

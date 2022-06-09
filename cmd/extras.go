@@ -115,7 +115,7 @@ func init() {
 
 func checkConnMain() {
 	objst := objstore.NewObjStore(context.Background(), cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
-	if ok, err := objst.IsReachableWithRetries(context.Background(), 10, cfgBucket); !ok {
+	if ok, err := objst.IsReachableWithRetries(context.Background(), 10, cfgBucket, nil); !ok {
 		fmt.Println("connectivity check failed: are your settings correct in config.toml? error: ", err)
 	} else {
 		fmt.Println("connectivity check successful")
@@ -129,7 +129,7 @@ func wipeCloudMain() {
 	// initialize progress bar container
 	progressBarContainer := mpb.New()
 
-	allObjects, err := objst.GetObjList(ctx, cfgBucket, "")
+	allObjects, err := objst.GetObjList(ctx, cfgBucket, "", nil)
 	if err != nil {
 		log.Printf("error: wipeCloudMain: GetObjList failed: %v", err)
 	}

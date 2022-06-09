@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/fsctl/tless/pkg/cryptography"
+	"github.com/fsctl/tless/pkg/util"
 )
 
 var (
@@ -36,7 +37,7 @@ var (
 func (os *ObjStore) CheckCryptoConfigMatchesServer(ctx context.Context, key []byte, bucket string, expectedSalt string, isVerbose bool) bool {
 	// Try to read the salt, warning user on common failure cases ErrMultipleSalts and
 	// ErrCantDecryptSaltFile.  On ErrNoSaltOnServer, try to save the config salt to the server.
-	salt, err := os.tryReadSalt(ctx, key, bucket, isVerbose)
+	salt, err := os.tryReadSalt(ctx, key, bucket, isVerbose, nil)
 	if err != nil {
 		if errors.Is(err, ErrMultipleSalts) {
 			fmt.Println(`warning: there are multiple SALT-xxxx files in the bucket. You need to delete
@@ -70,8 +71,8 @@ backup.`)
 }
 
 // Same as CheckCryptoConfigMatchesServer() except printing and error return designed for daemon mode
-func (os *ObjStore) CheckCryptoConfigMatchesServerDaemon(ctx context.Context, key []byte, bucket string, expectedSalt string) (bool, error) {
-	salt, err := os.tryReadSalt(ctx, key, bucket, false)
+func (os *ObjStore) CheckCryptoConfigMatchesServerDaemon(ctx context.Context, key []byte, bucket string, expectedSalt string, vlog *util.VLog) (bool, error) {
+	salt, err := os.tryReadSalt(ctx, key, bucket, false, vlog)
 	if err != nil {
 		if errors.Is(err, ErrMultipleSalts) {
 			log.Println(`warning: there are multiple SALT-xxxx files in the bucket. You need to delete
@@ -99,9 +100,9 @@ master password in config.toml?`)
 	return true, nil
 }
 
-func (os *ObjStore) tryReadSalt(ctx context.Context, key []byte, bucket string, isVerbose bool) (string, error) {
+func (os *ObjStore) tryReadSalt(ctx context.Context, key []byte, bucket string, isVerbose bool, vlog *util.VLog) (string, error) {
 	// Try to fetch all objects starting with "SALT-"
-	m, err := os.GetObjList(ctx, bucket, "SALT-")
+	m, err := os.GetObjList(ctx, bucket, "SALT-", vlog)
 	if err != nil {
 		return "", err
 	}
@@ -110,7 +111,12 @@ func (os *ObjStore) tryReadSalt(ctx context.Context, key []byte, bucket string, 
 	var saltObjName string
 	if len(m) > 1 {
 		for k := range m {
-			log.Printf("warning: found salt: '%s' in bucket\n", k)
+			msg := fmt.Sprintf("warning: found salt: '%s' in bucket\n", k)
+			if vlog != nil {
+				vlog.Println(msg)
+			} else {
+				log.Println(msg)
+			}
 		}
 		log.Printf("warning: there are multiple SALT-xxxx files on the server; you need to manually delete the wrong one(s)")
 		return "", ErrMultipleSalts
@@ -121,8 +127,12 @@ func (os *ObjStore) tryReadSalt(ctx context.Context, key []byte, bucket string, 
 		// There is only one salt; get its value
 		for k := range m {
 			saltObjName = k
+			msg := fmt.Sprintf("found salt file '%s' in bucket\n", saltObjName)
 			if isVerbose {
-				fmt.Printf("found salt file '%s' in bucket\n", saltObjName)
+				fmt.Println(msg)
+			}
+			if vlog != nil {
+				vlog.Println(msg)
 			}
 		}
 	}

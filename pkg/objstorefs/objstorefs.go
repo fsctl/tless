@@ -39,7 +39,7 @@ type BackupDir struct {
 func GetGroupedSnapshots(ctx context.Context, objst *objstore.ObjStore, key []byte, bucket string) (map[string]BackupDir, error) {
 	retBackupDirs := make(map[string]BackupDir)
 
-	allObjects, err := objst.GetObjList(ctx, bucket, "")
+	allObjects, err := objst.GetObjList(ctx, bucket, "", nil)
 	if err != nil {
 		log.Printf("error: getGroupedSnapshots: GetObjList failed: %v", err)
 		return nil, err
