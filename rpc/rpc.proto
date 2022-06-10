@@ -30,6 +30,9 @@ service DaemonCtl {
 
   // Restore command
   rpc Restore (stream RestoreRequest) returns (RestoreResponse) {}
+
+  // Special operations
+  rpc WipeCloud (WipeCloudRequest) returns (WipeCloudResponse) {}
 }
 
 message HelloRequest {
@@ -159,6 +162,13 @@ message RestoreRequest {
 }
 
 message RestoreResponse {
+  bool isStarting = 1;
+  string ErrMsg = 2;
+}
+
+message WipeCloudRequest {}
+
+message WipeCloudResponse {
   bool isStarting = 1;
   string ErrMsg = 2;
 }

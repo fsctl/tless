@@ -40,6 +40,8 @@ type DaemonCtlClient interface {
 	DeleteSnapshot(ctx context.Context, in *DeleteSnapshotRequest, opts ...grpc.CallOption) (*DeleteSnapshotResponse, error)
 	// Restore command
 	Restore(ctx context.Context, opts ...grpc.CallOption) (DaemonCtl_RestoreClient, error)
+	// Special operations
+	WipeCloud(ctx context.Context, in *WipeCloudRequest, opts ...grpc.CallOption) (*WipeCloudResponse, error)
 }
 
 type daemonCtlClient struct {
@@ -188,6 +190,15 @@ func (x *daemonCtlRestoreClient) CloseAndRecv() (*RestoreResponse, error) {
 	return m, nil
 }
 
+func (c *daemonCtlClient) WipeCloud(ctx context.Context, in *WipeCloudRequest, opts ...grpc.CallOption) (*WipeCloudResponse, error) {
+	out := new(WipeCloudResponse)
+	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/WipeCloud", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonCtlServer is the server API for DaemonCtl service.
 // All implementations must embed UnimplementedDaemonCtlServer
 // for forward compatibility
@@ -210,6 +221,8 @@ type DaemonCtlServer interface {
 	DeleteSnapshot(context.Context, *DeleteSnapshotRequest) (*DeleteSnapshotResponse, error)
 	// Restore command
 	Restore(DaemonCtl_RestoreServer) error
+	// Special operations
+	WipeCloud(context.Context, *WipeCloudRequest) (*WipeCloudResponse, error)
 	mustEmbedUnimplementedDaemonCtlServer()
 }
 
@@ -246,6 +259,9 @@ func (UnimplementedDaemonCtlServer) DeleteSnapshot(context.Context, *DeleteSnaps
 }
 func (UnimplementedDaemonCtlServer) Restore(DaemonCtl_RestoreServer) error {
 	return status.Errorf(codes.Unimplemented, "method Restore not implemented")
+}
+func (UnimplementedDaemonCtlServer) WipeCloud(context.Context, *WipeCloudRequest) (*WipeCloudResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method WipeCloud not implemented")
 }
 func (UnimplementedDaemonCtlServer) mustEmbedUnimplementedDaemonCtlServer() {}
 
@@ -451,6 +467,24 @@ func (x *daemonCtlRestoreServer) Recv() (*RestoreRequest, error) {
 	return m, nil
 }
 
+func _DaemonCtl_WipeCloud_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WipeCloudRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonCtlServer).WipeCloud(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/rpc.DaemonCtl/WipeCloud",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonCtlServer).WipeCloud(ctx, req.(*WipeCloudRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonCtl_ServiceDesc is the grpc.ServiceDesc for DaemonCtl service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -489,6 +523,10 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteSnapshot",
 			Handler:    _DaemonCtl_DeleteSnapshot_Handler,
+		},
+		{
+			MethodName: "WipeCloud",
+			Handler:    _DaemonCtl_WipeCloud_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
