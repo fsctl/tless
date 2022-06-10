@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
-	"math"
 	"net"
 	"os"
 	"os/signal"
@@ -161,7 +160,7 @@ func DaemonMain() {
 		if err != nil {
 			log.Fatalf("failed to chmod the socket: %v", err)
 		}
-		s := grpc.NewServer(grpc.MaxSendMsgSize(math.MaxInt32 * 1024))
+		s := grpc.NewServer()
 
 		// spawn a go routine to listen on socket
 		go func() {
@@ -179,8 +178,9 @@ func DaemonMain() {
 		<-signals
 		fmt.Println() // line break after ^C
 
-		// do cleanup here before terminating
-		s.GracefulStop()
+		// This is commented out because otherwise the gRPC listener panics when SIGTERM is
+		// received during the processing of an RPC.
+		//s.GracefulStop()
 
 		// other cleanup
 		gGlobalsLock.Lock()
