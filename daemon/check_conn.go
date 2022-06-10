@@ -40,9 +40,10 @@ func (s *server) CheckConn(ctx context.Context, in *pb.CheckConnRequest) (*pb.Ch
 	objst := objstore.NewObjStore(ctx, in.GetEndpoint(), in.GetAccessKey(), in.GetSecretKey(), in.GetTrustSelfSignedCerts())
 	isSuccessful, err := objst.IsReachableWithRetries(context.Background(), 3, in.GetBucketName(), nil)
 
+	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
 	gGlobalsLock.Lock()
 	gStatus.state = Idle
-	gStatus.msg = ""
+	gStatus.msg = "Last backup: " + lastBackupTimeFormatted
 	gGlobalsLock.Unlock()
 
 	if isSuccessful {
