@@ -127,7 +127,7 @@ func (os *ObjStore) tryReadSalt(ctx context.Context, key []byte, bucket string, 
 		// There is only one salt; get its value
 		for k := range m {
 			saltObjName = k
-			msg := fmt.Sprintf("found salt file '%s' in bucket\n", saltObjName)
+			msg := fmt.Sprintf("found salt file '%s' in bucket", saltObjName)
 			if isVerbose {
 				fmt.Println(msg)
 			}
