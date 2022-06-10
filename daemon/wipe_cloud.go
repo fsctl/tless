@@ -85,6 +85,6 @@ func WipeCloud(vlog *util.VLog, completion func()) {
 		gStatus.percentage = percentDone
 		gGlobalsLock.Unlock()
 
-		vlog.Printf("WIPE-CLOUD> Deleted %s (%.2f done)\n", objName, percentDone)
+		vlog.Printf("WIPE-CLOUD> Deleted %s (%.2f%% done)\n", objName, percentDone)
 	}
 }
