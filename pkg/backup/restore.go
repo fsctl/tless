@@ -132,9 +132,8 @@ func createFullPath(basePath string, backupRootDirName string, snapshotName stri
 	}
 
 	if uid != -1 && gid != -1 {
-		if err := os.Chown(basePath, uid, gid); err != nil {
-			log.Printf("error: os.Chown failed to set uid/gid (%d/%d) on %s", uid, gid, basePath)
-		}
+		// This one really may fail depending on basepath, so silence the error.
+		_ = os.Chown(basePath, uid, gid)
 		if err := os.Chown(filepath.Join(basePath, backupRootDirName), uid, gid); err != nil {
 			log.Printf("error: os.Chown failed to set uid/gid (%d/%d) on %s", uid, gid, filepath.Join(basePath, backupRootDirName))
 		}

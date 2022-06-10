@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -221,6 +222,19 @@ func (os *ObjStore) RenameObj(ctx context.Context, bucket string, objectNameSrc 
 
 	err = os.DeleteObj(ctx, bucket, objectNameSrc)
 	return err
+}
+
+func (os *ObjStore) ListBuckets(ctx context.Context) ([]string, error) {
+	buckets, err := os.minioClient.ListBuckets(ctx)
+	if err != nil {
+		return []string{}, err
+	}
+	ret := make([]string, 0)
+	for _, bucketInfo := range buckets {
+		ret = append(ret, bucketInfo.Name)
+	}
+	sort.Strings(ret)
+	return ret, nil
 }
 
 // Computes the expected ETag for the entire buffer buf

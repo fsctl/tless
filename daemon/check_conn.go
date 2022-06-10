@@ -38,7 +38,14 @@ func (s *server) CheckConn(ctx context.Context, in *pb.CheckConnRequest) (*pb.Ch
 	log.Printf("    Bucket:               '%s'\n", in.GetBucketName())
 	log.Printf("    TrustSelfSignedCerts: '%v'\n", in.GetTrustSelfSignedCerts())
 	objst := objstore.NewObjStore(ctx, in.GetEndpoint(), in.GetAccessKey(), in.GetSecretKey(), in.GetTrustSelfSignedCerts())
-	isSuccessful, err := objst.IsReachableWithRetries(context.Background(), 3, in.GetBucketName(), nil)
+	var isSuccessful bool
+	var err error
+	if in.GetBucketName() == "" {
+		_, err = objst.ListBuckets(context.Background())
+		isSuccessful = err == nil
+	} else {
+		isSuccessful, err = objst.IsReachableWithRetries(context.Background(), 3, in.GetBucketName(), nil)
+	}
 
 	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
 	gGlobalsLock.Lock()
