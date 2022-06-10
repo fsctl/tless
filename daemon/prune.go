@@ -42,9 +42,10 @@ func PruneSnapshots() error {
 	accessKey := gCfg.AccessKeyId
 	secretKey := gCfg.SecretAccessKey
 	bucket := gCfg.Bucket
+	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
 	copy(encKey, gKey)
 	gGlobalsLock.Unlock()
-	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey)
+	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
 	mSnapshots, err := snapshots.GetAllSnapshotInfos(ctx, encKey, objst, bucket)
 	if err != nil {

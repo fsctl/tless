@@ -20,14 +20,15 @@ var (
 	encKey []byte
 
 	// Flags
-	cfgEndpoint        string
-	cfgAccessKeyId     string
-	cfgSecretAccessKey string
-	cfgBucket          string
-	cfgMasterPassword  string
-	cfgSalt            string
-	cfgVerbose         bool
-	cfgForce           bool
+	cfgEndpoint             string
+	cfgAccessKeyId          string
+	cfgSecretAccessKey      string
+	cfgBucket               string
+	cfgTrustSelfSignedCerts bool
+	cfgMasterPassword       string
+	cfgSalt                 string
+	cfgVerbose              bool
+	cfgForce                bool
 
 	// Root command
 	rootCmd = &cobra.Command{
@@ -69,6 +70,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgSalt, "salt", "l", "", "salt used for key derivation from master password")
 	rootCmd.PersistentFlags().BoolVarP(&cfgVerbose, "verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolVarP(&cfgForce, "force", "f", false, "override check that salt and master password match\nwhat was previously used on server")
+	rootCmd.PersistentFlags().BoolVarP(&cfgTrustSelfSignedCerts, "trust-certs", "C", false, "trust a self-signed cert from your cloud provider")
 
 	rootCmd.Flags().Bool("version", false, "print the version")
 
@@ -145,6 +147,9 @@ func configFallbackToTomlFile() {
 	if cfgBucket == "" {
 		cfgBucket = viper.GetString("objectstore.bucket")
 	}
+	if !cfgTrustSelfSignedCerts {
+		cfgTrustSelfSignedCerts = viper.GetBool("objectstore.trust_self_signed_certs")
+	}
 	if cfgMasterPassword == "" {
 		cfgMasterPassword = viper.GetString("backups.master_password")
 	}
@@ -177,7 +182,7 @@ func validateConfigVars() error {
 	// Check crypto config in SALT-xxxx file
 	if !cfgForce {
 		ctx := context.Background()
-		objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
+		objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 		if ok, err := objst.IsReachableWithRetries(context.Background(), 10, cfgBucket, nil); !ok {
 			log.Fatalln("error: exiting because server not reachable: ", err)
 		}

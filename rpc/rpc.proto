@@ -32,13 +32,11 @@ service DaemonCtl {
   rpc Restore (stream RestoreRequest) returns (RestoreResponse) {}
 }
 
-// Initial connect request with information about console logged-in user
 message HelloRequest {
   string username = 1;
   string userHomeDir = 2;
 }
 
-// TODO:  return last backup timestamp
 message HelloResponse {
   bool DidSucceed = 1;
   string ErrMsg = 2;
@@ -65,6 +63,7 @@ message CheckConnRequest {
   string AccessKey = 2;
   string SecretKey = 3;
   string BucketName = 4;
+  bool TrustSelfSignedCerts = 5;
 }
 
 message CheckConnResponse {
@@ -83,14 +82,15 @@ message ReadConfigResponse {
   string AccessKey = 2;
   string SecretKey = 3;
   string BucketName = 4;
-  string MasterPassword = 5;
-  string Salt = 6;
-  repeated string Dirs = 7;
-  repeated string Excludes = 8;
-  bool Verbose = 11;
+  bool TrustSelfSignedCerts = 5;
+  string MasterPassword = 6;
+  string Salt = 7;
+  repeated string Dirs = 8;
+  repeated string Excludes = 9;
+  bool Verbose = 10;
 
-  bool IsValid = 9;
-  string ErrMsg = 10;
+  bool IsValid = 11;
+  string ErrMsg = 12;
 }
 
 message WriteConfigRequest {
@@ -98,11 +98,12 @@ message WriteConfigRequest {
   string AccessKey = 2;
   string SecretKey = 3;
   string BucketName = 4;
-  string MasterPassword = 5;
-  string Salt = 6;
-  repeated string Dirs = 7;
-  repeated string Excludes = 8;
-  bool Verbose = 9;
+  bool TrustSelfSignedCerts = 5;
+  string MasterPassword = 6;
+  string Salt = 7;
+  repeated string Dirs = 8;
+  repeated string Excludes = 9;
+  bool Verbose = 10;
 }
 
 message WriteConfigResponse {

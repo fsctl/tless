@@ -47,9 +47,10 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 	accessKey := gCfg.AccessKeyId
 	secretKey := gCfg.SecretAccessKey
 	bucket := gCfg.Bucket
+	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
 	key := gKey
 	gGlobalsLock.Unlock()
-	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey)
+	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
 	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctxBkg, objst, key, bucket)
 	if err != nil {
@@ -206,9 +207,10 @@ func (s *server) DeleteSnapshot(ctx context.Context, in *pb.DeleteSnapshotReques
 	accessKey := gCfg.AccessKeyId
 	secretKey := gCfg.SecretAccessKey
 	bucket := gCfg.Bucket
+	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
 	key := gKey
 	gGlobalsLock.Unlock()
-	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey)
+	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
 	backupDirName, snapshotTimestamp, err := snapshots.SplitSnapshotName(in.SnapshotRawName)
 	if err != nil {

@@ -60,7 +60,7 @@ func init() {
 
 func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 	ctx := context.Background()
-	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
+	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 
 	backupAndSnapshotNameParts := strings.Split(backupAndSnapshotName, "/")
 	if len(backupAndSnapshotNameParts) != 2 {

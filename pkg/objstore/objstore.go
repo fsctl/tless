@@ -31,14 +31,14 @@ var (
 	ErrUploadCorrupted = errors.New("error: upload corrupted in transit, bad etag returned")
 )
 
-func NewObjStore(ctx context.Context, endpoint string, accessKeyId string, secretAccessKey string) *ObjStore {
+func NewObjStore(ctx context.Context, endpoint string, accessKeyId string, secretAccessKey string, isTrustSelfSignedCerts bool) *ObjStore {
 	// Initialize minio client object.
 	minioClient, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKeyId, secretAccessKey, ""),
 		Secure: true,
 		Transport: &http.Transport{
 			DisableCompression: true,
-			TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig:    &tls.Config{InsecureSkipVerify: isTrustSelfSignedCerts},
 		},
 	})
 	if err != nil {

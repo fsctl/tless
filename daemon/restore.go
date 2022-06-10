@@ -111,9 +111,10 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 	accessKey := gCfg.AccessKeyId
 	secretKey := gCfg.SecretAccessKey
 	bucket := gCfg.Bucket
+	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
 	copy(encKey, gKey)
 	gGlobalsLock.Unlock()
-	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey)
+	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 	if ok, err := objst.IsReachableWithRetries(ctx, 10, bucket, vlog); !ok {
 		log.Println("error: exiting because server not reachable: ", err)
 		gGlobalsLock.Lock()

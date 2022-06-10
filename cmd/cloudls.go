@@ -56,7 +56,7 @@ func init() {
 
 func cloudlsMain() {
 	ctx := context.Background()
-	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
+	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 
 	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket)
 	if err != nil {
@@ -120,7 +120,7 @@ func cloudlsMain() {
 
 func cloudlsMainGreppableSnapshots() {
 	ctx := context.Background()
-	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
+	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 
 	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket)
 	if err != nil {
@@ -153,7 +153,7 @@ func cloudlsMainGreppableSnapshots() {
 
 func cloudlsMainShowSnapshot() {
 	ctx := context.Background()
-	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
+	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 
 	snapshotFlagParts := strings.Split(cloudlsCfgSnapshot, "/")
 	if len(snapshotFlagParts) != 2 {

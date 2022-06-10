@@ -35,15 +35,16 @@ func StripTrailingSlashes(s string) string {
 }
 
 type CfgSettings struct {
-	Endpoint        string
-	AccessKeyId     string
-	SecretAccessKey string
-	Bucket          string
-	MasterPassword  string
-	Salt            string
-	Dirs            []string
-	ExcludePaths    []string
-	VerboseDaemon   bool
+	Endpoint             string
+	AccessKeyId          string
+	SecretAccessKey      string
+	Bucket               string
+	TrustSelfSignedCerts bool
+	MasterPassword       string
+	Salt                 string
+	Dirs                 []string
+	ExcludePaths         []string
+	VerboseDaemon        bool
 }
 
 func GenerateConfigTemplate(configValues *CfgSettings) string {
@@ -87,6 +88,19 @@ bucket = "`
 	}
 
 	template += `"
+trust_self_signed_certs = `
+
+	if configValues != nil {
+		if configValues.TrustSelfSignedCerts {
+			template += "true"
+		} else {
+			template += "false"
+		}
+	} else {
+		template += "true"
+	}
+
+	template += `
 
 [backups]
 # You can specify as many directories to back up as you want. All paths 
@@ -147,7 +161,7 @@ salt = "`
 
 [daemon]
 # This section affects only the daemon.
-verbose = "`
+verbose = `
 
 	if configValues != nil {
 		if configValues.VerboseDaemon {
@@ -159,7 +173,7 @@ verbose = "`
 		template += "true"
 	}
 
-	template += `"
+	template += `
 `
 
 	return template

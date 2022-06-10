@@ -54,7 +54,7 @@ func init() {
 
 func pruneMain(backupName string, isDryRun bool) {
 	ctx := context.Background()
-	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
+	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 	mSnapshots, err := snapshots.GetAllSnapshotInfos(ctx, encKey, objst, cfgBucket)
 	if err != nil {
 		fmt.Println("error: prune: ", err)

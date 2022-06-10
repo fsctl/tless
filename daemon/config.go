@@ -54,15 +54,16 @@ func initConfig(globalsLock *sync.Mutex) {
 
 	globalsLock.Lock()
 	gCfg = &util.CfgSettings{
-		Endpoint:        viper.GetString("objectstore.endpoint"),
-		AccessKeyId:     viper.GetString("objectstore.access_key_id"),
-		SecretAccessKey: viper.GetString("objectstore.access_secret"),
-		Bucket:          viper.GetString("objectstore.bucket"),
-		MasterPassword:  viper.GetString("backups.master_password"),
-		Salt:            viper.GetString("backups.salt"),
-		Dirs:            viper.GetStringSlice("backups.dirs"),
-		ExcludePaths:    viper.GetStringSlice("backups.excludes"),
-		VerboseDaemon:   viper.GetBool("daemon.verbose"),
+		Endpoint:             viper.GetString("objectstore.endpoint"),
+		AccessKeyId:          viper.GetString("objectstore.access_key_id"),
+		SecretAccessKey:      viper.GetString("objectstore.access_secret"),
+		Bucket:               viper.GetString("objectstore.bucket"),
+		TrustSelfSignedCerts: viper.GetBool("objectstore.trust_self_signed_certs"),
+		MasterPassword:       viper.GetString("backups.master_password"),
+		Salt:                 viper.GetString("backups.salt"),
+		Dirs:                 viper.GetStringSlice("backups.dirs"),
+		ExcludePaths:         viper.GetStringSlice("backups.excludes"),
+		VerboseDaemon:        viper.GetBool("daemon.verbose"),
 	}
 	globalsLock.Unlock()
 
@@ -136,17 +137,18 @@ func (s *server) ReadDaemonConfig(ctx context.Context, in *pb.ReadConfigRequest)
 		log.Println("Returning all config file settings")
 		gGlobalsLock.Lock()
 		resp := &pb.ReadConfigResponse{
-			IsValid:        true,
-			ErrMsg:         "",
-			Endpoint:       gCfg.Endpoint,
-			AccessKey:      gCfg.AccessKeyId,
-			SecretKey:      gCfg.SecretAccessKey,
-			BucketName:     gCfg.Bucket,
-			MasterPassword: gCfg.MasterPassword,
-			Salt:           gCfg.Salt,
-			Dirs:           gCfg.Dirs,
-			Excludes:       gCfg.ExcludePaths,
-			Verbose:        gCfg.VerboseDaemon,
+			IsValid:              true,
+			ErrMsg:               "",
+			Endpoint:             gCfg.Endpoint,
+			AccessKey:            gCfg.AccessKeyId,
+			SecretKey:            gCfg.SecretAccessKey,
+			BucketName:           gCfg.Bucket,
+			TrustSelfSignedCerts: gCfg.TrustSelfSignedCerts,
+			MasterPassword:       gCfg.MasterPassword,
+			Salt:                 gCfg.Salt,
+			Dirs:                 gCfg.Dirs,
+			Excludes:             gCfg.ExcludePaths,
+			Verbose:              gCfg.VerboseDaemon,
 		}
 		gGlobalsLock.Unlock()
 		return resp, nil
@@ -175,15 +177,16 @@ func (s *server) WriteToDaemonConfig(ctx context.Context, in *pb.WriteConfigRequ
 		vlog.Println("Overwriting old config file settings")
 
 		configToWrite := &util.CfgSettings{
-			Endpoint:        in.GetEndpoint(),
-			AccessKeyId:     in.GetAccessKey(),
-			SecretAccessKey: in.GetSecretKey(),
-			Bucket:          in.GetBucketName(),
-			MasterPassword:  in.GetMasterPassword(),
-			Salt:            in.GetSalt(),
-			Dirs:            in.GetDirs(),
-			ExcludePaths:    in.GetExcludes(),
-			VerboseDaemon:   in.GetVerbose(),
+			Endpoint:             in.GetEndpoint(),
+			AccessKeyId:          in.GetAccessKey(),
+			SecretAccessKey:      in.GetSecretKey(),
+			Bucket:               in.GetBucketName(),
+			TrustSelfSignedCerts: in.GetTrustSelfSignedCerts(),
+			MasterPassword:       in.GetMasterPassword(),
+			Salt:                 in.GetSalt(),
+			Dirs:                 in.GetDirs(),
+			ExcludePaths:         in.GetExcludes(),
+			VerboseDaemon:        in.GetVerbose(),
 		}
 
 		gGlobalsLock.Lock()

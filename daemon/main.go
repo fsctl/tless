@@ -58,10 +58,11 @@ func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRespo
 	secretKey := gCfg.SecretAccessKey
 	bucket := gCfg.Bucket
 	salt := gCfg.Salt
+	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
 	key := gKey
 	gGlobalsLock.Unlock()
 	ctxBkg := context.Background()
-	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey)
+	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 	if ok, err := objst.IsReachableWithRetries(ctxBkg, 2, bucket, vlog); !ok {
 		errMsg := fmt.Sprintf("server not reachable: %v", err)
 		vlog.Println(errMsg)

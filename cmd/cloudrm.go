@@ -46,7 +46,7 @@ func init() {
 
 func cloudrmMain() {
 	ctx := context.Background()
-	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
+	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 
 	backupDirName, snapshotTimestamp, err := snapshots.SplitSnapshotName(cloudrmCfgSnapshot)
 	if err != nil {

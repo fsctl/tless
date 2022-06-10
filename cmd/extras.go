@@ -114,7 +114,7 @@ func init() {
 }
 
 func checkConnMain() {
-	objst := objstore.NewObjStore(context.Background(), cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
+	objst := objstore.NewObjStore(context.Background(), cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 	if ok, err := objst.IsReachableWithRetries(context.Background(), 10, cfgBucket, nil); !ok {
 		fmt.Println("connectivity check failed: are your settings correct in config.toml? error: ", err)
 	} else {
@@ -123,7 +123,7 @@ func checkConnMain() {
 }
 
 func wipeCloudMain() {
-	objst := objstore.NewObjStore(context.Background(), cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey)
+	objst := objstore.NewObjStore(context.Background(), cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 	ctx := context.Background()
 
 	// initialize progress bar container

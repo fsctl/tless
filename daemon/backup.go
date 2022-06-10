@@ -91,9 +91,10 @@ func Backup(vlog *util.VLog, completion func()) {
 	endpoint := gCfg.Endpoint
 	accessKey := gCfg.AccessKeyId
 	secretKey := gCfg.SecretAccessKey
+	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
 	bucket := gCfg.Bucket
 	gGlobalsLock.Unlock()
-	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey)
+	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 	if ok, err := objst.IsReachableWithRetries(ctx, 10, bucket, vlog); !ok {
 		log.Println("error: exiting because server not reachable: ", err)
 		gGlobalsLock.Lock()
@@ -250,8 +251,9 @@ func replayBackupJournal() {
 	accessKey := gCfg.AccessKeyId
 	secretKey := gCfg.SecretAccessKey
 	bucket := gCfg.Bucket
+	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
 	gGlobalsLock.Unlock()
-	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey)
+	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 	if ok, err := objst.IsReachableWithRetries(ctx, 10, bucket, vlog); !ok {
 		log.Println("error: exiting because server not reachable: ", err)
 		gGlobalsLock.Lock()
