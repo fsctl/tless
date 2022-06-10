@@ -23,7 +23,7 @@ import (
 
 // Callback for rpc.DaemonCtlServer.CheckConn requests
 func (s *server) Backup(ctx context.Context, in *pb.BackupRequest) (*pb.BackupResponse, error) {
-	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg != nil && gCfg.VerboseDaemon })
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
 	log.Println(">> GOT COMMAND: Backup")
 
@@ -209,7 +209,7 @@ done:
 }
 
 func replayBackupJournal() {
-	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg != nil && gCfg.VerboseDaemon })
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
 	// Reset all InProgress -> Unstarted
 	gGlobalsLock.Lock()
@@ -361,7 +361,7 @@ func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 }
 
 func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string) {
-	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg != nil && gCfg.VerboseDaemon })
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
 	vlog.Printf("CANCEL: Starting unwind")
 

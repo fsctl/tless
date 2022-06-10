@@ -19,7 +19,7 @@ const (
 
 // Callback for rpc.DaemonCtlServer.ReadAllSnapshots requests
 func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonCtl_ReadAllSnapshotsServer) error {
-	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg != nil && gCfg.VerboseDaemon })
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
 	log.Println(">> GOT COMMAND: ReadAllSnapshots")
 	defer log.Println(">> COMPLETED COMMAND: ReadAllSnapshots")

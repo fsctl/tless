@@ -37,7 +37,7 @@ func (s *server) CheckConn(ctx context.Context, in *pb.CheckConnRequest) (*pb.Ch
 	log.Printf("    Secret Key: '%s'\n", util.MakeLogSafe(in.GetSecretKey()))
 	log.Printf("    Bucket:     '%s'\n", in.GetBucketName())
 	objst := objstore.NewObjStore(ctx, in.GetEndpoint(), in.GetAccessKey(), in.GetSecretKey())
-	isSuccessful, err := objst.IsReachableWithRetries(context.Background(), 5, in.GetBucketName(), nil)
+	isSuccessful, err := objst.IsReachableWithRetries(context.Background(), 3, in.GetBucketName(), nil)
 
 	gGlobalsLock.Lock()
 	gStatus.state = Idle

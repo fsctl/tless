@@ -5,10 +5,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/md5"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"strings"
 	"time"
 
@@ -22,10 +24,7 @@ const (
 )
 
 type ObjStore struct {
-	endpoint        string
-	accessKeyId     string
-	secretAccessKey string
-	minioClient     *minio.Client
+	minioClient *minio.Client
 }
 
 var (
@@ -33,22 +32,21 @@ var (
 )
 
 func NewObjStore(ctx context.Context, endpoint string, accessKeyId string, secretAccessKey string) *ObjStore {
-	useSSL := !true
-
 	// Initialize minio client object.
 	minioClient, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKeyId, secretAccessKey, ""),
-		Secure: useSSL,
+		Secure: true,
+		Transport: &http.Transport{
+			DisableCompression: true,
+			TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+		},
 	})
 	if err != nil {
 		log.Fatalln("error: NewObjStore: ", err)
 	}
 
 	return &ObjStore{
-		endpoint:        endpoint,
-		accessKeyId:     accessKeyId,
-		secretAccessKey: secretAccessKey,
-		minioClient:     minioClient,
+		minioClient: minioClient,
 	}
 }
 
@@ -202,9 +200,7 @@ func (os *ObjStore) GetObjListTopTwoLevels(ctx context.Context, bucket string, e
 }
 
 func (os *ObjStore) DeleteObj(ctx context.Context, bucket string, objectName string) error {
-	opts := minio.RemoveObjectOptions{
-		GovernanceBypass: true,
-	}
+	opts := minio.RemoveObjectOptions{}
 	err := os.minioClient.RemoveObject(context.Background(), bucket, objectName, opts)
 	return err
 }

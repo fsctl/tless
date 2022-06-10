@@ -11,5 +11,5 @@ if [[ $MINIO_ROOT_USER == "" || $MINIO_ROOT_PASSWORD == "" || $MINIO_HOST_PORT =
     echo ""
     exit 1
 fi
-/usr/local/opt/minio/bin/minio server --config-dir=/usr/local/etc/minio --address=$MINIO_HOST_PORT --console-address=127.0.0.1:9001 /usr/local/var/minio
+/usr/local/opt/minio/bin/minio server --certs-dir ~/.minio/certs --config-dir=/usr/local/etc/minio --address=$MINIO_HOST_PORT --console-address=127.0.0.1:9001 /usr/local/var/minio
 
