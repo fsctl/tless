@@ -16,7 +16,13 @@ If you follow the [security recommendations](SECURITY.md), your data is likely t
 
 ## Installation & Usage
 
-1.  Set up a bucket on an S3-compatible blob store and get read-write access credentials for it.  For testing, I recommend running [Minio](https://docs.min.io/docs/minio-quickstart-guide.html) on your local machine.
+### Prerequisites
+
+1.  Set up a bucket on an S3-compatible blob store and get read-write access credentials for it.
+
+The simplest path is to use an AWS account that has access to S3.  Just create a bucket and a Access Key Id + Secret Access Key pair that can read/write the bucket.
+
+For testing on your LAN, I recommend running [Minio](https://docs.min.io/docs/minio-quickstart-guide.html) on your local machine.  Make sure to enable TLS.  You can use a self-signed certificate, but the Minio documentation for how to make this work is sparse, so see my [instructions here](MINIO-TLS.md).
 
 Whatever blobstore you use, make note of these pieces of information:
 
@@ -24,7 +30,7 @@ Whatever blobstore you use, make note of these pieces of information:
  - Access Key and Secret Key for your blobstore acccount
  - The name of the empty bucket, which you should create in advance
  
-2.  Install these prerequisites:
+2.  Install these prerequisites to be able to compile:
 
  - [Protocol Buffer Compiler (protoc)](https://grpc.io/docs/protoc-installation/)
  - The Go Protocol Buffer and GRPC plugins:
@@ -34,25 +40,34 @@ $ go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28
 $ go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
 ```
 
-3.  Clone this repo and run `make` to build the executable
+Make sure the plugins are in your PATH so `protoc` can find them:
 
-Note: Go 1.18 or higher is required
+```
+    export PATH="$PATH:$(go env GOPATH)/bin"
+```
 
-4.  Run the program as `tless backup` to generate a template config file in `$HOME/.tless/config.toml`
+### Setting Up `tless`
 
-5.  Edit the config file, following the instructions in the comments.  This is where you provide your blobstore credentials.  A high-entropy Diceware password and a strong salt are generated for you, though you can change them if you like.  
+1.  Clone this repo and run `make` to build the executable
 
-The config file also specifies what directory tree(s) to back up, e.g., `/home/<your name>` on Linux or `/Users/<your name>/Documents` on macOS.
+Note: Go 1.18 or higher is required.
 
-6.  Test your config file by running `tless extras check-conn`. This will report on whether your blob store is reachable.
+2.  Run the program as `tless backup` to generate a template config file in `$HOME/.tless/config.toml`
 
-7.  Run your first backup:  `tless backup`.  Change (or `touch`) some files and run that command again to create an incremental snapshot.
+3.  Edit the config file, following the instructions in the comments.  This is where you provide your blobstore credentials.  If you are using a self-signed TLS certificate (rather than a commercial S3-compatible provider like AWS), make sure that `trust_self_signed_certs` is set to `true`.
 
-8.  Use `tless cloudls` to see the snapshots you have accumulated on your cloud server.  They are all named after the directory being backed up and the time the snapshot was made.  Pick one to restore from the list and run:
+A high-entropy Diceware password and a strong salt are generated for you, though you can change them if you like.  
+
+The config file also specifies what directory tree(s) to back up.  For example, you may want to back up `/home/<your username>` on Linux or `/Users/<your username>/Documents` on macOS.
+
+4.  Test your config file by running `tless extras check-conn`. This will report on whether your blob store is reachable.
+
+5.  Run your first backup:  `tless backup`.  Change (or `touch`) some files and run that command again to create an incremental snapshot.
+
+6.  Use `tless cloudls` to see the snapshots you have accumulated on your cloud server.  They are all named after the directory being backed up and the time the snapshot was made.  Pick one to restore from the list and run:
 
 ```
 tless restore Documents/2022-05-22_11:52:01 /tmp/restore-here
 ```
 
-9.  Connect to your bucket via its web interface and observe that everything is encrypted:  file and directory names, file metadata, file contents.
-
+7.  Connect to your bucket via its web interface and observe that everything is encrypted:  file and directory names, file metadata, file contents.
