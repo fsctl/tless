@@ -42,6 +42,9 @@ type DaemonCtlClient interface {
 	Restore(ctx context.Context, opts ...grpc.CallOption) (DaemonCtl_RestoreClient, error)
 	// Special operations
 	WipeCloud(ctx context.Context, in *WipeCloudRequest, opts ...grpc.CallOption) (*WipeCloudResponse, error)
+	// Bucket operations
+	ListBuckets(ctx context.Context, in *ListBucketsRequest, opts ...grpc.CallOption) (*ListBucketsResponse, error)
+	MakeBucket(ctx context.Context, in *MakeBucketRequest, opts ...grpc.CallOption) (*MakeBucketResponse, error)
 }
 
 type daemonCtlClient struct {
@@ -199,6 +202,24 @@ func (c *daemonCtlClient) WipeCloud(ctx context.Context, in *WipeCloudRequest, o
 	return out, nil
 }
 
+func (c *daemonCtlClient) ListBuckets(ctx context.Context, in *ListBucketsRequest, opts ...grpc.CallOption) (*ListBucketsResponse, error) {
+	out := new(ListBucketsResponse)
+	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/ListBuckets", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonCtlClient) MakeBucket(ctx context.Context, in *MakeBucketRequest, opts ...grpc.CallOption) (*MakeBucketResponse, error) {
+	out := new(MakeBucketResponse)
+	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/MakeBucket", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonCtlServer is the server API for DaemonCtl service.
 // All implementations must embed UnimplementedDaemonCtlServer
 // for forward compatibility
@@ -223,6 +244,9 @@ type DaemonCtlServer interface {
 	Restore(DaemonCtl_RestoreServer) error
 	// Special operations
 	WipeCloud(context.Context, *WipeCloudRequest) (*WipeCloudResponse, error)
+	// Bucket operations
+	ListBuckets(context.Context, *ListBucketsRequest) (*ListBucketsResponse, error)
+	MakeBucket(context.Context, *MakeBucketRequest) (*MakeBucketResponse, error)
 	mustEmbedUnimplementedDaemonCtlServer()
 }
 
@@ -262,6 +286,12 @@ func (UnimplementedDaemonCtlServer) Restore(DaemonCtl_RestoreServer) error {
 }
 func (UnimplementedDaemonCtlServer) WipeCloud(context.Context, *WipeCloudRequest) (*WipeCloudResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method WipeCloud not implemented")
+}
+func (UnimplementedDaemonCtlServer) ListBuckets(context.Context, *ListBucketsRequest) (*ListBucketsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListBuckets not implemented")
+}
+func (UnimplementedDaemonCtlServer) MakeBucket(context.Context, *MakeBucketRequest) (*MakeBucketResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MakeBucket not implemented")
 }
 func (UnimplementedDaemonCtlServer) mustEmbedUnimplementedDaemonCtlServer() {}
 
@@ -485,6 +515,42 @@ func _DaemonCtl_WipeCloud_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonCtl_ListBuckets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListBucketsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonCtlServer).ListBuckets(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/rpc.DaemonCtl/ListBuckets",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonCtlServer).ListBuckets(ctx, req.(*ListBucketsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonCtl_MakeBucket_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MakeBucketRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonCtlServer).MakeBucket(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/rpc.DaemonCtl/MakeBucket",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonCtlServer).MakeBucket(ctx, req.(*MakeBucketRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonCtl_ServiceDesc is the grpc.ServiceDesc for DaemonCtl service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -527,6 +593,14 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WipeCloud",
 			Handler:    _DaemonCtl_WipeCloud_Handler,
+		},
+		{
+			MethodName: "ListBuckets",
+			Handler:    _DaemonCtl_ListBuckets_Handler,
+		},
+		{
+			MethodName: "MakeBucket",
+			Handler:    _DaemonCtl_MakeBucket_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -33,6 +33,10 @@ service DaemonCtl {
 
   // Special operations
   rpc WipeCloud (WipeCloudRequest) returns (WipeCloudResponse) {}
+
+  // Bucket operations
+  rpc ListBuckets (ListBucketsRequest) returns (ListBucketsResponse) {}
+  rpc MakeBucket (MakeBucketRequest) returns (MakeBucketResponse) {}
 }
 
 message HelloRequest {
@@ -170,5 +174,22 @@ message WipeCloudRequest {}
 
 message WipeCloudResponse {
   bool isStarting = 1;
+  string ErrMsg = 2;
+}
+
+message ListBucketsRequest {}
+
+message ListBucketsResponse {
+  repeated string Buckets = 1;
+  string ErrMsg = 2;
+}
+
+message MakeBucketRequest {
+  string BucketName = 1;
+  string Region = 2;
+}
+
+message MakeBucketResponse {
+  bool DidSucceed = 1;
   string ErrMsg = 2;
 }

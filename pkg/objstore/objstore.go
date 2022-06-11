@@ -237,6 +237,14 @@ func (os *ObjStore) ListBuckets(ctx context.Context) ([]string, error) {
 	return ret, nil
 }
 
+func (os *ObjStore) MakeBucket(ctx context.Context, bucketName string, region string) error {
+	err := os.minioClient.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: region, ObjectLocking: false})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // Computes the expected ETag for the entire buffer buf
 // Ref: https://stackoverflow.com/questions/12186993/what-is-the-algorithm-to-compute-the-amazon-s3-etag-for-a-file-larger-than-5gb#answer-19896823
 func ComputeETag(buf []byte) string {
