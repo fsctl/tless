@@ -6,9 +6,14 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/aybabtme/uniplot/histogram"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
 
 	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/util"
@@ -43,6 +48,11 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 
 	pendingDirEntryInserts := make([]dirEntryInsert, 0, 10000)
 
+	// For sizes histogram, count, mean and median
+	fileSizesMb := make([]float64, 0)
+	var filesCnt int64 = 0
+	var dirsCnt int64 = 0
+
 	err := filepath.WalkDir(rootPath, func(path string, dirent fs.DirEntry, err error) error {
 		if err != nil {
 			log.Printf("error: WalkDirFunc: %v", err)
@@ -58,16 +68,25 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 
 		mtimeUnix, err := getMTimeUnix(dirent)
 		if err != nil {
-			log.Printf("Error: getMTimeUnix: %v", err)
+			log.Printf("error: getMTimeUnix: %v", err)
 			return nil // log the error and skip this entry
 		}
 
-		// // Debugging only
-		// if dirent.IsDir() {
-		// 	fmt.Printf("DIR> %s (mtime=%v)\n", rootDirName+"/"+relPath, mtimeUnix)
-		// } else {
-		// 	fmt.Printf("FILE> %s (mtime=%v)\n", rootDirName+"/"+relPath, mtimeUnix)
-		// }
+		// For summary statistics only
+		finfo, err := dirent.Info()
+		if err == nil {
+			size := finfo.Size()
+			sizeMb := float64(size) / float64(1024*1024)
+			fileSizesMb = append(fileSizesMb, sizeMb)
+		}
+		if dirent.IsDir() {
+			dirsCnt += 1
+			//fmt.Printf("DIR> %s (mtime=%v)\n", rootDirName+"/"+relPath, mtimeUnix)
+		} else {
+			filesCnt += 1
+			//fmt.Printf("FILE> %s (mtime=%v)\n", rootDirName+"/"+relPath, mtimeUnix)
+		}
+		// end - summary stats
 
 		// Remove path from knownPaths so that at the end
 		// knownPaths will be a list of all files recently deleted
@@ -130,6 +149,19 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 		}
 		backupIdsQueue.Ids = append(backupIdsQueue.Ids, id)
 	}
+
+	// print summary statistics
+	p := message.NewPrinter(language.English)
+	s := p.Sprintf("%d files, %d dirs", filesCnt, dirsCnt)
+	log.Println("~~~ path traversal summary stats ~~~")
+	log.Println(s)
+	log.Printf("\nHistogram of size in Mb (%d files):\n", len(fileSizesMb))
+	hist := histogram.Hist(30, fileSizesMb)
+	if err := histogram.Fprint(os.Stdout, hist, histogram.Linear(80)); err != nil {
+		log.Println("error: uniplot.Fprint: ", err)
+	}
+	log.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+	// end - summary statistics
 
 	return nil
 }
