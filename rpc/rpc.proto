@@ -37,6 +37,7 @@ service DaemonCtl {
   // Bucket operations
   rpc ListBuckets (ListBucketsRequest) returns (ListBucketsResponse) {}
   rpc MakeBucket (MakeBucketRequest) returns (MakeBucketResponse) {}
+  rpc GetBucketSalt (GetBucketSaltRequest) returns (GetBucketSaltResponse) {}
 }
 
 message HelloRequest {
@@ -192,4 +193,20 @@ message MakeBucketRequest {
 message MakeBucketResponse {
   bool DidSucceed = 1;
   string ErrMsg = 2;
+}
+
+message GetBucketSaltRequest {
+  string BucketName = 1;
+}
+
+message GetBucketSaltResponse {
+  enum GetBucketSaltResult {
+    SUCCESS = 0;
+    ERR_NO_SALT = 1;
+    ERR_MULTIPLE_SALTS = 2;
+    ERR_OTHER = 3;
+  }
+  GetBucketSaltResult Result = 1;
+  string ErrMsg = 2;
+  string Salt = 3;
 }

@@ -45,6 +45,7 @@ type DaemonCtlClient interface {
 	// Bucket operations
 	ListBuckets(ctx context.Context, in *ListBucketsRequest, opts ...grpc.CallOption) (*ListBucketsResponse, error)
 	MakeBucket(ctx context.Context, in *MakeBucketRequest, opts ...grpc.CallOption) (*MakeBucketResponse, error)
+	GetBucketSalt(ctx context.Context, in *GetBucketSaltRequest, opts ...grpc.CallOption) (*GetBucketSaltResponse, error)
 }
 
 type daemonCtlClient struct {
@@ -220,6 +221,15 @@ func (c *daemonCtlClient) MakeBucket(ctx context.Context, in *MakeBucketRequest,
 	return out, nil
 }
 
+func (c *daemonCtlClient) GetBucketSalt(ctx context.Context, in *GetBucketSaltRequest, opts ...grpc.CallOption) (*GetBucketSaltResponse, error) {
+	out := new(GetBucketSaltResponse)
+	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/GetBucketSalt", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonCtlServer is the server API for DaemonCtl service.
 // All implementations must embed UnimplementedDaemonCtlServer
 // for forward compatibility
@@ -247,6 +257,7 @@ type DaemonCtlServer interface {
 	// Bucket operations
 	ListBuckets(context.Context, *ListBucketsRequest) (*ListBucketsResponse, error)
 	MakeBucket(context.Context, *MakeBucketRequest) (*MakeBucketResponse, error)
+	GetBucketSalt(context.Context, *GetBucketSaltRequest) (*GetBucketSaltResponse, error)
 	mustEmbedUnimplementedDaemonCtlServer()
 }
 
@@ -292,6 +303,9 @@ func (UnimplementedDaemonCtlServer) ListBuckets(context.Context, *ListBucketsReq
 }
 func (UnimplementedDaemonCtlServer) MakeBucket(context.Context, *MakeBucketRequest) (*MakeBucketResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MakeBucket not implemented")
+}
+func (UnimplementedDaemonCtlServer) GetBucketSalt(context.Context, *GetBucketSaltRequest) (*GetBucketSaltResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetBucketSalt not implemented")
 }
 func (UnimplementedDaemonCtlServer) mustEmbedUnimplementedDaemonCtlServer() {}
 
@@ -551,6 +565,24 @@ func _DaemonCtl_MakeBucket_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonCtl_GetBucketSalt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBucketSaltRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonCtlServer).GetBucketSalt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/rpc.DaemonCtl/GetBucketSalt",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonCtlServer).GetBucketSalt(ctx, req.(*GetBucketSaltRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonCtl_ServiceDesc is the grpc.ServiceDesc for DaemonCtl service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -601,6 +633,10 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MakeBucket",
 			Handler:    _DaemonCtl_MakeBucket_Handler,
+		},
+		{
+			MethodName: "GetBucketSalt",
+			Handler:    _DaemonCtl_GetBucketSalt_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
