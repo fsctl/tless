@@ -221,9 +221,10 @@ message CheckBucketSaltPasswordRequest {
 message CheckBucketSaltPasswordResponse {
   enum CheckBucketSaltPasswordResult {
     SUCCESS = 0;
-    ERR_SALT_WRONG = 1;
-    ERR_PASSWORD_WRONG = 2;
-    ERR_OTHER = 3;
+    ERR_NO_SALT = 1;
+    ERR_SALT_WRONG = 2;
+    ERR_PASSWORD_WRONG = 3;
+    ERR_OTHER = 4;
   }
   CheckBucketSaltPasswordResult Result = 1;
   string ErrMsg = 2;

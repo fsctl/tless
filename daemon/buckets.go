@@ -185,6 +185,8 @@ func (s *server) GetBucketSalt(ctx context.Context, in *pb.GetBucketSaltRequest)
 
 // Callback for rpc.DaemonCtlServer.CheckBucketSaltPassword requests
 func (s *server) CheckBucketSaltPassword(ctx context.Context, in *pb.CheckBucketSaltPasswordRequest) (*pb.CheckBucketSaltPasswordResponse, error) {
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
+
 	log.Printf(">> GOT COMMAND: CheckBucketSaltPassword (%s)", in.GetBucketName())
 	defer log.Println(">> COMPLETED COMMAND: CheckBucketSaltPassword")
 
@@ -207,6 +209,22 @@ func (s *server) CheckBucketSaltPassword(ctx context.Context, in *pb.CheckBucket
 	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
+
+	// Check if a SALT-xxxx file exists at all
+	m, err := objst.GetObjList(ctx, in.GetBucketName(), "SALT-", vlog)
+	if err != nil {
+		log.Println("error: GetBucketSalt: GetObjList failed: ", err)
+		return &pb.CheckBucketSaltPasswordResponse{
+			Result: pb.CheckBucketSaltPasswordResponse_ERR_OTHER,
+			ErrMsg: err.Error(),
+		}, nil
+	}
+	if len(m) != 1 {
+		return &pb.CheckBucketSaltPasswordResponse{
+			Result: pb.CheckBucketSaltPasswordResponse_ERR_NO_SALT,
+			ErrMsg: "",
+		}, nil
+	}
 
 	// Try to fetch "SALT-" + input salt file
 	saltObjName := "SALT-" + in.GetSalt()
