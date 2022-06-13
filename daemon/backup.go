@@ -365,6 +365,19 @@ func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 		}
 		if isJournalComplete {
 			vlog.Printf("Finished the journal (re)play")
+			vlog.Printf("Deleting all journal rows")
+			globalsLock.Lock()
+			err = db.CompleteBackupJournal()
+			globalsLock.Unlock()
+			if err != nil {
+				if errors.Is(err, database.ErrJournalHasUnfinishedTasks) {
+					log.Println("error: tried to complete journal while it still had unfinished tasks")
+					continue
+				} else {
+					log.Println("error: db.CompleteBackupJournal() failed: ", err)
+					continue
+				}
+			}
 			return
 		} else {
 			// Update the percentage on gStatus based on where we are now

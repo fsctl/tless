@@ -27,6 +27,10 @@ const (
 var (
 	// ErrNoWork is returned by ClaimNextBackupJournalTask() when there are no unstarted tasks left
 	ErrNoWork = errors.New("queue: no work available")
+
+	// ErrJournalHasUnfinishedTasks is returned by CompleteBackupJournal() if you try to call that
+	// function when the journal is not 100% Finished tasks
+	ErrJournalHasUnfinishedTasks = errors.New("journal: cannot wipe out journal because it has unfinished items")
 )
 
 type InsertBackupJournalStmt struct {
@@ -154,7 +158,7 @@ func (db *DB) selectNextBackupJournalCandidateTask() (id int64, dirEntId int64, 
 }
 
 // Marks backupJournalTask as Finished.  If this was the last task that was not yet complete,
-// deletes all rows from backup_journal and returns true for isJournalComplete.
+// returns true for isJournalComplete.
 func (db *DB) CompleteBackupJournalTask(backupJournalTask *BackupJournalTask) (isJournalComplete bool, err error) {
 	// Mark this task as done
 	stmt, err := db.dbConn.Prepare("UPDATE backup_journal SET status = ? WHERE id = ?")
@@ -170,7 +174,7 @@ func (db *DB) CompleteBackupJournalTask(backupJournalTask *BackupJournalTask) (i
 		return false, err
 	}
 
-	// Get count of finished and total. If all tasks are finished, delete all rows and return isJournalComplete==true
+	// Get count of finished and total. If all tasks are finished, return true for isJournalComplete==true
 	totalCount, err := db.getCountTotalBackupJournal()
 	if err != nil {
 		return false, err
@@ -180,14 +184,37 @@ func (db *DB) CompleteBackupJournalTask(backupJournalTask *BackupJournalTask) (i
 		return false, err
 	}
 	if finishedCount >= totalCount {
-		if err = db.deleteAllRowsBackupJournal(); err != nil {
-			log.Printf("Error: CompleteBackupJournalTask: %v", err)
-			return true, err
-		} else {
-			return true, nil
-		}
+		return true, nil
+	} else {
+		return false, nil
 	}
-	return false, nil
+}
+
+// Double-checks that all journal items are complete and if so then deletes all journal rows.
+func (db *DB) CompleteBackupJournal() error {
+	// Get count of finished and total. Make sure all tasks are finished.
+	totalCount, err := db.getCountTotalBackupJournal()
+	if err != nil {
+		return err
+	}
+	finishedCount, err := db.getCountFinishedBackupJournal()
+	if err != nil {
+		return err
+	}
+
+	// delete all rows or return ErrJournalHasUnfinishedTasks if a mistake was made in calling
+	// this function
+	if finishedCount >= totalCount {
+		if err = db.deleteAllRowsBackupJournal(); err != nil {
+			log.Printf("error: CompleteBackupJournal: %v", err)
+			return err
+		} else {
+			return nil
+		}
+	} else {
+		log.Printf("error: CompleteBackupJournal: cannot complete the journal because it still has unfinished tasks")
+		return ErrJournalHasUnfinishedTasks
+	}
 }
 
 // Call this function when finishing an incomplete backup journal on startup. It rolls all the
