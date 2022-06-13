@@ -46,6 +46,7 @@ type DaemonCtlClient interface {
 	ListBuckets(ctx context.Context, in *ListBucketsRequest, opts ...grpc.CallOption) (*ListBucketsResponse, error)
 	MakeBucket(ctx context.Context, in *MakeBucketRequest, opts ...grpc.CallOption) (*MakeBucketResponse, error)
 	GetBucketSalt(ctx context.Context, in *GetBucketSaltRequest, opts ...grpc.CallOption) (*GetBucketSaltResponse, error)
+	CheckBucketSaltPassword(ctx context.Context, in *CheckBucketSaltPasswordRequest, opts ...grpc.CallOption) (*CheckBucketSaltPasswordResponse, error)
 }
 
 type daemonCtlClient struct {
@@ -230,6 +231,15 @@ func (c *daemonCtlClient) GetBucketSalt(ctx context.Context, in *GetBucketSaltRe
 	return out, nil
 }
 
+func (c *daemonCtlClient) CheckBucketSaltPassword(ctx context.Context, in *CheckBucketSaltPasswordRequest, opts ...grpc.CallOption) (*CheckBucketSaltPasswordResponse, error) {
+	out := new(CheckBucketSaltPasswordResponse)
+	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/CheckBucketSaltPassword", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonCtlServer is the server API for DaemonCtl service.
 // All implementations must embed UnimplementedDaemonCtlServer
 // for forward compatibility
@@ -258,6 +268,7 @@ type DaemonCtlServer interface {
 	ListBuckets(context.Context, *ListBucketsRequest) (*ListBucketsResponse, error)
 	MakeBucket(context.Context, *MakeBucketRequest) (*MakeBucketResponse, error)
 	GetBucketSalt(context.Context, *GetBucketSaltRequest) (*GetBucketSaltResponse, error)
+	CheckBucketSaltPassword(context.Context, *CheckBucketSaltPasswordRequest) (*CheckBucketSaltPasswordResponse, error)
 	mustEmbedUnimplementedDaemonCtlServer()
 }
 
@@ -306,6 +317,9 @@ func (UnimplementedDaemonCtlServer) MakeBucket(context.Context, *MakeBucketReque
 }
 func (UnimplementedDaemonCtlServer) GetBucketSalt(context.Context, *GetBucketSaltRequest) (*GetBucketSaltResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBucketSalt not implemented")
+}
+func (UnimplementedDaemonCtlServer) CheckBucketSaltPassword(context.Context, *CheckBucketSaltPasswordRequest) (*CheckBucketSaltPasswordResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CheckBucketSaltPassword not implemented")
 }
 func (UnimplementedDaemonCtlServer) mustEmbedUnimplementedDaemonCtlServer() {}
 
@@ -583,6 +597,24 @@ func _DaemonCtl_GetBucketSalt_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonCtl_CheckBucketSaltPassword_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckBucketSaltPasswordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonCtlServer).CheckBucketSaltPassword(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/rpc.DaemonCtl/CheckBucketSaltPassword",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonCtlServer).CheckBucketSaltPassword(ctx, req.(*CheckBucketSaltPasswordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonCtl_ServiceDesc is the grpc.ServiceDesc for DaemonCtl service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -637,6 +669,10 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetBucketSalt",
 			Handler:    _DaemonCtl_GetBucketSalt_Handler,
+		},
+		{
+			MethodName: "CheckBucketSaltPassword",
+			Handler:    _DaemonCtl_CheckBucketSaltPassword_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

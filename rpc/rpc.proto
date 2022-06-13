@@ -38,6 +38,7 @@ service DaemonCtl {
   rpc ListBuckets (ListBucketsRequest) returns (ListBucketsResponse) {}
   rpc MakeBucket (MakeBucketRequest) returns (MakeBucketResponse) {}
   rpc GetBucketSalt (GetBucketSaltRequest) returns (GetBucketSaltResponse) {}
+  rpc CheckBucketSaltPassword (CheckBucketSaltPasswordRequest) returns (CheckBucketSaltPasswordResponse) {}
 }
 
 message HelloRequest {
@@ -209,4 +210,21 @@ message GetBucketSaltResponse {
   GetBucketSaltResult Result = 1;
   string ErrMsg = 2;
   string Salt = 3;
+}
+
+message CheckBucketSaltPasswordRequest {
+  string BucketName = 1;
+  string Salt = 2;
+  string Password = 3;
+}
+
+message CheckBucketSaltPasswordResponse {
+  enum CheckBucketSaltPasswordResult {
+    SUCCESS = 0;
+    ERR_SALT_WRONG = 1;
+    ERR_PASSWORD_WRONG = 2;
+    ERR_OTHER = 3;
+  }
+  CheckBucketSaltPasswordResult Result = 1;
+  string ErrMsg = 2;
 }

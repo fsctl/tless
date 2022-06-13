@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
@@ -88,7 +89,7 @@ func (s *server) MakeBucket(ctx context.Context, in *pb.MakeBucketRequest) (*pb.
 	}, nil
 }
 
-// Callback for rpc.DaemonCtlServer.ListBuckets requests
+// Callback for rpc.DaemonCtlServer.GetBucketSalt requests
 func (s *server) GetBucketSalt(ctx context.Context, in *pb.GetBucketSaltRequest) (*pb.GetBucketSaltResponse, error) {
 	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
@@ -179,5 +180,68 @@ func (s *server) GetBucketSalt(ctx context.Context, in *pb.GetBucketSaltRequest)
 		Result: pb.GetBucketSaltResponse_ERR_OTHER,
 		ErrMsg: fmt.Sprintf("unknown error trying to read salt from bucket '%s'", in.GetBucketName()),
 		Salt:   "",
+	}, nil
+}
+
+// Callback for rpc.DaemonCtlServer.CheckBucketSaltPassword requests
+func (s *server) CheckBucketSaltPassword(ctx context.Context, in *pb.CheckBucketSaltPasswordRequest) (*pb.CheckBucketSaltPasswordResponse, error) {
+	log.Printf(">> GOT COMMAND: CheckBucketSaltPassword (%s)", in.GetBucketName())
+	defer log.Println(">> COMPLETED COMMAND: CheckBucketSaltPassword")
+
+	// Make sure the global config we need is initialized
+	gGlobalsLock.Lock()
+	isGlobalConfigReady := gCfg != nil
+	gGlobalsLock.Unlock()
+	if !isGlobalConfigReady {
+		log.Println("error: CheckBucketSaltPassword: global config not yet initialized")
+		return &pb.CheckBucketSaltPasswordResponse{
+			Result: pb.CheckBucketSaltPasswordResponse_ERR_OTHER,
+			ErrMsg: "global config not yet initialized",
+		}, nil
+	}
+
+	gGlobalsLock.Lock()
+	endpoint := gCfg.Endpoint
+	accessKey := gCfg.AccessKeyId
+	secretKey := gCfg.SecretAccessKey
+	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
+	gGlobalsLock.Unlock()
+	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
+
+	// Try to fetch "SALT-" + input salt file
+	saltObjName := "SALT-" + in.GetSalt()
+	saltFileContents, err := objst.DownloadObjToBuffer(ctx, in.GetBucketName(), saltObjName)
+	if err != nil {
+		log.Printf("error: CheckBucketSaltPassword: could not download '%s': %v", saltObjName, err)
+		return &pb.CheckBucketSaltPasswordResponse{
+			Result: pb.CheckBucketSaltPasswordResponse_ERR_SALT_WRONG,
+			ErrMsg: err.Error(),
+		}, nil
+	}
+
+	// Derive the key
+	key, err := cryptography.DeriveKey(in.GetSalt(), in.GetPassword())
+	if err != nil {
+		log.Println("error: CheckBucketSaltPassword: DeriveKey failed: ", err)
+		return &pb.CheckBucketSaltPasswordResponse{
+			Result: pb.CheckBucketSaltPasswordResponse_ERR_OTHER,
+			ErrMsg: err.Error(),
+		}, nil
+	}
+
+	// Try to decrypt the salt file just downloaded
+	_, err = cryptography.DecryptBuffer(key, saltFileContents)
+	if err != nil {
+		log.Println("error: CheckBucketSaltPassword: DecryptBuffer failed: ", err)
+		return &pb.CheckBucketSaltPasswordResponse{
+			Result: pb.CheckBucketSaltPasswordResponse_ERR_PASSWORD_WRONG,
+			ErrMsg: err.Error(),
+		}, nil
+	}
+
+	// Otherwise, we have the right Bucket/Salt/Password combination
+	return &pb.CheckBucketSaltPasswordResponse{
+		Result: pb.CheckBucketSaltPasswordResponse_SUCCESS,
+		ErrMsg: "",
 	}, nil
 }
