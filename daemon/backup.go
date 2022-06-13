@@ -147,7 +147,28 @@ func Backup(vlog *util.VLog, completion func()) {
 		}
 		for _, dirEntId := range backupIdsQueue.Ids {
 			gGlobalsLock.Lock()
-			insertBJTxn.InsertBackupJournalRow(int64(dirEntId), database.Unstarted)
+			insertBJTxn.InsertBackupJournalRow(int64(dirEntId), database.Unstarted, database.Updated)
+			gGlobalsLock.Unlock()
+		}
+		for deletedPath := range prevPaths {
+			// deletedPath is backupDirName/deletedRelPath.  Make it just deletedRelPath
+			deletedPath = strings.TrimPrefix(deletedPath, backupDirName)
+			deletedPath = strings.TrimPrefix(deletedPath, "/")
+
+			gGlobalsLock.Lock()
+			isFound, _, dirEntId, err := gDb.HasDirEnt(backupDirName, deletedPath)
+			gGlobalsLock.Unlock()
+			if err != nil {
+				log.Printf("error: while trying to find '%s'/'%s' in dirents: %v", backupDirName, deletedPath, err)
+				continue
+			}
+			if !isFound {
+				log.Printf("error: could not find '%s'/'%s' in dirents: %v", backupDirName, deletedPath, err)
+				continue
+			}
+			vlog.Printf("Found deleted file '%s'/'%s' (dirents id = %d)", backupDirName, deletedPath, dirEntId)
+			gGlobalsLock.Lock()
+			insertBJTxn.InsertBackupJournalRow(int64(dirEntId), database.Unstarted, database.Deleted)
 			gGlobalsLock.Unlock()
 		}
 		gGlobalsLock.Lock()
@@ -179,13 +200,6 @@ func Backup(vlog *util.VLog, completion func()) {
 		gGlobalsLock.Lock()
 		gStatus.percentage = float32(percentDone)
 		gGlobalsLock.Unlock()
-
-		// Any remaining prevPaths represent deleted files, so upload keys to mark them deleted
-		// and remove from dirents
-		if err = createDeletedPathsKeysAndPurgeFromDb(ctx, objst, bucket, gDb, &gGlobalsLock, encKey, backupDirName, snapshotName, prevPaths); err != nil {
-			log.Println("error: failed creating deleted paths keys")
-			goto done
-		}
 
 		breakFromLoop := playBackupJournal(ctx, encKey, gDb, &gGlobalsLock, backupDirPath, snapshotName, objst, bucket, vlog)
 		if breakFromLoop {
@@ -321,11 +335,19 @@ func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 		if err != nil {
 			log.Printf("error: db.GetDirEntPaths(): could not get dirent id '%d'\n", bjt.DirEntId)
 		}
-		vlog.Printf("Backing up '%s/%s'", rootDirName, relPath)
 
-		if err := backup.Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, false); err != nil {
-			log.Printf("error: backup.Backup(): %v", err)
-			continue
+		if bjt.ChangeType == database.Updated {
+			vlog.Printf("Backing up '%s/%s'", rootDirName, relPath)
+			if err := backup.Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, false); err != nil {
+				log.Printf("error: backup.Backup(): %v", err)
+				continue
+			}
+		} else if bjt.ChangeType == database.Deleted {
+			vlog.Printf("Deleting '%s/%s'", rootDirName, relPath)
+			if err = createDeletedPathKeyAndPurgeFromDb(ctx, objst, bucket, gDb, &gGlobalsLock, key, rootDirName, snapshotName, relPath); err != nil {
+				log.Printf("error: failed on deleting path '%s': %v", relPath, err)
+				continue
+			}
 		}
 
 		globalsLock.Lock()
@@ -408,7 +430,7 @@ func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock 
 	// (When we return, status will be set back to Idle)
 }
 
-func createDeletedPathsKeysAndPurgeFromDb(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, dbLock *sync.Mutex, key []byte, backupDirName string, snapshotName string, deletedPaths map[string]int) error {
+func createDeletedPathKeyAndPurgeFromDb(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, dbLock *sync.Mutex, key []byte, backupDirName string, snapshotName string, deletedPath string) error {
 	// get the encrypted representation of backupDirName and snapshotName
 	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotName)
 	if err != nil {
@@ -421,39 +443,32 @@ func createDeletedPathsKeysAndPurgeFromDb(ctx context.Context, objst *objstore.O
 		return err
 	}
 
-	// iterate over the deleted paths
-	for deletedPath := range deletedPaths {
-		// deletedPath is backupDirName/deletedRelPath.  Make it just deletedRelPath
-		deletedPath = strings.TrimPrefix(deletedPath, backupDirName)
-		deletedPath = strings.TrimPrefix(deletedPath, "/")
+	// encrypt the deleted path name
+	encryptedDeletedRelPath, err := cryptography.EncryptFilename(key, deletedPath)
+	if err != nil {
+		log.Printf("error: createDeletedPathsKeys(): could not encrypt deleted rel path ('%s'): %v\n", deletedPath, err)
+		return err
+	}
 
-		// encrypt the deleted path name
-		encryptedDeletedRelPath, err := cryptography.EncryptFilename(key, deletedPath)
-		if err != nil {
-			log.Printf("error: createDeletedPathsKeys(): could not encrypt deleted rel path ('%s'): %v\n", deletedPath, err)
-			return err
-		}
+	// Insert a slash in the middle of encrypted relPath b/c server won't
+	// allow path components > 255 characters
+	encryptedDeletedRelPath = backup.InsertSlashIntoEncRelPath(encryptedDeletedRelPath)
 
-		// Insert a slash in the middle of encrypted relPath b/c server won't
-		// allow path components > 255 characters
-		encryptedDeletedRelPath = backup.InsertSlashIntoEncRelPath(encryptedDeletedRelPath)
+	// create an object in this snapshot like encBackupDirName/encSnapshotName/##encRelPath
+	// where ## prefix indicates rel path was deleted since prev snapshot
+	objName := encryptedBackupDirName + "/" + encryptedSnapshotName + "/##" + encryptedDeletedRelPath
+	if err = objst.UploadObjFromBuffer(ctx, bucket, objName, make([]byte, 0), objstore.ComputeETag([]byte{})); err != nil {
+		log.Printf("error: createDeletedPathsKeys(): could not UploadObjFromBuffer ('%s'): %v\n", objName, err)
+		return err
+	}
 
-		// create an object in this snapshot like encBackupDirName/encSnapshotName/##encRelPath
-		// where ## prefix indicates rel path was deleted since prev snapshot
-		objName := encryptedBackupDirName + "/" + encryptedSnapshotName + "/##" + encryptedDeletedRelPath
-		if err = objst.UploadObjFromBuffer(ctx, bucket, objName, make([]byte, 0), objstore.ComputeETag([]byte{})); err != nil {
-			log.Printf("error: createDeletedPathsKeys(): could not UploadObjFromBuffer ('%s'): %v\n", objName, err)
-			return err
-		}
-
-		// Delete dirents row for backupDirName/relPath
-		dbLock.Lock()
-		err = db.DeleteDirEntByPath(backupDirName, deletedPath)
-		dbLock.Unlock()
-		if err != nil {
-			log.Printf("DeleteDirEntByPath failed: %v", err)
-			return err
-		}
+	// Delete dirents row for backupDirName/relPath
+	dbLock.Lock()
+	err = db.DeleteDirEntByPath(backupDirName, deletedPath)
+	dbLock.Unlock()
+	if err != nil {
+		log.Printf("DeleteDirEntByPath failed: %v", err)
+		return err
 	}
 
 	return nil

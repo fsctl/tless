@@ -16,6 +16,14 @@ const (
 	Finished   JournalStatus = 3
 )
 
+// The type of change the rel path underwent that we are now going to backup (updated file or deleted file)
+type ChangeType int
+
+const (
+	Updated ChangeType = 1
+	Deleted ChangeType = 2
+)
+
 var (
 	// ErrNoWork is returned by ClaimNextBackupJournalTask() when there are no unstarted tasks left
 	ErrNoWork = errors.New("queue: no work available")
@@ -55,7 +63,7 @@ func (db *DB) NewInsertBackupJournalStmt(backupDirPath string) (*InsertBackupJou
 		return nil, err
 	}
 
-	stmt, err := tx.Prepare("INSERT INTO backup_journal (backup_info_id, dirent_id, status) values (?, ?, ?)")
+	stmt, err := tx.Prepare("INSERT INTO backup_journal (backup_info_id, dirent_id, status, change_type) values (?, ?, ?, ?)")
 	if err != nil {
 		log.Printf("Error: NewInsertBackupJournalStmt: %v", err)
 		return nil, err
@@ -71,8 +79,8 @@ func (ibst *InsertBackupJournalStmt) Close() {
 }
 
 // Inserts a single backup_journal row as part of larger transaction
-func (ibst *InsertBackupJournalStmt) InsertBackupJournalRow(dirEntId int64, status JournalStatus) error {
-	_, err := ibst.stmt.Exec(ibst.backupsInfoId, dirEntId, status)
+func (ibst *InsertBackupJournalStmt) InsertBackupJournalRow(dirEntId int64, status JournalStatus, changeType ChangeType) error {
+	_, err := ibst.stmt.Exec(ibst.backupsInfoId, dirEntId, status, changeType)
 	if err != nil {
 		log.Printf("Error: InsertBackupJournalRow: %v", err)
 		return err
@@ -82,13 +90,14 @@ func (ibst *InsertBackupJournalStmt) InsertBackupJournalRow(dirEntId int64, stat
 }
 
 type BackupJournalTask struct {
-	id       int64
-	DirEntId int64
+	id         int64
+	DirEntId   int64
+	ChangeType ChangeType
 }
 
 func (db *DB) ClaimNextBackupJournalTask() (backupJournalTask *BackupJournalTask, err error) {
 	for {
-		id, dirEntId, err := db.selectNextBackupJournalCandidateTask()
+		id, dirEntId, changeType, err := db.selectNextBackupJournalCandidateTask()
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNoWork
 		} else if err != nil {
@@ -111,8 +120,9 @@ func (db *DB) ClaimNextBackupJournalTask() (backupJournalTask *BackupJournalTask
 		if rowsAffected, err := result.RowsAffected(); err == nil {
 			if rowsAffected == 1 {
 				return &BackupJournalTask{
-					id:       id,
-					DirEntId: dirEntId,
+					id:         id,
+					DirEntId:   dirEntId,
+					ChangeType: changeType,
 				}, nil
 			} else {
 				continue
@@ -124,23 +134,23 @@ func (db *DB) ClaimNextBackupJournalTask() (backupJournalTask *BackupJournalTask
 	}
 }
 
-func (db *DB) selectNextBackupJournalCandidateTask() (id int64, dirEntId int64, err error) {
-	stmt, err := db.dbConn.Prepare("SELECT id, dirent_id FROM backup_journal WHERE status = ? LIMIT 1")
+func (db *DB) selectNextBackupJournalCandidateTask() (id int64, dirEntId int64, changeType ChangeType, err error) {
+	stmt, err := db.dbConn.Prepare("SELECT id, dirent_id, change_type FROM backup_journal WHERE status = ? LIMIT 1")
 	if err != nil {
 		log.Printf("Error: selectNextBackupJournalCandidateTask: %v", err)
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	defer stmt.Close()
 
-	err = stmt.QueryRow(Unstarted).Scan(&id, &dirEntId)
+	err = stmt.QueryRow(Unstarted).Scan(&id, &dirEntId, &changeType)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, 0, err
+		return 0, 0, 0, err
 	} else if err != nil {
 		log.Printf("Error: selectNextBackupJournalCandidateTask: %v", err)
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 
-	return id, dirEntId, nil
+	return id, dirEntId, changeType, nil
 }
 
 // Marks backupJournalTask as Finished.  If this was the last task that was not yet complete,

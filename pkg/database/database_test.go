@@ -159,7 +159,7 @@ func TestBackupJournalFunctions(t *testing.T) {
 	insertBJTxn, err := db.NewInsertBackupJournalStmt("/dir/subdir")
 	assert.NoError(t, err)
 	for i := 0; i < 32; i++ {
-		insertBJTxn.InsertBackupJournalRow(int64(i), Unstarted)
+		insertBJTxn.InsertBackupJournalRow(int64(i), Unstarted, Updated)
 	}
 	insertBJTxn.Close()
 

@@ -106,10 +106,12 @@ func (db *DB) createTables() error {
 	create table backup_journal (
 		id integer primary key autoincrement,
 		backup_info_id integer NOT NULL, /* key into backups_info */
-		dirent_id integer,            /* key into dirents */
-		status integer                /* 1=Unstarted */
-							          /* 2=InProgress */
-							          /* 3=Finished */
+		dirent_id integer,               /* key into dirents */
+		change_type integer,             /* 1=Updated (so back it up) */
+		                                 /* 2=Deleted (so mark it deleted) */
+		status integer                   /* 1=Unstarted */
+							             /* 2=InProgress */
+							             /* 3=Finished */
 	);
 	create index idx_status ON backup_journal (status);
 	create index idx_binfo_id ON backup_journal (backup_info_id);
