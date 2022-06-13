@@ -19,8 +19,9 @@ const (
 func timerLoop(signals chan os.Signal, server *server) {
 	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
+	// Start the first automatic backup 15 minutes after this loop starts running
 	var (
-		secondsCnt                 int = 0
+		secondsCnt                 int = automaticBackupEveryNSeconds - (15 * 60)
 		lastAutomaticBackupStarted int = 0
 		lastAutomaticPruneStarted  int = 0
 	)
