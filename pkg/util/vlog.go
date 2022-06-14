@@ -18,18 +18,18 @@ func NewVLog(lock *sync.Mutex, checkIfVerboseFunc func() bool) *VLog {
 }
 
 func (v *VLog) Println(x ...any) {
-	v.lock.Lock()
+	LockIf(v.lock)
 	isVerbose := v.isVerboseFunc()
-	v.lock.Unlock()
+	UnlockIf(v.lock)
 	if isVerbose {
 		log.Println(x...)
 	}
 }
 
 func (v *VLog) Printf(format string, x ...any) {
-	v.lock.Lock()
+	LockIf(v.lock)
 	isVerbose := v.isVerboseFunc()
-	v.lock.Unlock()
+	UnlockIf(v.lock)
 	if isVerbose {
 		log.Printf(format, x...)
 	}

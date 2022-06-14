@@ -2,20 +2,13 @@ package daemon
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"log"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/fsctl/tless/pkg/backup"
-	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/database"
-	"github.com/fsctl/tless/pkg/fstraverse"
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/objstorefs"
 	"github.com/fsctl/tless/pkg/snapshots"
@@ -128,82 +121,14 @@ func Backup(vlog *util.VLog, completion func()) {
 		gStatus.msg = backupDirName
 		gGlobalsLock.Unlock()
 
-		// Traverse the filesystem looking for changed directory entries
-		gGlobalsLock.Lock()
-		prevPaths, err := gDb.GetAllKnownPaths(backupDirName)
-		gGlobalsLock.Unlock()
-		if err != nil {
-			log.Printf("Error: cannot get paths list: %v", err)
+		// Traverse the FS for changed files and do the journaled backup
+		breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludePaths, vlog, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress)
+		if fatalError {
 			goto done
 		}
-		var backupIdsQueue fstraverse.BackupIdsQueue
-		fstraverse.Traverse(backupDirPath, prevPaths, gDb, &gGlobalsLock, &backupIdsQueue, excludePaths)
-
-		// Iterate over the queue of dirent id's inserting them into journal
-		gGlobalsLock.Lock()
-		insertBJTxn, err := gDb.NewInsertBackupJournalStmt(backupDirPath)
-		gGlobalsLock.Unlock()
-		if err != nil {
-			log.Printf("Error: could not bulk insert into journal: %v", err)
-			goto done
-		}
-		for _, dirEntId := range backupIdsQueue.Ids {
-			gGlobalsLock.Lock()
-			insertBJTxn.InsertBackupJournalRow(int64(dirEntId), database.Unstarted, database.Updated)
-			gGlobalsLock.Unlock()
-		}
-		for deletedPath := range prevPaths {
-			// deletedPath is backupDirName/deletedRelPath.  Make it just deletedRelPath
-			deletedPath = strings.TrimPrefix(deletedPath, backupDirName)
-			deletedPath = strings.TrimPrefix(deletedPath, "/")
-
-			gGlobalsLock.Lock()
-			isFound, _, dirEntId, err := gDb.HasDirEnt(backupDirName, deletedPath)
-			gGlobalsLock.Unlock()
-			if err != nil {
-				log.Printf("error: while trying to find '%s'/'%s' in dirents: %v", backupDirName, deletedPath, err)
-				continue
-			}
-			if !isFound {
-				log.Printf("error: could not find '%s'/'%s' in dirents: %v", backupDirName, deletedPath, err)
-				continue
-			}
-			vlog.Printf("Found deleted file '%s'/'%s' (dirents id = %d)", backupDirName, deletedPath, dirEntId)
-			gGlobalsLock.Lock()
-			insertBJTxn.InsertBackupJournalRow(int64(dirEntId), database.Unstarted, database.Deleted)
-			gGlobalsLock.Unlock()
-		}
-		gGlobalsLock.Lock()
-		insertBJTxn.Close()
-		gGlobalsLock.Unlock()
-
-		// Get the snapshot name from timestamp in backup_info
-		gGlobalsLock.Lock()
-		_, snapshotUnixtime, err := gDb.GetJournaledBackupInfo()
-		gGlobalsLock.Unlock()
-		if errors.Is(err, sql.ErrNoRows) {
-			// If no rows were just inserted into journal, then nothing to backup for this snapshot
-			vlog.Printf("nothing inserted in journal => nothing to back up")
+		if continueLoop {
 			continue
-		} else if err != nil {
-			log.Printf("error: gDb.GetJournaledBackupInfo(): %v", err)
-			goto done
 		}
-		snapshotName := time.Unix(snapshotUnixtime, 0).UTC().Format("2006-01-02_15.04.05")
-
-		// Set the initial progress bar
-		gGlobalsLock.Lock()
-		finished, total, err := gDb.GetBackupJournalCounts()
-		gGlobalsLock.Unlock()
-		if err != nil {
-			log.Printf("error: db.GetBackupJournalCounts: %v", err)
-		}
-		percentDone := (float32(finished)/float32(total))*float32(100) + 0.1
-		gGlobalsLock.Lock()
-		gStatus.percentage = float32(percentDone)
-		gGlobalsLock.Unlock()
-
-		breakFromLoop := playBackupJournal(ctx, encKey, gDb, &gGlobalsLock, backupDirPath, snapshotName, objst, bucket, vlog)
 		if breakFromLoop {
 			break
 		}
@@ -215,8 +140,8 @@ func Backup(vlog *util.VLog, completion func()) {
 		time.Sleep(time.Second * 2)
 	}
 
-	// Finally set the status back to Idle since we are done with backup
 done:
+	// On finished, set the status back to Idle
 	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
 	gGlobalsLock.Lock()
 	gStatus.state = Idle
@@ -228,38 +153,6 @@ done:
 func replayBackupJournal() {
 	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
-	// Reset all InProgress -> Unstarted
-	gGlobalsLock.Lock()
-	err := gDb.ResetAllInProgressBackupJournalTasks()
-	gGlobalsLock.Unlock()
-	if err != nil {
-		log.Println("error: gDb.ResetAllInProgressBackupJournalTasks: ", err)
-	}
-
-	// Reconstruct backupDirPath, backupDirName and snapshotName from backup_info table
-	gGlobalsLock.Lock()
-	backupDirPath, snapshotUnixtime, err := gDb.GetJournaledBackupInfo()
-	gGlobalsLock.Unlock()
-	if err != nil {
-		log.Printf("error: gDb.GetJournaledBackupInfo(): %v", err)
-	}
-	backupDirName := filepath.Base(backupDirPath)
-	snapshotName := time.Unix(snapshotUnixtime, 0).UTC().Format("2006-01-02_15.04.05")
-
-	// Set the gStatus for backing up, with correct percentage done to start
-	gGlobalsLock.Lock()
-	finished, total, err := gDb.GetBackupJournalCounts()
-	gGlobalsLock.Unlock()
-	if err != nil {
-		log.Printf("error: db.GetBackupJournalCounts: %v", err)
-	}
-	percentDone := (float32(finished)/float32(total))*float32(100) + 0.1
-	gGlobalsLock.Lock()
-	gStatus.state = BackingUp
-	gStatus.msg = backupDirName
-	gStatus.percentage = percentDone
-	gGlobalsLock.Unlock()
-
 	// Reconstruct obj store handle
 	ctx := context.Background()
 	gGlobalsLock.Lock()
@@ -268,6 +161,7 @@ func replayBackupJournal() {
 	secretKey := gCfg.SecretAccessKey
 	bucket := gCfg.Bucket
 	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
+	db := gDb
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 	if ok, err := objst.IsReachableWithRetries(ctx, 10, bucket, vlog); !ok {
@@ -286,8 +180,8 @@ func replayBackupJournal() {
 	copy(encKey, gKey)
 	gGlobalsLock.Unlock()
 
-	// Roll the journal forward
-	_ = playBackupJournal(ctx, encKey, gDb, &gGlobalsLock, backupDirPath, snapshotName, objst, bucket, vlog)
+	// Replay the journal
+	backup.ReplayBackupJournal(ctx, encKey, objst, bucket, db, &gGlobalsLock, vlog, setReplayInitialProgress, checkAndHandleCancelation, updateBackupProgress)
 
 	// Finally set the status back to Idle since we are done with backup
 	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
@@ -298,125 +192,52 @@ func replayBackupJournal() {
 	gGlobalsLock.Unlock()
 }
 
-func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string, vlog *util.VLog) (breakFromLoop bool) {
-	// By default, don't signal we want to break out of caller's loop over backups
-	breakFromLoop = false
-
-	for {
-		// Sleep this go routine briefly on every iteration of the for loop
-		time.Sleep(time.Millisecond * 50)
-
-		// Has cancelation been requested?
-		globalsLock.Lock()
-		isCancelRequested := gCancelRequested
-		globalsLock.Unlock()
-		if isCancelRequested {
-			cancelBackup(ctx, key, db, globalsLock, backupDirPath, snapshotName, objst, bucket)
-			globalsLock.Lock()
-			gCancelRequested = false
-			globalsLock.Unlock()
-			return true
-		}
-
-		globalsLock.Lock()
-		bjt, err := db.ClaimNextBackupJournalTask()
-		globalsLock.Unlock()
-		if err != nil {
-			if errors.Is(err, database.ErrNoWork) {
-				vlog.Println("playBackupJournal: no work found in journal... done")
-				return
-			} else {
-				log.Println("error: db.ClaimNextBackupJournalTask: ", err)
-				return
-			}
-		}
-
-		globalsLock.Lock()
-		rootDirName, relPath, err := db.GetDirEntPaths(int(bjt.DirEntId))
-		globalsLock.Unlock()
-		if err != nil {
-			log.Printf("error: db.GetDirEntPaths(): could not get dirent id '%d'\n", bjt.DirEntId)
-		}
-
-		crp := objstorefs.CloudRelPath{}
-		if bjt.ChangeType == database.Updated {
-			vlog.Printf("Backing up '%s/%s'", rootDirName, relPath)
-			encryptedRelPath, encryptedChunks, err := backup.Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, false)
-			if err != nil {
-				log.Printf("error: backup.Backup(): %v", err)
-				continue
-			}
-
-			// For JSON serialization into journal
-			crp.DecryptedRelPath = relPath
-			crp.EncryptedRelPathStripped = encryptedRelPath
-			crp.EncryptedChunkNames = encryptedChunks
-			crp.IsDeleted = false
-		} else if bjt.ChangeType == database.Deleted {
-			vlog.Printf("Deleting '%s/%s'", rootDirName, relPath)
-			encryptedRelPath, encryptedChunks, err := createDeletedPathKeyAndPurgeFromDb(ctx, objst, bucket, gDb, &gGlobalsLock, key, rootDirName, snapshotName, relPath)
-			if err != nil {
-				log.Printf("error: failed on deleting path '%s': %v", relPath, err)
-				continue
-			}
-
-			// For JSON serialization into journal
-			crp.DecryptedRelPath = relPath
-			crp.EncryptedRelPathStripped = encryptedRelPath
-			crp.EncryptedChunkNames = encryptedChunks
-			crp.IsDeleted = true
-		}
-
-		globalsLock.Lock()
-		err = db.UpdateLastBackupTime(int(bjt.DirEntId))
-		globalsLock.Unlock()
-		if err != nil {
-			log.Printf("error: db.UpdateLastBackupTime(): %v", err)
-		}
-
-		globalsLock.Lock()
-		isJournalComplete, err := db.CompleteBackupJournalTask(bjt, crp.ToJson())
-		globalsLock.Unlock()
-		if err != nil {
-			log.Printf("error: db.CompleteBackupJournalTask: %v", err)
-		}
-		if isJournalComplete {
-			vlog.Printf("Finished the journal (re)play")
-			err = writeIndexFile(ctx, globalsLock, gDb, objst, bucket, key, filepath.Base(backupDirPath), snapshotName)
-			if err != nil {
-				log.Println("error: couldn't write index file: ", err)
-			}
-			vlog.Printf("Deleting all journal rows")
-			globalsLock.Lock()
-			err = db.CompleteBackupJournal()
-			globalsLock.Unlock()
-			if err != nil {
-				if errors.Is(err, database.ErrJournalHasUnfinishedTasks) {
-					log.Println("error: tried to complete journal while it still had unfinished tasks")
-					continue
-				} else {
-					log.Println("error: db.CompleteBackupJournal() failed: ", err)
-					continue
-				}
-			}
-			return
-		} else {
-			// Update the percentage on gStatus based on where we are now
-			globalsLock.Lock()
-			finished, total, err := db.GetBackupJournalCounts()
-			globalsLock.Unlock()
-			if err != nil {
-				log.Printf("error: db.GetBackupJournalCounts: %v", err)
-			} else {
-				percentDone := (float32(finished)/float32(total))*float32(100) + 0.1
-				globalsLock.Lock()
-				gStatus.percentage = percentDone
-				globalsLock.Unlock()
-				vlog.Printf("%.2f%% done", percentDone)
-			}
-		}
+func checkAndHandleCancelation(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, globalsLock *sync.Mutex, db *database.DB, backupDirPath string, snapshotName string) bool {
+	util.LockIf(globalsLock)
+	isCancelRequested := gCancelRequested
+	util.UnlockIf(globalsLock)
+	if isCancelRequested {
+		cancelBackup(ctx, key, db, globalsLock, backupDirPath, snapshotName, objst, bucket)
+		util.LockIf(globalsLock)
+		gCancelRequested = false
+		util.UnlockIf(globalsLock)
+		return true
 	}
+	return false
 }
+
+func updateBackupProgress(finished int64, total int64, globalsLock *sync.Mutex, vlog *util.VLog) {
+	percentDone := (float32(finished)/float32(total))*float32(100) + 0.1
+	util.LockIf(globalsLock)
+	gStatus.percentage = percentDone
+	util.UnlockIf(globalsLock)
+	vlog.Printf("%.2f%% done", percentDone)
+}
+
+func setBackupInitialProgress(finished int64, total int64, globalsLock *sync.Mutex, vlog *util.VLog) {
+	percentDone := (float32(finished)/float32(total))*float32(100) + 0.1
+	util.LockIf(globalsLock)
+	gStatus.percentage = float32(percentDone)
+	util.UnlockIf(globalsLock)
+}
+
+func setReplayInitialProgress(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog) {
+	percentDone := (float32(finished)/float32(total))*float32(100) + 0.1
+	util.LockIf(globalsLock)
+	gStatus.state = BackingUp
+	gStatus.msg = backupDirName
+	gStatus.percentage = percentDone
+	util.UnlockIf(globalsLock)
+	vlog.Printf("%.2f%% done replay", percentDone)
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////  move to pkg/backups  ////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////  end - move to pkg/backups  ///////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string) {
 	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
@@ -464,55 +285,6 @@ func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock 
 	// (When we return, status will be set back to Idle)
 }
 
-func createDeletedPathKeyAndPurgeFromDb(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, dbLock *sync.Mutex, key []byte, backupDirName string, snapshotName string, deletedPath string) (encryptedDeletedRelPath string, encryptedChunks map[string]int64, err error) {
-	encryptedChunks = make(map[string]int64)
-
-	// get the encrypted representation of backupDirName and snapshotName
-	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotName)
-	if err != nil {
-		log.Printf("error: createDeletedPathKeyAndPurgeFromDb(): could not encrypt snapshot name (%s): %v\n", snapshotName, err)
-		return "", nil, err
-	}
-	encryptedBackupDirName, err := cryptography.EncryptFilename(key, backupDirName)
-	if err != nil {
-		log.Printf("error: createDeletedPathKeyAndPurgeFromDb(): could not encrypt backup dir name (%s): %v\n", backupDirName, err)
-		return "", nil, err
-	}
-
-	// encrypt the deleted path name
-	encryptedDeletedRelPath, err = cryptography.EncryptFilename(key, deletedPath)
-	if err != nil {
-		log.Printf("error: createDeletedPathKeyAndPurgeFromDb(): could not encrypt deleted rel path ('%s'): %v\n", deletedPath, err)
-		return "", nil, err
-	}
-
-	// Insert a slash in the middle of encrypted relPath b/c server won't
-	// allow path components > 255 characters
-	encryptedDeletedRelPath = backup.InsertSlashIntoEncRelPath(encryptedDeletedRelPath)
-
-	// create an object in this snapshot like encBackupDirName/encSnapshotName/##encRelPath
-	// where ## prefix indicates rel path was deleted since prev snapshot
-	objName := encryptedBackupDirName + "/" + encryptedSnapshotName + "/##" + encryptedDeletedRelPath
-	if err = objst.UploadObjFromBuffer(ctx, bucket, objName, make([]byte, 0), objstore.ComputeETag([]byte{})); err != nil {
-		log.Printf("error: createDeletedPathKeyAndPurgeFromDb(): could not UploadObjFromBuffer ('%s'): %v\n", objName, err)
-		return "", nil, err
-	}
-
-	// Save cnrypted chunk map for return value
-	encryptedChunks["##"+encryptedDeletedRelPath] = 0
-
-	// Delete dirents row for backupDirName/relPath
-	dbLock.Lock()
-	err = db.DeleteDirEntByPath(backupDirName, deletedPath)
-	dbLock.Unlock()
-	if err != nil {
-		log.Printf("error: createDeletedPathKeyAndPurgeFromDb: DeleteDirEntByPath failed: %v", err)
-		return "", nil, err
-	}
-
-	return encryptedDeletedRelPath, encryptedChunks, nil
-}
-
 func (s *server) CancelBackup(ctx context.Context, in *pb.CancelRequest) (*pb.CancelResponse, error) {
 	log.Println(">> GOT COMMAND: CancelBackup")
 
@@ -525,83 +297,4 @@ func (s *server) CancelBackup(ctx context.Context, in *pb.CancelRequest) (*pb.Ca
 		IsStarting: true,
 		ErrMsg:     "",
 	}, nil
-}
-
-func writeIndexFile(ctx context.Context, dbLock *sync.Mutex, db *database.DB, objst *objstore.ObjStore, bucket string, key []byte, backupDirName string, snapshotName string) error {
-	// Get encrypted snapshot name and backup dir
-	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotName)
-	if err != nil {
-		log.Printf("error: writeIndexFile(): could not encrypt snapshot name (%s): %v\n", snapshotName, err)
-		return err
-	}
-	encryptedBackupDirName, err := cryptography.EncryptFilename(key, backupDirName)
-	if err != nil {
-		log.Printf("error: createDeletedPathKeyAndPurgeFromDb(): could not encrypt backup dir name (%s): %v\n", backupDirName, err)
-		return err
-	}
-
-	// Get snapshot time from name and parse into time.Time struct
-	// Parse the snapshot datetime string
-	snapShotDateTime, err := time.Parse("2006-01-02_15.04.05", snapshotName)
-	if err != nil {
-		log.Printf("error: writeIndexFile: time.Parse failed on '%s': %v", snapshotName, err)
-	}
-
-	// Construct the objstorefs.Snapshot object
-	snapshotObj := objstorefs.Snapshot{
-		EncryptedName: encryptedSnapshotName,
-		DecryptedName: snapshotName,
-		Datetime:      snapShotDateTime,
-		RelPaths:      make(map[string]objstorefs.CloudRelPath),
-	}
-
-	// Add to snapshot:  every journal row's index_entry
-	dbLock.Lock()
-	indexEntries, err := db.GetAllBackupJournalRowIndexEntries()
-	dbLock.Unlock()
-	if err != nil {
-		log.Println("error: writeIndexFile: db.GetAllBackupJournalRowIndexEntries() failed")
-		return fmt.Errorf("error: writeIndexFile failed")
-	}
-
-	for _, indexEntry := range indexEntries {
-		// reconstruct the crp object from json
-		crp := objstorefs.NewCloudRelPathFromJson(indexEntry)
-
-		// add object to snapshot obj's map
-		snapshotObj.RelPaths[crp.DecryptedRelPath] = *crp
-	}
-
-	// Serialize fully linked snapshot obj to json bytes
-	buf, err := json.Marshal(snapshotObj)
-	if err != nil {
-		log.Println("error: writeIndexFile: marshal failed: ", err)
-		return err
-	}
-
-	// lzma compress the json
-	compressedBuf, err := util.XZCompress(buf)
-	if err != nil {
-		log.Println("error: writeIndexFile: xzCompress failed")
-		return err
-	}
-
-	// encrypt the compressed json
-	encCompressedBuf, err := cryptography.EncryptBuffer(key, compressedBuf)
-	if err != nil {
-		log.Println("error: writeIndexFile: EncryptBuffer: ", err)
-		return err
-	}
-
-	// form the obj name of index file (enc backup dir / '@' + enc snapshhot name)
-	objName := encryptedBackupDirName + "/" + "@" + encryptedSnapshotName
-
-	// put the index object to server
-	err = objst.UploadObjFromBuffer(ctx, bucket, objName, encCompressedBuf, objstore.ComputeETag(encCompressedBuf))
-	if err != nil {
-		log.Println("error: writeIndexFile: UploadObjFromBuffer: ", err)
-		return err
-	}
-
-	return nil
 }

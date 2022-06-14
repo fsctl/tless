@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sethvargo/go-diceware/diceware"
@@ -284,4 +285,18 @@ func GetUnixTimeFromSnapshotName(snapshotName string) int64 {
 		log.Fatalln("error: getUnixTimeFromSnapshotName: ", err)
 	}
 	return tm.Unix()
+}
+
+// Acquires mutex if it is not nil. If mutex is nil, then this function is a no-op.
+func LockIf(lock *sync.Mutex) {
+	if lock != nil {
+		lock.Lock()
+	}
+}
+
+// Releases mutex if it is not nil. If mutex is nil, then this function is a no-op.
+func UnlockIf(lock *sync.Mutex) {
+	if lock != nil {
+		lock.Unlock()
+	}
 }
