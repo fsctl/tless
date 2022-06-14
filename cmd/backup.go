@@ -146,7 +146,7 @@ func backupMain() {
 				if err != nil {
 					log.Printf("error: db.GetDirEntPaths(): could not get dirent id '%d'\n", id)
 				}
-				if err := backup.Backup(ctx, encKey, rootDirName, relPath, backupDirPath, snapshotName, objst, cfgBucket, cfgVerbose); err != nil {
+				if _, _, err := backup.Backup(ctx, encKey, rootDirName, relPath, backupDirPath, snapshotName, objst, cfgBucket, cfgVerbose); err != nil {
 					log.Printf("error: Backup(): %v", err)
 					continue
 				}

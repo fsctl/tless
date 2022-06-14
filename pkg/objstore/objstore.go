@@ -154,9 +154,61 @@ func (os *ObjStore) GetObjList(ctx context.Context, bucket string, prefix string
 	return mAllObjects, nil
 }
 
+func (os *ObjStore) GetObjList2(ctx context.Context, bucket string, prefix string, recursive bool, vlog *util.VLog) (map[string]int64, error) {
+	mObjects := make(map[string]int64, 0)
+
+	opts := minio.ListObjectsOptions{
+		Recursive: recursive,
+		Prefix:    prefix,
+	}
+
+	for object := range os.minioClient.ListObjects(ctx, bucket, opts) {
+		if object.Err != nil {
+			msg := fmt.Sprintf("warning: GetObjList (ListObjects): %v", object.Err)
+			if vlog != nil {
+				vlog.Println(msg)
+			} else {
+				log.Println(msg)
+			}
+			return nil, object.Err
+		}
+		mObjects[object.Key] = object.Size
+	}
+
+	return mObjects, nil
+}
+
+// Gets only the top levels objects, i.e., all backup_name directories
+func (os *ObjStore) GetObjListTopLevel(ctx context.Context, bucket string, excludePrefixes []string) ([]string, error) {
+	objects := make([]string, 0)
+
+	opts := minio.ListObjectsOptions{
+		Recursive: false,
+		Prefix:    "",
+	}
+	for object := range os.minioClient.ListObjects(ctx, bucket, opts) {
+		if object.Err != nil {
+			log.Printf("warning: GetObjListTopTwoLevels: %v", object.Err)
+			return nil, object.Err
+		}
+
+		skip := false
+		for _, exclPrefix := range excludePrefixes {
+			if strings.HasPrefix(object.Key, exclPrefix) {
+				skip = true
+			}
+		}
+		if !skip {
+			objects = append(objects, util.StripTrailingSlashes(object.Key))
+		}
+	}
+
+	return objects, nil
+}
+
 // Gets only the first two levels of the full object list, i.e., all backup_name/snapshot_name
 // but none of the objects within a snapshot
-func (os *ObjStore) GetObjListTopTwoLevels(ctx context.Context, bucket string, excludeTopLevelWithPrefixes []string) (map[string][]string, error) {
+func (os *ObjStore) GetObjListTopTwoLevels(ctx context.Context, bucket string, excludeTopLevelWithPrefixes []string, excludeSecondLevelWithPrefix []string) (map[string][]string, error) {
 	mObjects := make(map[string][]string, 0)
 
 	// Get the top level
@@ -193,7 +245,16 @@ func (os *ObjStore) GetObjListTopTwoLevels(ctx context.Context, bucket string, e
 				return nil, subObject.Err
 			}
 			subObjKey := strings.TrimPrefix(subObject.Key, topLevelName+"/")
-			mObjects[topLevelName] = append(mObjects[topLevelName], util.StripTrailingSlashes(subObjKey))
+
+			skip := false
+			for _, exclPrefix := range excludeSecondLevelWithPrefix {
+				if strings.HasPrefix(subObjKey, exclPrefix) {
+					skip = true
+				}
+			}
+			if !skip {
+				mObjects[topLevelName] = append(mObjects[topLevelName], util.StripTrailingSlashes(subObjKey))
+			}
 		}
 	}
 

@@ -47,18 +47,18 @@ func DeleteSnapshot(ctx context.Context, key []byte, groupedObjects map[string]o
 	for _, renObj := range renameObjs {
 		encryptedOldSnapshotName, err := cryptography.EncryptFilename(key, renObj.OldSnapshot)
 		if err != nil {
-			log.Fatalf("error: cloudrmMain(): could not encrypt snapshot name (%s): %v\n", renObj.OldSnapshot, err)
+			log.Fatalf("error: DeleteSnapshot(): could not encrypt snapshot name (%s): %v\n", renObj.OldSnapshot, err)
 		}
 		encryptedNewSnapshotName, err := cryptography.EncryptFilename(key, renObj.NewSnapshot)
 		if err != nil {
-			log.Fatalf("error: cloudrmMain(): could not encrypt snapshot name (%s): %v\n", renObj.NewSnapshot, err)
+			log.Fatalf("error: DeleteSnapshot(): could not encrypt snapshot name (%s): %v\n", renObj.NewSnapshot, err)
 		}
 		oldObjName := encryptedBackupDirName + "/" + encryptedOldSnapshotName + "/" + renObj.RelPath
 		newObjName := encryptedBackupDirName + "/" + encryptedNewSnapshotName + "/" + renObj.RelPath
 
 		err = objst.RenameObj(ctx, bucket, oldObjName, newObjName)
 		if err != nil {
-			log.Fatalf("error: cloudrmMain(): could not rename object (%s): %v\n", oldObjName, err)
+			log.Fatalf("error: DeleteSnapshot(): could not rename object (%s): %v\n", oldObjName, err)
 		}
 	}
 	return nil
@@ -100,9 +100,9 @@ type SnapshotInfo struct {
 // Returns a map of backup:[]SnapshotInfo, where the snapshot info structs are sorted by timestamp ascending
 func GetAllSnapshotInfos(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string) (map[string][]SnapshotInfo, error) {
 	// Get the backup:snapshots map with encrypted names
-	encryptedSnapshotsMap, err := objst.GetObjListTopTwoLevels(ctx, bucket, []string{"SALT-"})
+	encryptedSnapshotsMap, err := objst.GetObjListTopTwoLevels(ctx, bucket, []string{"SALT-", "VERSION"}, []string{"@"})
 	if err != nil {
-		log.Println("error: GetAllSnapshotNames: ", err)
+		log.Println("error: GetAllSnapshotInfos: ", err)
 		return nil, err
 	}
 
@@ -111,7 +111,7 @@ func GetAllSnapshotInfos(ctx context.Context, key []byte, objst *objstore.ObjSto
 	for encBackupName := range encryptedSnapshotsMap {
 		backupName, err := cryptography.DecryptFilename(key, encBackupName)
 		if err != nil {
-			log.Println("error: GetAllSnapshotNames: DecryptFilename: ", err)
+			log.Println("error: GetAllSnapshotInfos: DecryptFilename: ", err)
 			return nil, err
 		}
 		mRet[backupName] = make([]SnapshotInfo, 0)
@@ -119,7 +119,7 @@ func GetAllSnapshotInfos(ctx context.Context, key []byte, objst *objstore.ObjSto
 		for _, encSnapshotName := range encryptedSnapshotsMap[encBackupName] {
 			snapshotName, err := cryptography.DecryptFilename(key, encSnapshotName)
 			if err != nil {
-				log.Println("error: GetAllSnapshotNames: DecryptFilename: ", err)
+				log.Println("error: GetAllSnapshotInfos: DecryptFilename: ", err)
 				return nil, err
 			}
 			mRet[backupName] = append(mRet[backupName], SnapshotInfo{

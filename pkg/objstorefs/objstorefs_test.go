@@ -37,62 +37,62 @@ func SetupSnapshots() (snapshots map[string]Snapshot) {
 	// 				file2.001 changed
 	//				file2.002 changed
 
-	file1RelPath2020 := RelPath{
+	file1RelPath2020 := CloudRelPath{
 		EncryptedRelPathStripped: "111111",
 		DecryptedRelPath:         "file1",
 		EncryptedChunkNames:      map[string]int64{"111111": 0},
 		IsDeleted:                false,
 	}
-	file2RelPath2020 := RelPath{
+	file2RelPath2020 := CloudRelPath{
 		EncryptedRelPathStripped: "222222",
 		DecryptedRelPath:         "file2",
 		EncryptedChunkNames:      map[string]int64{"222222": 0},
 		IsDeleted:                false,
 	}
-	file3RelPath2020 := RelPath{
+	file3RelPath2020 := CloudRelPath{
 		EncryptedRelPathStripped: "333333",
 		DecryptedRelPath:         "file3",
 		EncryptedChunkNames:      map[string]int64{"333333": 0},
 		IsDeleted:                false,
 	}
-	file4RelPath2020 := RelPath{
+	file4RelPath2020 := CloudRelPath{
 		EncryptedRelPathStripped: "444444",
 		DecryptedRelPath:         "file4",
 		EncryptedChunkNames:      map[string]int64{"444444.001": 0, "444444.002": 0},
 		IsDeleted:                false,
 	}
-	file1RelPath2021 := RelPath{
+	file1RelPath2021 := CloudRelPath{
 		EncryptedRelPathStripped: "111111",
 		DecryptedRelPath:         "file1",
 		EncryptedChunkNames:      map[string]int64{"##111111": 0},
 		IsDeleted:                true,
 	}
-	file2RelPath2021 := RelPath{
+	file2RelPath2021 := CloudRelPath{
 		EncryptedRelPathStripped: "222222",
 		DecryptedRelPath:         "file2",
 		EncryptedChunkNames:      map[string]int64{"222222.001": 0, "222222.002": 0},
 		IsDeleted:                false,
 	}
-	file1RelPath2022 := RelPath{
+	file1RelPath2022 := CloudRelPath{
 		EncryptedRelPathStripped: "111111",
 		DecryptedRelPath:         "file1",
 		EncryptedChunkNames:      map[string]int64{"##111111": 0},
 		IsDeleted:                false,
 	}
-	file2RelPath2022 := RelPath{
+	file2RelPath2022 := CloudRelPath{
 		EncryptedRelPathStripped: "222222",
 		DecryptedRelPath:         "file2",
 		EncryptedChunkNames:      map[string]int64{"222222.001": 0, "222222.002": 0},
 		IsDeleted:                false,
 	}
 	snapshot2020 := Snapshot{
-		RelPaths: map[string]RelPath{"file1": file1RelPath2020, "file2": file2RelPath2020, "file3": file3RelPath2020, "file4": file4RelPath2020},
+		RelPaths: map[string]CloudRelPath{"file1": file1RelPath2020, "file2": file2RelPath2020, "file3": file3RelPath2020, "file4": file4RelPath2020},
 	}
 	snapshot2021 := Snapshot{
-		RelPaths: map[string]RelPath{"file1": file1RelPath2021, "file2": file2RelPath2021},
+		RelPaths: map[string]CloudRelPath{"file1": file1RelPath2021, "file2": file2RelPath2021},
 	}
 	snapshot2022 := Snapshot{
-		RelPaths: map[string]RelPath{"file1": file1RelPath2022, "file2": file2RelPath2022},
+		RelPaths: map[string]CloudRelPath{"file1": file1RelPath2022, "file2": file2RelPath2022},
 	}
 	snapshots = map[string]Snapshot{
 		"2020-01-01_01.02.03": snapshot2020,

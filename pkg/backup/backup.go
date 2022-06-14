@@ -29,7 +29,9 @@ type dirEntMetadata struct {
 	SymlinkOrigin string
 }
 
-func Backup(ctx context.Context, key []byte, rootDirName string, relPath string, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string, showNameOnSuccess bool) error {
+func Backup(ctx context.Context, key []byte, rootDirName string, relPath string, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string, showNameOnSuccess bool) (encryptedRelPath string, encryptedChunks map[string]int64, err error) {
+	encryptedChunks = make(map[string]int64)
+
 	// strip any trailing slashes on destination path
 	backupDirPath = util.StripTrailingSlashes(backupDirPath)
 
@@ -40,13 +42,13 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 	info, err := os.Lstat(absPath)
 	if err != nil {
 		log.Printf("error: Backup(): could not stat '%s'\n", absPath)
-		return err
+		return "", nil, err
 	}
 	// get symlink origin if it's a symlink
 	symlinkOrigin, err := getSymlinkOriginIfSymlink(absPath)
 	if err != nil {
 		log.Printf("error: Backup(): could not get symlink info on '%s'\n", absPath)
-		return err
+		return "", nil, err
 	}
 	var isSymlink bool = false
 	if symlinkOrigin != "" {
@@ -71,24 +73,24 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 	buf, err := serializeMetadataStruct(metadata)
 	if err != nil {
 		log.Printf("error: Backup(): serializeMetadata failed: %v\n", err)
-		return err
+		return "", nil, err
 	}
 
 	// encrypt dir entry name, snapshot name and root dir name
-	encryptedRelPath, err := cryptography.EncryptFilename(key, relPath)
+	encryptedRelPath, err = cryptography.EncryptFilename(key, relPath)
 	if err != nil {
 		log.Printf("error: Backup(): could not encrypt rel path: %v\n", err)
-		return err
+		return "", nil, err
 	}
 	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotName)
 	if err != nil {
 		log.Printf("error: Backup(): could not encrypt snapshot name: %v\n", err)
-		return err
+		return "", nil, err
 	}
 	encryptedRootDirName, err := cryptography.EncryptFilename(key, rootDirName)
 	if err != nil {
 		log.Printf("error: Backup(): could not encrypt root dir name: %v\n", err)
-		return err
+		return "", nil, err
 	}
 
 	// If dir or small file (<ChunkSize bytes), process as single chunk.
@@ -100,7 +102,7 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 			buf, err = cryptography.AppendEntireFileToBuffer(absPath, buf)
 			if err != nil {
 				log.Printf("error: Backup(): AppendEntireFileToBuffer failed: %v\n", err)
-				return err
+				return "", nil, err
 			}
 		}
 
@@ -108,19 +110,22 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 		ciphertextBuf, err := cryptography.EncryptBuffer(key, buf)
 		if err != nil {
 			log.Printf("error: Backup(): EncryptBuffer failed: %v\n", err)
-			return err
+			return "", nil, err
 		}
 
 		// Insert a slash in the middle of encrypted relPath b/c server won't
 		// allow path components > 255 characters
 		encryptedRelPath = InsertSlashIntoEncRelPath(encryptedRelPath)
 
+		// Save the single chunk name to return
+		encryptedChunks[encryptedRelPath] = int64(len(ciphertextBuf))
+
 		// try to put the (encrypted filename, encrypted snapshot name, encrypted relPath) tuple to obj store
 		objName := encryptedRootDirName + "/" + encryptedSnapshotName + "/" + encryptedRelPath
 		err = objst.UploadObjFromBuffer(ctx, bucket, objName, ciphertextBuf, objstore.ComputeETag(ciphertextBuf))
 		if err != nil {
 			log.Printf("error: Backup(): backing up file: %v\n", err)
-			return err
+			return "", nil, err
 		}
 
 	} else {
@@ -129,14 +134,14 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 		// Generate initial nonce randomly; subsequent chunks will increment this value
 		nonce := make([]byte, 12)
 		if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-			return err
+			return "", nil, err
 		}
 
 		// Open the file for reading
 		f, err := os.Open(absPath)
 		if err != nil {
 			log.Printf("error: could not open '%s': %v", absPath, err)
-			return err
+			return "", nil, err
 		}
 		defer f.Close()
 
@@ -155,7 +160,7 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 			}
 			if err != nil {
 				log.Printf("error: could not read from '%s': %v", absPath, err)
-				return err
+				return "", nil, err
 			}
 			if bytesRead < len(readBuf) {
 				readBuf = readBuf[0:bytesRead]
@@ -170,22 +175,20 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 			ciphertextReadBuf, err := cryptography.EncryptBufferWithNonce(key, readBuf, nonce)
 			if err != nil {
 				log.Printf("error: could not encrypt buffer: %v", err)
-				return err
+				return "", nil, err
 			}
 
 			// Form object name with .N appended
 			objName := encryptedRootDirName + "/" + encryptedSnapshotName + "/" + encryptedRelPath + fmt.Sprintf(".%03d", i)
 
+			// Save the current chunk name to return
+			encryptedChunks[encryptedRelPath+fmt.Sprintf(".%03d", i)] = int64(len(ciphertextReadBuf))
+
 			// Upload encrypted readBuf
-			//TODO:  send this md5 as E-Tag, it works for minio.
-			//But note that to compute it on the client, you need to know the nonce, which is
-			//bad for the case when you're just checking local file against what's on the server.
-			//Would need to retrieve first 24 bytes of server file to compute ciphertext correctly.
-			//fmt.Printf("MD5 of ciphertext buffer: %x (%d bytes)\n", md5.Sum(ciphertextReadBuf), len(ciphertextReadBuf))
 			err = objst.UploadObjFromBuffer(ctx, bucket, objName, ciphertextReadBuf, objstore.ComputeETag(ciphertextReadBuf))
 			if err != nil {
 				log.Printf("error: Backup(): backing up file: %v\n", err)
-				return err
+				return "", nil, err
 			}
 
 			// For next iteration:  increment counter, increment nonce
@@ -198,7 +201,7 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 		fmt.Printf("Backed up %s\n", relPath)
 	}
 
-	return nil
+	return encryptedRelPath, encryptedChunks, nil
 }
 
 func InsertSlashIntoEncRelPath(encryptedRelPath string) string {

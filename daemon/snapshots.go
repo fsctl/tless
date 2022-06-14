@@ -52,7 +52,7 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
-	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctxBkg, objst, key, bucket)
+	groupedObjects, err := objstorefs.GetGroupedSnapshots2(ctxBkg, objst, key, bucket)
 	if err != nil {
 		log.Printf("Could not get grouped snapshots: %v", err)
 		resp := pb.ReadAllSnapshotsResponse{

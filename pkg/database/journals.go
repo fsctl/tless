@@ -159,16 +159,16 @@ func (db *DB) selectNextBackupJournalCandidateTask() (id int64, dirEntId int64, 
 
 // Marks backupJournalTask as Finished.  If this was the last task that was not yet complete,
 // returns true for isJournalComplete.
-func (db *DB) CompleteBackupJournalTask(backupJournalTask *BackupJournalTask) (isJournalComplete bool, err error) {
+func (db *DB) CompleteBackupJournalTask(backupJournalTask *BackupJournalTask, indexEntry []byte) (isJournalComplete bool, err error) {
 	// Mark this task as done
-	stmt, err := db.dbConn.Prepare("UPDATE backup_journal SET status = ? WHERE id = ?")
+	stmt, err := db.dbConn.Prepare("UPDATE backup_journal SET status = ?, index_entry = ? WHERE id = ?")
 	if err != nil {
 		log.Printf("Error: CompleteBackupJournalTask: %v", err)
 		return false, err
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(Finished, backupJournalTask.id)
+	_, err = stmt.Exec(Finished, indexEntry, backupJournalTask.id)
 	if err != nil {
 		log.Printf("Error: CompleteBackupJournalTask: %v", err)
 		return false, err
@@ -414,4 +414,38 @@ func (db *DB) CancelationCleanupJournal() error {
 	}
 
 	return nil
+}
+
+func (db *DB) GetAllBackupJournalRowIndexEntries() (indexEntries [][]byte, err error) {
+	// Prepare select statement
+	stmt, err := db.dbConn.Prepare("SELECT index_entry FROM backup_journal")
+	if err != nil {
+		log.Printf("error: GetAllBackupJournalRowIndexEntries: %v", err)
+		return nil, err
+	}
+	defer stmt.Close()
+
+	// Query
+	rows, err := stmt.Query()
+	if errors.Is(err, sql.ErrNoRows) {
+		log.Println("error: GetAllBackupJournalRowIndexEntries: found no rows!")
+		return nil, err
+	} else if err != nil {
+		log.Printf("error: GetAllBackupJournalRowIndexEntries: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	// Combine all rows into return slice
+	indexEntries = make([][]byte, 0)
+	var indexEntry []byte
+	for rows.Next() {
+		if err = rows.Scan(&indexEntry); err != nil {
+			log.Printf("error: GetAllBackupJournalRowIndexEntries: %v", err)
+			return nil, err
+		}
+		indexEntries = append(indexEntries, indexEntry)
+	}
+
+	return indexEntries, nil
 }

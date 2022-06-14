@@ -3,7 +3,9 @@ package daemon
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"path/filepath"
 	"strings"
@@ -336,18 +338,33 @@ func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 			log.Printf("error: db.GetDirEntPaths(): could not get dirent id '%d'\n", bjt.DirEntId)
 		}
 
+		crp := objstorefs.CloudRelPath{}
 		if bjt.ChangeType == database.Updated {
 			vlog.Printf("Backing up '%s/%s'", rootDirName, relPath)
-			if err := backup.Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, false); err != nil {
+			encryptedRelPath, encryptedChunks, err := backup.Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, false)
+			if err != nil {
 				log.Printf("error: backup.Backup(): %v", err)
 				continue
 			}
+
+			// For JSON serialization into journal
+			crp.DecryptedRelPath = relPath
+			crp.EncryptedRelPathStripped = encryptedRelPath
+			crp.EncryptedChunkNames = encryptedChunks
+			crp.IsDeleted = false
 		} else if bjt.ChangeType == database.Deleted {
 			vlog.Printf("Deleting '%s/%s'", rootDirName, relPath)
-			if err = createDeletedPathKeyAndPurgeFromDb(ctx, objst, bucket, gDb, &gGlobalsLock, key, rootDirName, snapshotName, relPath); err != nil {
+			encryptedRelPath, encryptedChunks, err := createDeletedPathKeyAndPurgeFromDb(ctx, objst, bucket, gDb, &gGlobalsLock, key, rootDirName, snapshotName, relPath)
+			if err != nil {
 				log.Printf("error: failed on deleting path '%s': %v", relPath, err)
 				continue
 			}
+
+			// For JSON serialization into journal
+			crp.DecryptedRelPath = relPath
+			crp.EncryptedRelPathStripped = encryptedRelPath
+			crp.EncryptedChunkNames = encryptedChunks
+			crp.IsDeleted = true
 		}
 
 		globalsLock.Lock()
@@ -358,13 +375,17 @@ func playBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 		}
 
 		globalsLock.Lock()
-		isJournalComplete, err := db.CompleteBackupJournalTask(bjt)
+		isJournalComplete, err := db.CompleteBackupJournalTask(bjt, crp.ToJson())
 		globalsLock.Unlock()
 		if err != nil {
 			log.Printf("error: db.CompleteBackupJournalTask: %v", err)
 		}
 		if isJournalComplete {
 			vlog.Printf("Finished the journal (re)play")
+			err = writeIndexFile(ctx, globalsLock, gDb, objst, bucket, key, filepath.Base(backupDirPath), snapshotName)
+			if err != nil {
+				log.Println("error: couldn't write index file: ", err)
+			}
 			vlog.Printf("Deleting all journal rows")
 			globalsLock.Lock()
 			err = db.CompleteBackupJournal()
@@ -443,24 +464,26 @@ func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock 
 	// (When we return, status will be set back to Idle)
 }
 
-func createDeletedPathKeyAndPurgeFromDb(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, dbLock *sync.Mutex, key []byte, backupDirName string, snapshotName string, deletedPath string) error {
+func createDeletedPathKeyAndPurgeFromDb(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, dbLock *sync.Mutex, key []byte, backupDirName string, snapshotName string, deletedPath string) (encryptedDeletedRelPath string, encryptedChunks map[string]int64, err error) {
+	encryptedChunks = make(map[string]int64)
+
 	// get the encrypted representation of backupDirName and snapshotName
 	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotName)
 	if err != nil {
-		log.Printf("error: createDeletedPathsKeys(): could not encrypt snapshot name (%s): %v\n", snapshotName, err)
-		return err
+		log.Printf("error: createDeletedPathKeyAndPurgeFromDb(): could not encrypt snapshot name (%s): %v\n", snapshotName, err)
+		return "", nil, err
 	}
 	encryptedBackupDirName, err := cryptography.EncryptFilename(key, backupDirName)
 	if err != nil {
-		log.Printf("error: createDeletedPathsKeys(): could not encrypt backup dir name (%s): %v\n", backupDirName, err)
-		return err
+		log.Printf("error: createDeletedPathKeyAndPurgeFromDb(): could not encrypt backup dir name (%s): %v\n", backupDirName, err)
+		return "", nil, err
 	}
 
 	// encrypt the deleted path name
-	encryptedDeletedRelPath, err := cryptography.EncryptFilename(key, deletedPath)
+	encryptedDeletedRelPath, err = cryptography.EncryptFilename(key, deletedPath)
 	if err != nil {
-		log.Printf("error: createDeletedPathsKeys(): could not encrypt deleted rel path ('%s'): %v\n", deletedPath, err)
-		return err
+		log.Printf("error: createDeletedPathKeyAndPurgeFromDb(): could not encrypt deleted rel path ('%s'): %v\n", deletedPath, err)
+		return "", nil, err
 	}
 
 	// Insert a slash in the middle of encrypted relPath b/c server won't
@@ -471,20 +494,23 @@ func createDeletedPathKeyAndPurgeFromDb(ctx context.Context, objst *objstore.Obj
 	// where ## prefix indicates rel path was deleted since prev snapshot
 	objName := encryptedBackupDirName + "/" + encryptedSnapshotName + "/##" + encryptedDeletedRelPath
 	if err = objst.UploadObjFromBuffer(ctx, bucket, objName, make([]byte, 0), objstore.ComputeETag([]byte{})); err != nil {
-		log.Printf("error: createDeletedPathsKeys(): could not UploadObjFromBuffer ('%s'): %v\n", objName, err)
-		return err
+		log.Printf("error: createDeletedPathKeyAndPurgeFromDb(): could not UploadObjFromBuffer ('%s'): %v\n", objName, err)
+		return "", nil, err
 	}
+
+	// Save cnrypted chunk map for return value
+	encryptedChunks["##"+encryptedDeletedRelPath] = 0
 
 	// Delete dirents row for backupDirName/relPath
 	dbLock.Lock()
 	err = db.DeleteDirEntByPath(backupDirName, deletedPath)
 	dbLock.Unlock()
 	if err != nil {
-		log.Printf("DeleteDirEntByPath failed: %v", err)
-		return err
+		log.Printf("error: createDeletedPathKeyAndPurgeFromDb: DeleteDirEntByPath failed: %v", err)
+		return "", nil, err
 	}
 
-	return nil
+	return encryptedDeletedRelPath, encryptedChunks, nil
 }
 
 func (s *server) CancelBackup(ctx context.Context, in *pb.CancelRequest) (*pb.CancelResponse, error) {
@@ -499,4 +525,83 @@ func (s *server) CancelBackup(ctx context.Context, in *pb.CancelRequest) (*pb.Ca
 		IsStarting: true,
 		ErrMsg:     "",
 	}, nil
+}
+
+func writeIndexFile(ctx context.Context, dbLock *sync.Mutex, db *database.DB, objst *objstore.ObjStore, bucket string, key []byte, backupDirName string, snapshotName string) error {
+	// Get encrypted snapshot name and backup dir
+	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotName)
+	if err != nil {
+		log.Printf("error: writeIndexFile(): could not encrypt snapshot name (%s): %v\n", snapshotName, err)
+		return err
+	}
+	encryptedBackupDirName, err := cryptography.EncryptFilename(key, backupDirName)
+	if err != nil {
+		log.Printf("error: createDeletedPathKeyAndPurgeFromDb(): could not encrypt backup dir name (%s): %v\n", backupDirName, err)
+		return err
+	}
+
+	// Get snapshot time from name and parse into time.Time struct
+	// Parse the snapshot datetime string
+	snapShotDateTime, err := time.Parse("2006-01-02_15.04.05", snapshotName)
+	if err != nil {
+		log.Printf("error: writeIndexFile: time.Parse failed on '%s': %v", snapshotName, err)
+	}
+
+	// Construct the objstorefs.Snapshot object
+	snapshotObj := objstorefs.Snapshot{
+		EncryptedName: encryptedSnapshotName,
+		DecryptedName: snapshotName,
+		Datetime:      snapShotDateTime,
+		RelPaths:      make(map[string]objstorefs.CloudRelPath),
+	}
+
+	// Add to snapshot:  every journal row's index_entry
+	dbLock.Lock()
+	indexEntries, err := db.GetAllBackupJournalRowIndexEntries()
+	dbLock.Unlock()
+	if err != nil {
+		log.Println("error: writeIndexFile: db.GetAllBackupJournalRowIndexEntries() failed")
+		return fmt.Errorf("error: writeIndexFile failed")
+	}
+
+	for _, indexEntry := range indexEntries {
+		// reconstruct the crp object from json
+		crp := objstorefs.NewCloudRelPathFromJson(indexEntry)
+
+		// add object to snapshot obj's map
+		snapshotObj.RelPaths[crp.DecryptedRelPath] = *crp
+	}
+
+	// Serialize fully linked snapshot obj to json bytes
+	buf, err := json.Marshal(snapshotObj)
+	if err != nil {
+		log.Println("error: writeIndexFile: marshal failed: ", err)
+		return err
+	}
+
+	// lzma compress the json
+	compressedBuf, err := util.XZCompress(buf)
+	if err != nil {
+		log.Println("error: writeIndexFile: xzCompress failed")
+		return err
+	}
+
+	// encrypt the compressed json
+	encCompressedBuf, err := cryptography.EncryptBuffer(key, compressedBuf)
+	if err != nil {
+		log.Println("error: writeIndexFile: EncryptBuffer: ", err)
+		return err
+	}
+
+	// form the obj name of index file (enc backup dir / '@' + enc snapshhot name)
+	objName := encryptedBackupDirName + "/" + "@" + encryptedSnapshotName
+
+	// put the index object to server
+	err = objst.UploadObjFromBuffer(ctx, bucket, objName, encCompressedBuf, objstore.ComputeETag(encCompressedBuf))
+	if err != nil {
+		log.Println("error: writeIndexFile: UploadObjFromBuffer: ", err)
+		return err
+	}
+
+	return nil
 }

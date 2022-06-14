@@ -72,3 +72,14 @@ func TestGetUnixTimeFromSnapshotName(t *testing.T) {
 
 	assert.Equal(t, int64(7), unixTimestamp)
 }
+
+func TestXzCompresserWrappers(t *testing.T) {
+	buf := []byte{0x01, 0x02, 0x03, 0x02, 0x02, 0x02, 0x02, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+
+	compressedBuf, err := XZCompress(buf)
+	assert.NoError(t, err)
+	uncompressedBuf, err := XZUncompress(compressedBuf)
+	assert.NoError(t, err)
+	assert.Equal(t, len(buf), len(uncompressedBuf))
+	assert.Equal(t, buf, uncompressedBuf)
+}

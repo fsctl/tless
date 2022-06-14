@@ -109,6 +109,7 @@ func (db *DB) createTables() error {
 		dirent_id integer,               /* key into dirents */
 		change_type integer,             /* 1=Updated (so back it up) */
 		                                 /* 2=Deleted (so mark it deleted) */
+		index_entry BLOB,                /* json bytes for entry in index file */
 		status integer                   /* 1=Unstarted */
 							             /* 2=InProgress */
 							             /* 3=Finished */
