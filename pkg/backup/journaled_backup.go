@@ -101,13 +101,15 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 	snapshotName := time.Unix(snapshotUnixtime, 0).UTC().Format("2006-01-02_15.04.05")
 
 	// Set the initial progress bar
-	util.LockIf(globalsLock)
-	finished, total, err := db.GetBackupJournalCounts()
-	util.UnlockIf(globalsLock)
-	if err != nil {
-		log.Printf("error: DoJournaledBackup: db.GetBackupJournalCounts: %v", err)
+	if setBackupInitialProgressFunc != nil {
+		util.LockIf(globalsLock)
+		finished, total, err := db.GetBackupJournalCounts()
+		util.UnlockIf(globalsLock)
+		if err != nil {
+			log.Printf("error: DoJournaledBackup: db.GetBackupJournalCounts: %v", err)
+		}
+		setBackupInitialProgressFunc(finished, total, globalsLock, vlog)
 	}
-	setBackupInitialProgressFunc(finished, total, globalsLock, vlog)
 
 	breakFromLoop = PlayBackupJournal(ctx, key, db, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateBackupProgressFunc)
 	return
