@@ -5,7 +5,6 @@ package objstorefs
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"sort"
@@ -120,7 +119,7 @@ type RenameObj struct {
 	NewSnapshot string
 }
 
-func ComputeSnapshotDelete(key []byte, encBackupDirName string, snapshots map[string]Snapshot, snapshotToDelete string, objst *objstore.ObjStore, ctx context.Context, bucket string) (deleteObjs []map[string]int64, renameObjs []RenameObj, newNextSnapshot *Snapshot, err error) {
+func ComputeSnapshotDelete(key []byte, encBackupDirName string, snapshots map[string]Snapshot, snapshotToDelete string, objst *objstore.ObjStore, ctx context.Context, bucket string) (deleteObjs []map[string]int64, renameObjs []RenameObj, newNextSnapshotObj *Snapshot, err error) {
 	// Make sure snapshotToDelete is actually a real snapshot
 	if _, ok := snapshots[snapshotToDelete]; !ok {
 		return nil, nil, nil, fmt.Errorf("error: snapshot '%s' not in list of snapshots", snapshotToDelete)
@@ -144,15 +143,8 @@ func ComputeSnapshotDelete(key []byte, encBackupDirName string, snapshots map[st
 	nextSnapshot := getNextSnapshot(snapshotKeys, snapshotToDelete)
 
 	// Create a Snapshot struct for new NEXT snapshot (one we're merging into)
-	encNextSnapshot, err := cryptography.EncryptFilename(key, nextSnapshot)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error: ComputeSnapshotDelete: could not encrypt snapshot name '%s'", nextSnapshot)
-	}
-	newNextSnapshot, err = ReadIndexFileIntoSnapshotObj(key, encBackupDirName, encNextSnapshot, objst, ctx, bucket)
-	if err != nil {
-		log.Printf("error: ComputeSnapshotDelete: could not read next snapshot's index '%s'", nextSnapshot)
-		return nil, nil, nil, err
-	}
+	tmp := snapshots[nextSnapshot]
+	newNextSnapshotObj = &tmp
 
 	// loop over each rel path in snapshotToDelete
 	for relPath := range snapshots[snapshotToDelete].RelPaths {
@@ -178,7 +170,7 @@ func ComputeSnapshotDelete(key []byte, encBackupDirName string, snapshots map[st
 				// If relpath is NOT in next snapshot change set at all, then we must rename relpath objects in
 				// snapshotToDelete to next snapshot.
 				renameObjs = append(renameObjs, renameDeletionMarkerIntoNextSnapshot(snapshots, relPath, snapshotToDelete, nextSnapshot)...)
-				newNextSnapshot.RelPaths[relPath] = crp
+				newNextSnapshotObj.RelPaths[relPath] = crp
 			}
 		} else {
 			// relPath in snapshotToDelete is a real file.  Delete it if it shows up in the next
@@ -189,12 +181,12 @@ func ComputeSnapshotDelete(key []byte, encBackupDirName string, snapshots map[st
 				deleteObjs = append(deleteObjs, snapshots[snapshotToDelete].RelPaths[relPath].EncryptedChunkNames)
 			} else {
 				renameObjs = append(renameObjs, renameAllChunksIntoNextSnapshot(snapshots, relPath, snapshotToDelete, nextSnapshot)...)
-				newNextSnapshot.RelPaths[relPath] = crp
+				newNextSnapshotObj.RelPaths[relPath] = crp
 			}
 		}
 	}
 
-	return deleteObjs, renameObjs, newNextSnapshot, nil
+	return deleteObjs, renameObjs, newNextSnapshotObj, nil
 }
 
 func renameDeletionMarkerIntoNextSnapshot(snapshots map[string]Snapshot, relPath, snapshotToDelete, nextSnapshot string) (renameObjs []RenameObj) {
@@ -249,40 +241,4 @@ func getNextSnapshot(snapshotKeys []string, snapshotToDelete string) (nextSnapsh
 	}
 	log.Fatalln("error: getNextSnapshot couldn't find next snapshot")
 	return ""
-}
-
-func ReadIndexFileIntoSnapshotObj(key []byte, encryptedBackupDirName string, encryptedSnapshotName string, objst *objstore.ObjStore, ctx context.Context, bucket string) (snapshotObj *Snapshot, err error) {
-	// form the obj name of index file: encBackupDir/@encSnapshhotName
-	objName := encryptedBackupDirName + "/" + "@" + encryptedSnapshotName
-
-	// retrieve it from cloud
-	encCompressedBuf, err := objst.DownloadObjToBuffer(ctx, bucket, objName)
-	if err != nil {
-		log.Println("error: ReadIndexFileIntoSnapshotObj: UploadObjFromBuffer: ", err)
-		return nil, err
-	}
-
-	// decrypt
-	compressedBuf, err := cryptography.DecryptBuffer(key, encCompressedBuf)
-	if err != nil {
-		log.Println("error: ReadIndexFileIntoSnapshotObj: DecryptBuffer: ", err)
-		return nil, err
-	}
-
-	// decompress
-	buf, err := util.XZUncompress(compressedBuf)
-	if err != nil {
-		log.Println("error: ReadIndexFileIntoSnapshotObj: xzUncompress failed")
-		return nil, err
-	}
-
-	// deserialize to json
-	var retObj Snapshot
-	err = json.Unmarshal(buf, &retObj)
-	if err != nil {
-		log.Println("error: ReadIndexFileIntoSnapshotObj: json.Unmarshall failed")
-		return nil, err
-	}
-
-	return &retObj, nil
 }
