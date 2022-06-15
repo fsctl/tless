@@ -12,7 +12,8 @@ Digital Ocean is an easy-to-use cloud provider that offers an S3-compatible obje
 
 Digital Ocean calls their S3 buckets _Spaces_.  To create one, log in to your account and navigate to `Create` -> `Spaces`.
 
+<center>
 ![Create New Space 1](img/DO-Create-New-Space-1.png)
-
+</center>
 
 
