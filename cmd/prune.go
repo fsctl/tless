@@ -9,6 +9,7 @@ import (
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/objstorefs"
 	"github.com/fsctl/tless/pkg/snapshots"
+	"github.com/fsctl/tless/pkg/util"
 	"github.com/spf13/cobra"
 )
 
@@ -53,6 +54,8 @@ func init() {
 }
 
 func pruneMain(backupName string, isDryRun bool) {
+	vlog := util.NewVLog(nil, func() bool { return cfgVerbose })
+
 	ctx := context.Background()
 	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 	mSnapshots, err := snapshots.GetAllSnapshotInfos(ctx, encKey, objst, cfgBucket)
@@ -69,7 +72,7 @@ func pruneMain(backupName string, isDryRun bool) {
 
 	var groupedObjects map[string]objstorefs.BackupDir
 	if !isDryRun {
-		groupedObjects, err = objstorefs.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket)
+		groupedObjects, err = objstorefs.GetGroupedSnapshots2(ctx, objst, encKey, cfgBucket, vlog)
 		if err != nil {
 			log.Fatalf("Could not get grouped snapshots: %v", err)
 		}

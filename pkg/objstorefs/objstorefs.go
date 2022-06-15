@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -76,107 +75,9 @@ func NewCloudRelPathFromJson(jsonBuf []byte) *CloudRelPath {
 	return &obj
 }
 
-func GetGroupedSnapshots(ctx context.Context, objst *objstore.ObjStore, key []byte, bucket string) (map[string]BackupDir, error) {
-	retBackupDirs := make(map[string]BackupDir)
-
-	allObjects, err := objst.GetObjList(ctx, bucket, "", nil)
-	if err != nil {
-		log.Printf("error: GetGroupedSnapshots: GetObjList failed: %v", err)
-		return nil, err
-	}
-
-	reDot, _ := regexp.Compile(`\.`)
-
-	for objName, size := range allObjects {
-		// skip the salt and version object keys
-		if objName[:5] == "SALT-" || objName[:7] == "VERSION" {
-			continue
-		}
-		// skip snapshot index files
-		if strings.Contains(objName, "@") {
-			continue
-		}
-
-		// We expect everything after this to be backupName/snapshotName/relP/ath.
-		// (relPath is split in half by a slash to overcome server limitations.) So,
-		// if objName is not splittable by slashes into 4 parts, ignore it.
-		parts := strings.Split(objName, "/")
-		if len(parts) != 4 {
-			log.Printf("error: object name not in proper format '%s' (skipping)", objName)
-			continue
-		}
-		encBackupName := parts[0]
-		encSnapshotName := parts[1]
-		encRelPath := parts[2] + "/" + parts[3]
-		encRelPathWithoutSlash := parts[2] + parts[3]
-
-		// Get the prefix and suffix stripped versions of encRelPath
-		isDeleted := false
-		encRelPathStripped := encRelPath
-		encRelPathWithoutSlashStripped := encRelPathWithoutSlash
-		if strings.HasPrefix(encRelPath, "##") {
-			encRelPathStripped = strings.TrimPrefix(encRelPathStripped, "##")
-			encRelPathWithoutSlashStripped = strings.TrimPrefix(encRelPathWithoutSlashStripped, "##")
-			isDeleted = true
-		}
-		hasDot := reDot.FindAllString(encRelPathStripped, -1) != nil
-		if hasDot {
-			// strip trailing .NNN if present
-			encRelPathStripped = encRelPathStripped[:len(encRelPathStripped)-4]
-			encRelPathWithoutSlashStripped = encRelPathWithoutSlashStripped[:len(encRelPathWithoutSlashStripped)-4]
-		}
-
-		backupName, snapshotName, relPath, err := decryptNamesTriplet(key, encBackupName, encSnapshotName, encRelPathWithoutSlashStripped)
-		if err != nil {
-			continue
-		}
-
-		// Parse the snapshot datetime string
-		snapShotDateTime, err := time.Parse("2006-01-02_15.04.05", snapshotName)
-		if err != nil {
-			log.Printf("error: GetGroupedSnapshots: time.Parse failed on '%s': %v", snapshotName, err)
-			continue
-		}
-
-		if _, ok := retBackupDirs[backupName]; !ok {
-			// backupName key is new, so add a map k/v pair for it
-			retBackupDirs[backupName] = BackupDir{
-				EncryptedName: encBackupName,
-				DecryptedName: backupName,
-				Snapshots:     make(map[string]Snapshot),
-			}
-		}
-
-		if _, ok := retBackupDirs[backupName].Snapshots[snapshotName]; !ok {
-			// snapshotName is new, so add a k/v pair for it
-			retBackupDirs[backupName].Snapshots[snapshotName] = Snapshot{
-				EncryptedName: encSnapshotName,
-				DecryptedName: snapshotName,
-				Datetime:      snapShotDateTime,
-				RelPaths:      make(map[string]CloudRelPath),
-			}
-		}
-
-		if _, ok := retBackupDirs[backupName].Snapshots[snapshotName].RelPaths[relPath]; !ok {
-			// relPath is new, so add a k/v pair for it
-			retBackupDirs[backupName].Snapshots[snapshotName].RelPaths[relPath] = CloudRelPath{
-				EncryptedRelPathStripped: encRelPathStripped,
-				DecryptedRelPath:         relPath,
-				EncryptedChunkNames:      make(map[string]int64),
-				IsDeleted:                isDeleted,
-			}
-		}
-
-		retBackupDirs[backupName].Snapshots[snapshotName].RelPaths[relPath].EncryptedChunkNames[encRelPath] = size
-	}
-
-	return retBackupDirs, nil
-}
-
 ////////////////////////////////  /new code for GetGroupedSnapshots2  //////////////////////////////////////////////
 
-// TODO:  take a vlog (optional)
-func GetGroupedSnapshots2(ctx context.Context, objst *objstore.ObjStore, key []byte, bucket string) (map[string]BackupDir, error) {
+func GetGroupedSnapshots2(ctx context.Context, objst *objstore.ObjStore, key []byte, bucket string, vlog *util.VLog) (map[string]BackupDir, error) {
 	// setup return map
 	ret := make(map[string]BackupDir)
 
@@ -203,7 +104,7 @@ func GetGroupedSnapshots2(ctx context.Context, objst *objstore.ObjStore, key []b
 		}
 
 		// get all snapshot index files for this backup
-		indexFiles, err := getAllSnapshotIndexFiles(ctx, objst, key, encBackupName, bucket)
+		indexFiles, err := getAllSnapshotIndexFiles(ctx, objst, key, encBackupName, bucket, vlog)
 		if err != nil {
 			log.Printf("error: GetGroupedSnapshots2: could not get snapshot index files for '%s': %v\n", backupName, err)
 			return nil, err
@@ -228,7 +129,7 @@ func GetGroupedSnapshots2(ctx context.Context, objst *objstore.ObjStore, key []b
 
 // Returns a map of [decrypted snapshot index obj names] onto [slices of (encrypted, compressed) bytes] for that index file
 // TODO:  cache decrypted/uncompressed files, and then look in cache first
-func getAllSnapshotIndexFiles(ctx context.Context, objst *objstore.ObjStore, key []byte, encBackupName string, bucket string) (map[string][]byte, error) {
+func getAllSnapshotIndexFiles(ctx context.Context, objst *objstore.ObjStore, key []byte, encBackupName string, bucket string, vlog *util.VLog) (map[string][]byte, error) {
 	ret := make(map[string][]byte)
 
 	mObjs, err := objst.GetObjList2(ctx, bucket, encBackupName+"/@", false, nil)
@@ -238,7 +139,7 @@ func getAllSnapshotIndexFiles(ctx context.Context, objst *objstore.ObjStore, key
 	}
 
 	for encObjName := range mObjs {
-		log.Printf("Working on index file:  %s", encObjName) //vlog
+		vlog.Printf("Working on index file:  %s", encObjName)
 
 		// strip off the prefix "encBackupName/@"
 		encSsName := strings.TrimPrefix(encObjName, encBackupName+"/@")
@@ -249,7 +150,7 @@ func getAllSnapshotIndexFiles(ctx context.Context, objst *objstore.ObjStore, key
 			log.Printf("error: getAllSnapshotIndexFiles: could not decrypt snapshot name (%s): %v\n", encSsName, err)
 			return nil, err
 		}
-		log.Printf("While is for snapshot:  %s", ssName) //vlog
+		vlog.Printf("Which is for snapshot:  %s", ssName)
 
 		// download actual snapshot file
 		buf, err := objst.DownloadObjToBuffer(ctx, bucket, encObjName)
@@ -291,25 +192,6 @@ func decryptAndUncompressIndexFile(key []byte, encBuf []byte) ([]byte, error) {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func decryptNamesTriplet(key []byte, encBackupName string, encSnapshotName string, encRelPath string) (backupName string, snapshotName string, relPath string, err error) {
-	backupName, err = cryptography.DecryptFilename(key, encBackupName)
-	if err != nil {
-		log.Printf("error: skipping b/c could not decrypt encrypted backup name '%s'", encBackupName)
-		return "", "", "", err
-	}
-	snapshotName, err = cryptography.DecryptFilename(key, encSnapshotName)
-	if err != nil {
-		log.Printf("error: skipping b/c could not decrypt encrypted snapshot name '%s'", encSnapshotName)
-		return "", "", "", err
-	}
-	relPath, err = cryptography.DecryptFilename(key, encRelPath)
-	if err != nil {
-		log.Printf("error: skipping b/c could not decrypt encrypted rel path '%s'", encRelPath)
-		return "", "", "", err
-	}
-	return backupName, snapshotName, relPath, nil
-}
-
 // Walks all snapshots from the earliest to snapshotName using the deltas in each to figure out
 // what files the snapshot snapshotName consisted of, and what object key to use to retrieve them.
 //
@@ -325,12 +207,12 @@ func decryptNamesTriplet(key []byte, encBackupName string, encSnapshotName strin
 // groupedObjects argument can be nil and it will be computed for you.  However, because compueting
 // it is slow, if caller already has a copy cached, then you can pass it in and your cached copy will
 // be used (read-only).
-func ReconstructSnapshotFileList(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, backupName string, snapshotName string, partialRestorePath string, preselectedRelPaths map[string]int, groupedObjects map[string]BackupDir) (map[string][]string, error) {
+func ReconstructSnapshotFileList(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, backupName string, snapshotName string, partialRestorePath string, preselectedRelPaths map[string]int, groupedObjects map[string]BackupDir, vlog *util.VLog) (map[string][]string, error) {
 	m := make(map[string][]string)
 	var err error
 
 	if groupedObjects == nil {
-		groupedObjects, err = GetGroupedSnapshots(ctx, objst, key, bucket)
+		groupedObjects, err = GetGroupedSnapshots2(ctx, objst, key, bucket, vlog)
 		if err != nil {
 			log.Fatalf("Could not get grouped snapshots: %v", err)
 		}
@@ -414,10 +296,10 @@ type RenameObj struct {
 	NewSnapshot string
 }
 
-func ComputeSnapshotDelete(snapshots map[string]Snapshot, snapshotToDelete string) (deleteObjs []map[string]int64, renameObjs []RenameObj, err error) {
+func ComputeSnapshotDelete(key []byte, encBackupDirName string, snapshots map[string]Snapshot, snapshotToDelete string, objst *objstore.ObjStore, ctx context.Context, bucket string) (deleteObjs []map[string]int64, renameObjs []RenameObj, newNextSnapshot *Snapshot, err error) {
 	// Make sure snapshotToDelete is actually a real snapshot
 	if _, ok := snapshots[snapshotToDelete]; !ok {
-		return nil, nil, fmt.Errorf("error: snapshot '%s' not in list of snapshots", snapshotToDelete)
+		return nil, nil, nil, fmt.Errorf("error: snapshot '%s' not in list of snapshots", snapshotToDelete)
 	}
 
 	// Get an ordered list of all snapshots from earliest to most recent
@@ -431,19 +313,37 @@ func ComputeSnapshotDelete(snapshots map[string]Snapshot, snapshotToDelete strin
 	// since there's no snapshot to merge forward into.
 	if snapshotKeys[len(snapshotKeys)-1] == snapshotToDelete {
 		deleteObjs = deleteAllKeysInSnapshot(snapshots, snapshotToDelete)
-		return deleteObjs, nil, nil
+		return deleteObjs, nil, nil, nil
 	}
 
 	// Get the next snapshot forward in time after snapshotToDelete
 	nextSnapshot := getNextSnapshot(snapshotKeys, snapshotToDelete)
 
+	// Create a Snapshot struct for new NEXT snapshot (one we're merging into)
+	encNextSnapshot, err := cryptography.EncryptFilename(key, nextSnapshot)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("error: ComputeSnapshotDelete: could not encrypt snapshot name '%s'", nextSnapshot)
+	}
+	newNextSnapshot, err = ReadIndexFileIntoSnapshotObj(key, encBackupDirName, encNextSnapshot, objst, ctx, bucket)
+	if err != nil {
+		log.Printf("error: ComputeSnapshotDelete: could not read next snapshot's index '%s'", nextSnapshot)
+		return nil, nil, nil, err
+	}
+
 	// loop over each rel path in snapshotToDelete
 	for relPath := range snapshots[snapshotToDelete].RelPaths {
+		crp := CloudRelPath{
+			EncryptedRelPathStripped: snapshots[snapshotToDelete].RelPaths[relPath].EncryptedRelPathStripped,
+			DecryptedRelPath:         relPath,
+			EncryptedChunkNames:      snapshots[snapshotToDelete].RelPaths[relPath].EncryptedChunkNames,
+		}
+
 		// If relpath in the current snapshot is just a ## deletion marker, we either need to
 		// delete it or roll it forward to the next snapshot.
 		// - Delete if relPath shows up again in the next snapshot
 		// - Else rename and roll it forward
 		if snapshots[snapshotToDelete].RelPaths[relPath].IsDeleted {
+			crp.IsDeleted = true
 			deletionMarker := "##" + snapshots[snapshotToDelete].RelPaths[relPath].EncryptedRelPathStripped
 
 			// If rel path is in next snapshot...
@@ -454,19 +354,23 @@ func ComputeSnapshotDelete(snapshots map[string]Snapshot, snapshotToDelete strin
 				// If relpath is NOT in next snapshot change set at all, then we must rename relpath objects in
 				// snapshotToDelete to next snapshot.
 				renameObjs = append(renameObjs, renameDeletionMarkerIntoNextSnapshot(snapshots, relPath, snapshotToDelete, nextSnapshot)...)
+				newNextSnapshot.RelPaths[relPath] = crp
 			}
 		} else {
 			// relPath in snapshotToDelete is a real file.  Delete it if it shows up in the next
 			// snapshot, otherwise roll it forward
+			crp.IsDeleted = false
+
 			if containsRelPath(snapshots[nextSnapshot], relPath) {
 				deleteObjs = append(deleteObjs, snapshots[snapshotToDelete].RelPaths[relPath].EncryptedChunkNames)
 			} else {
 				renameObjs = append(renameObjs, renameAllChunksIntoNextSnapshot(snapshots, relPath, snapshotToDelete, nextSnapshot)...)
+				newNextSnapshot.RelPaths[relPath] = crp
 			}
 		}
 	}
 
-	return deleteObjs, renameObjs, nil
+	return deleteObjs, renameObjs, newNextSnapshot, nil
 }
 
 func renameDeletionMarkerIntoNextSnapshot(snapshots map[string]Snapshot, relPath, snapshotToDelete, nextSnapshot string) (renameObjs []RenameObj) {
@@ -521,4 +425,40 @@ func getNextSnapshot(snapshotKeys []string, snapshotToDelete string) (nextSnapsh
 	}
 	log.Fatalln("error: getNextSnapshot couldn't find next snapshot")
 	return ""
+}
+
+func ReadIndexFileIntoSnapshotObj(key []byte, encryptedBackupDirName string, encryptedSnapshotName string, objst *objstore.ObjStore, ctx context.Context, bucket string) (snapshotObj *Snapshot, err error) {
+	// form the obj name of index file: encBackupDir/@encSnapshhotName
+	objName := encryptedBackupDirName + "/" + "@" + encryptedSnapshotName
+
+	// retrieve it from cloud
+	encCompressedBuf, err := objst.DownloadObjToBuffer(ctx, bucket, objName)
+	if err != nil {
+		log.Println("error: ReadIndexFileIntoSnapshotObj: UploadObjFromBuffer: ", err)
+		return nil, err
+	}
+
+	// decrypt
+	compressedBuf, err := cryptography.DecryptBuffer(key, encCompressedBuf)
+	if err != nil {
+		log.Println("error: ReadIndexFileIntoSnapshotObj: DecryptBuffer: ", err)
+		return nil, err
+	}
+
+	// decompress
+	buf, err := util.XZUncompress(compressedBuf)
+	if err != nil {
+		log.Println("error: ReadIndexFileIntoSnapshotObj: xzUncompress failed")
+		return nil, err
+	}
+
+	// deserialize to json
+	var retObj Snapshot
+	err = json.Unmarshal(buf, &retObj)
+	if err != nil {
+		log.Println("error: ReadIndexFileIntoSnapshotObj: json.Unmarshall failed")
+		return nil, err
+	}
+
+	return &retObj, nil
 }

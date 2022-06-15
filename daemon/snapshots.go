@@ -52,7 +52,7 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
-	groupedObjects, err := objstorefs.GetGroupedSnapshots2(ctxBkg, objst, key, bucket)
+	groupedObjects, err := objstorefs.GetGroupedSnapshots2(ctxBkg, objst, key, bucket, vlog)
 	if err != nil {
 		log.Printf("Could not get grouped snapshots: %v", err)
 		resp := pb.ReadAllSnapshotsResponse{
@@ -121,7 +121,7 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 			ret.PartialSnapshot.SnapshotTimestamp = util.GetUnixTimeFromSnapshotName(snapshotName)
 
 			relPathKeys := make([]string, 0, len(groupedObjects[groupName].Snapshots[snapshotName].RelPaths))
-			mFilelist, err := objstorefs.ReconstructSnapshotFileList(ctxBkg, objst, bucket, key, groupName, snapshotName, "", nil, groupedObjects)
+			mFilelist, err := objstorefs.ReconstructSnapshotFileList(ctxBkg, objst, bucket, key, groupName, snapshotName, "", nil, groupedObjects, vlog)
 			if err != nil {
 				log.Println("error: ReadAllSnapshots: objstorefs.ReconstructSnapshotFileList: ", err)
 			}
@@ -167,6 +167,8 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 
 // Callback for rpc.DaemonCtlServer.ReadAllSnapshots requests
 func (s *server) DeleteSnapshot(ctx context.Context, in *pb.DeleteSnapshotRequest) (*pb.DeleteSnapshotResponse, error) {
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
+
 	log.Printf(">> GOT COMMAND: DeleteSnapshot (%s)", in.SnapshotRawName)
 	defer log.Println(">> COMPLETED COMMAND: DeleteSnapshot")
 
@@ -221,7 +223,7 @@ func (s *server) DeleteSnapshot(ctx context.Context, in *pb.DeleteSnapshotReques
 		}, nil
 	}
 
-	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctx, objst, key, bucket)
+	groupedObjects, err := objstorefs.GetGroupedSnapshots2(ctx, objst, key, bucket, vlog)
 	if err != nil {
 		log.Printf("Could not get grouped snapshots: %v", err)
 		return &pb.DeleteSnapshotResponse{

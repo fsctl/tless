@@ -168,14 +168,16 @@ if [[ "$XATTRS_DIR_SRC" != "$XATTRS_DIR_DST" ]]; then
 fi
 
 #
-# Now delete a file and repeat the whole test process
+# Now add, change and delete files and repeat the whole test process
 #
 rm -rf $TEMPDIR/test-backup-src/subdir2
+echo "Hello there" > $TEMPDIR/test-backup-src/newfile.txt
+echo "New message" > $TEMPDIR/test-backup-src/subdir1/file.txt
 
 #
 # Incremental backup of $TEMPDIR/test-backup-src
 #
-echo "🧪 Testing incremental backup with deleted paths..."
+echo "🧪 Testing incremental backup with added, changed and deleted paths..."
 ./tless backup -d $TEMPDIR/test-backup-src $VERBOSE
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then
@@ -186,12 +188,50 @@ fi
 #
 # Get the new snapshot name to specify in next restore
 #
+FIRST_SNAPSHOT_NAME=$SNAPSHOT_NAME
 SNAPSHOT_NAME=`./tless cloudls --grep | tail -n -1`
 
 #
 # Restore to $TEMPDIR/test-restore-dst/
 #
-echo "🧪 Testing restore of snapshot with deleted paths..."
+echo "🧪 Testing restore of snapshot with added, changed and deleted paths..."
+./tless restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE
+EXITCODE=$?
+if [[ $EXITCODE != 0 ]]; then
+    echo "$0: Halting test due to failure exit code ($EXITCODE)"
+    exit 1
+fi
+
+#
+# 'diff -r' to make sure they match exactly
+#
+diff -r $TEMPDIR/test-backup-src $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME
+EXITCODE=$?
+if [[ $EXITCODE != 0 ]]; then
+    echo "$0: ERROR: source and restore directories do not match!"
+    exit 1
+fi
+
+#
+# Cleanup:  delete second snapshot restore dir
+#
+rm -rf $TEMPDIR/test-restore-dst/$SNAPSHOT_NAME
+
+#
+# Test deleting the first snapshot and restoring the only remaining snapshot
+#
+echo "🧪 Testing snapshot deletion..."
+./tless cloudrm --snapshot $FIRST_SNAPSHOT_NAME $VERBOSE
+EXITCODE=$?
+if [[ $EXITCODE != 0 ]]; then
+    echo "$0: Halting test due to failure exit code ($EXITCODE)"
+    exit 1
+fi
+
+#
+# Restore remaining snapshot again to $TEMPDIR/test-restore-dst/
+#
+echo "🧪 Testing restore of latest snapshot after the preceding snapshot was deleted..."
 ./tless restore $SNAPSHOT_NAME $TEMPDIR/test-restore-dst/ $VERBOSE
 EXITCODE=$?
 if [[ $EXITCODE != 0 ]]; then

@@ -214,7 +214,7 @@ func updateBackupProgress(finished int64, total int64, globalsLock *sync.Mutex, 
 	vlog.Printf("%.2f%% done", percentDone)
 }
 
-func setBackupInitialProgress(finished int64, total int64, globalsLock *sync.Mutex, vlog *util.VLog) {
+func setBackupInitialProgress(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog) {
 	percentDone := (float32(finished)/float32(total))*float32(100) + 0.1
 	util.LockIf(globalsLock)
 	gStatus.percentage = float32(percentDone)
@@ -253,7 +253,7 @@ func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock 
 
 	// Delete the snapshot we've been creating
 	vlog.Printf("CANCEL: Deleting partially created snapshot")
-	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctx, objst, key, bucket)
+	groupedObjects, err := objstorefs.GetGroupedSnapshots2(ctx, objst, key, bucket, vlog)
 	if err != nil {
 		log.Printf("Could not get grouped snapshots for cancelation: %v", err)
 	}

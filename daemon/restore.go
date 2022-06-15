@@ -147,7 +147,7 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 		}
 	}
 	//log.Printf("RESTORE: selectedRelPathsMap (%d) = %v\n", len(selectedRelPathsMap), selectedRelPathsMap)
-	mRelPathsObjsMap, err := objstorefs.ReconstructSnapshotFileList(ctx, objst, bucket, encKey, backupName, snapshotName, "", selectedRelPathsMap, nil)
+	mRelPathsObjsMap, err := objstorefs.ReconstructSnapshotFileList(ctx, objst, bucket, encKey, backupName, snapshotName, "", selectedRelPathsMap, nil, vlog)
 	if err != nil {
 		log.Println("error: reconstructSnapshotFileList failed: ", err)
 		done()

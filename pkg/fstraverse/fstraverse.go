@@ -151,16 +151,17 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 
 	// print summary statistics
 	p := message.NewPrinter(language.English)
-	s := p.Sprintf("%d files, %d dirs", filesCnt, dirsCnt)
-	log.Println("~~~ path traversal summary stats ~~~")
-	log.Println(s)
+	_ = p
+	//s := p.Sprintf("%d files, %d dirs", filesCnt, dirsCnt)
+	//log.Println("~~~ path traversal summary stats ~~~")
+	//log.Println(s)
 	//log.Printf("\nHistogram of size in Mb (%d files):\n", len(fileSizesMb))
 	hist := histogram.Hist(30, fileSizesMb)
 	_ = hist
 	//if err := histogram.Fprint(os.Stdout, hist, histogram.Linear(80)); err != nil {
 	//	log.Println("error: uniplot.Fprint: ", err)
 	//}
-	log.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+	//log.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 	// end - summary statistics
 
 	return nil

@@ -16,19 +16,20 @@ import (
 func DeleteSnapshot(ctx context.Context, key []byte, groupedObjects map[string]objstorefs.BackupDir, backupDirName string, snapshotTimestamp string, objst *objstore.ObjStore, bucket string) error {
 	backupDirSnapshotsOnly := groupedObjects[backupDirName].Snapshots
 
-	deleteObjs, renameObjs, err := objstorefs.ComputeSnapshotDelete(backupDirSnapshotsOnly, snapshotTimestamp)
-	if err != nil {
-		return fmt.Errorf("error: DeleteSnapshot(): could not compute plan for deleting snapshot: %v", err)
-	}
-
 	// get the encrypted representation of backupDirName and snapshotName
 	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotTimestamp)
 	if err != nil {
-		return fmt.Errorf("error: DeleteSnapshot(): could not encrypt snapshot name (%s): %v", snapshotTimestamp, err)
+		return fmt.Errorf("error: DeleteSnapshot: could not encrypt snapshot name (%s): %v", snapshotTimestamp, err)
 	}
 	encryptedBackupDirName, err := cryptography.EncryptFilename(key, backupDirName)
 	if err != nil {
-		return fmt.Errorf("error: DeleteSnapshot(): could not encrypt backup dir name (%s): %v", backupDirName, err)
+		return fmt.Errorf("error: DeleteSnapshot: could not encrypt backup dir name (%s): %v", backupDirName, err)
+	}
+
+	// Compute the plan for deleting this snapshot and merging forward
+	deleteObjs, renameObjs, newNextSnapshotObj, err := objstorefs.ComputeSnapshotDelete(key, encryptedBackupDirName, backupDirSnapshotsOnly, snapshotTimestamp, objst, ctx, bucket)
+	if err != nil {
+		return fmt.Errorf("error: DeleteSnapshot: could not compute plan for deleting snapshot: %v", err)
 	}
 
 	// Object deletes
@@ -38,7 +39,7 @@ func DeleteSnapshot(ctx context.Context, key []byte, groupedObjects map[string]o
 
 			err = objst.DeleteObj(ctx, bucket, objName)
 			if err != nil {
-				return fmt.Errorf("error: DeleteSnapshot(): could not rename object (%s): %v", objName, err)
+				return fmt.Errorf("error: DeleteSnapshot: could not delete object (%s): %v", objName, err)
 			}
 		}
 	}
@@ -47,20 +48,36 @@ func DeleteSnapshot(ctx context.Context, key []byte, groupedObjects map[string]o
 	for _, renObj := range renameObjs {
 		encryptedOldSnapshotName, err := cryptography.EncryptFilename(key, renObj.OldSnapshot)
 		if err != nil {
-			log.Fatalf("error: DeleteSnapshot(): could not encrypt snapshot name (%s): %v\n", renObj.OldSnapshot, err)
+			log.Fatalf("error: DeleteSnapshot: could not encrypt snapshot name (%s): %v\n", renObj.OldSnapshot, err)
 		}
 		encryptedNewSnapshotName, err := cryptography.EncryptFilename(key, renObj.NewSnapshot)
 		if err != nil {
-			log.Fatalf("error: DeleteSnapshot(): could not encrypt snapshot name (%s): %v\n", renObj.NewSnapshot, err)
+			log.Fatalf("error: DeleteSnapshot: could not encrypt snapshot name (%s): %v\n", renObj.NewSnapshot, err)
 		}
 		oldObjName := encryptedBackupDirName + "/" + encryptedOldSnapshotName + "/" + renObj.RelPath
 		newObjName := encryptedBackupDirName + "/" + encryptedNewSnapshotName + "/" + renObj.RelPath
 
 		err = objst.RenameObj(ctx, bucket, oldObjName, newObjName)
 		if err != nil {
-			log.Fatalf("error: DeleteSnapshot(): could not rename object (%s): %v\n", oldObjName, err)
+			log.Fatalf("error: DeleteSnapshot: could not rename object (%s): %v\n", oldObjName, err)
 		}
 	}
+
+	// Overwrite the new snapshot index for NEXT snapshot (one we merged into)
+	if newNextSnapshotObj != nil {
+		if err = SerializeAndWriteSnapshotObj(newNextSnapshotObj, key, encryptedBackupDirName, newNextSnapshotObj.EncryptedName, objst, ctx, bucket); err != nil {
+			log.Printf("error: DeleteSnapshot: failed in SerializeAndSaveSnapshotObj: %v\n", err)
+			return err
+		}
+	}
+
+	// Delete index file for deleted snapshot
+	indexObjName := encryptedBackupDirName + "/@" + encryptedSnapshotName
+	err = objst.DeleteObj(ctx, bucket, indexObjName)
+	if err != nil {
+		return fmt.Errorf("error: DeleteSnapshot: could not delete old snapshot's index file (%s): %v", indexObjName, err)
+	}
+
 	return nil
 }
 
@@ -98,6 +115,7 @@ type SnapshotInfo struct {
 }
 
 // Returns a map of backup:[]SnapshotInfo, where the snapshot info structs are sorted by timestamp ascending
+// Used by prune (cmd/prune.go) and autoprune (daemon/timer.go)
 func GetAllSnapshotInfos(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string) (map[string][]SnapshotInfo, error) {
 	// Get the backup:snapshots map with encrypted names
 	encryptedSnapshotsMap, err := objst.GetObjListTopTwoLevels(ctx, bucket, []string{"SALT-", "VERSION"}, []string{"@"})

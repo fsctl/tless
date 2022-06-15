@@ -3,9 +3,7 @@ package backup
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"path/filepath"
 	"strings"
@@ -17,6 +15,7 @@ import (
 	"github.com/fsctl/tless/pkg/fstraverse"
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/objstorefs"
+	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
 )
 
@@ -24,7 +23,7 @@ import (
 type CheckAndHandleCancelationFuncType func(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, globalsLock *sync.Mutex, db *database.DB, backupDirPath string, snapshotName string) bool
 type UpdateProgressFuncType func(finished int64, total int64, globalsLock *sync.Mutex, vlog *util.VLog)
 type SetReplayInitialProgressFuncType func(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog)
-type SetBackupInitialProgressFuncType func(finished int64, total int64, globalsLock *sync.Mutex, vlog *util.VLog)
+type SetBackupInitialProgressFuncType func(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog)
 
 func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, excludePaths []string, vlog *util.VLog, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, setBackupInitialProgressFunc SetBackupInitialProgressFuncType, updateBackupProgressFunc UpdateProgressFuncType) (breakFromLoop bool, continueLoop bool, fatalError bool) {
 	// Return values
@@ -108,7 +107,7 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 		if err != nil {
 			log.Printf("error: DoJournaledBackup: db.GetBackupJournalCounts: %v", err)
 		}
-		setBackupInitialProgressFunc(finished, total, globalsLock, vlog)
+		setBackupInitialProgressFunc(finished, total, backupDirName, globalsLock, vlog)
 	}
 
 	breakFromLoop = PlayBackupJournal(ctx, key, db, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateBackupProgressFunc)
@@ -118,6 +117,20 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string, vlog *util.VLog, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, updateProgressFunc UpdateProgressFuncType) (breakFromLoop bool) {
 	// By default, don't signal we want to break out of caller's loop over backups
 	breakFromLoop = false
+
+	progressUpdateClosure := func() {
+		// Update the percentage based on where we are now
+		util.LockIf(globalsLock)
+		finished, total, err := db.GetBackupJournalCounts()
+		util.UnlockIf(globalsLock)
+		if err != nil {
+			log.Printf("error: PlayBackupJournal: db.GetBackupJournalCounts: %v", err)
+		} else {
+			if updateProgressFunc != nil {
+				updateProgressFunc(finished, total, globalsLock, vlog)
+			}
+		}
+	}
 
 	for {
 		// Sleep this go routine briefly on every iteration of the for loop
@@ -195,7 +208,9 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 		}
 		if isJournalComplete {
 			vlog.Printf("Finished the journal (re)play")
-			err = writeIndexFile(ctx, globalsLock, db, objst, bucket, key, filepath.Base(backupDirPath), snapshotName)
+			progressUpdateClosure()
+
+			err = snapshots.WriteIndexFile(ctx, globalsLock, db, objst, bucket, key, filepath.Base(backupDirPath), snapshotName)
 			if err != nil {
 				log.Println("error: PlayBackupJournal: couldn't write index file: ", err)
 			}
@@ -214,17 +229,7 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 			}
 			return
 		} else {
-			// Update the percentage on gStatus based on where we are now
-			util.LockIf(globalsLock)
-			finished, total, err := db.GetBackupJournalCounts()
-			util.UnlockIf(globalsLock)
-			if err != nil {
-				log.Printf("error: PlayBackupJournal: db.GetBackupJournalCounts: %v", err)
-			} else {
-				if updateProgressFunc != nil {
-					updateProgressFunc(finished, total, globalsLock, vlog)
-				}
-			}
+			progressUpdateClosure()
 		}
 	}
 }
@@ -310,83 +315,4 @@ func ReplayBackupJournal(ctx context.Context, key []byte, objst *objstore.ObjSto
 
 	// Roll the journal forward
 	_ = PlayBackupJournal(ctx, key, db, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateProgressFunc)
-}
-
-func writeIndexFile(ctx context.Context, dbLock *sync.Mutex, db *database.DB, objst *objstore.ObjStore, bucket string, key []byte, backupDirName string, snapshotName string) error {
-	// Get encrypted snapshot name and backup dir
-	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotName)
-	if err != nil {
-		log.Printf("error: writeIndexFile(): could not encrypt snapshot name (%s): %v\n", snapshotName, err)
-		return err
-	}
-	encryptedBackupDirName, err := cryptography.EncryptFilename(key, backupDirName)
-	if err != nil {
-		log.Printf("error: createDeletedPathKeyAndPurgeFromDb(): could not encrypt backup dir name (%s): %v\n", backupDirName, err)
-		return err
-	}
-
-	// Get snapshot time from name and parse into time.Time struct
-	// Parse the snapshot datetime string
-	snapShotDateTime, err := time.Parse("2006-01-02_15.04.05", snapshotName)
-	if err != nil {
-		log.Printf("error: writeIndexFile: time.Parse failed on '%s': %v", snapshotName, err)
-	}
-
-	// Construct the objstorefs.Snapshot object
-	snapshotObj := objstorefs.Snapshot{
-		EncryptedName: encryptedSnapshotName,
-		DecryptedName: snapshotName,
-		Datetime:      snapShotDateTime,
-		RelPaths:      make(map[string]objstorefs.CloudRelPath),
-	}
-
-	// Add to snapshot:  every journal row's index_entry
-	util.LockIf(dbLock)
-	indexEntries, err := db.GetAllBackupJournalRowIndexEntries()
-	util.UnlockIf(dbLock)
-	if err != nil {
-		log.Println("error: writeIndexFile: db.GetAllBackupJournalRowIndexEntries() failed")
-		return fmt.Errorf("error: writeIndexFile failed")
-	}
-
-	for _, indexEntry := range indexEntries {
-		// reconstruct the crp object from json
-		crp := objstorefs.NewCloudRelPathFromJson(indexEntry)
-
-		// add object to snapshot obj's map
-		snapshotObj.RelPaths[crp.DecryptedRelPath] = *crp
-	}
-
-	// Serialize fully linked snapshot obj to json bytes
-	buf, err := json.Marshal(snapshotObj)
-	if err != nil {
-		log.Println("error: writeIndexFile: marshal failed: ", err)
-		return err
-	}
-
-	// lzma compress the json
-	compressedBuf, err := util.XZCompress(buf)
-	if err != nil {
-		log.Println("error: writeIndexFile: xzCompress failed")
-		return err
-	}
-
-	// encrypt the compressed json
-	encCompressedBuf, err := cryptography.EncryptBuffer(key, compressedBuf)
-	if err != nil {
-		log.Println("error: writeIndexFile: EncryptBuffer: ", err)
-		return err
-	}
-
-	// form the obj name of index file (enc backup dir / '@' + enc snapshhot name)
-	objName := encryptedBackupDirName + "/" + "@" + encryptedSnapshotName
-
-	// put the index object to server
-	err = objst.UploadObjFromBuffer(ctx, bucket, objName, encCompressedBuf, objstore.ComputeETag(encCompressedBuf))
-	if err != nil {
-		log.Println("error: writeIndexFile: UploadObjFromBuffer: ", err)
-		return err
-	}
-
-	return nil
 }

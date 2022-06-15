@@ -8,13 +8,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
+	"sync"
 	"time"
 
 	"github.com/fsctl/tless/pkg/backup"
-	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/database"
-	"github.com/fsctl/tless/pkg/fstraverse"
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/util"
 
@@ -62,6 +60,8 @@ func init() {
 func backupMain() {
 	ctx := context.Background()
 
+	vlog := util.NewVLog(nil, func() bool { return cfgVerbose })
+
 	// check that cfgDirs is set, and allow cfgExcludePaths to be set from toml file if no arg
 	if err := validateDirs(); err != nil {
 		log.Fatalln("no valid dirs to back up: ", err)
@@ -77,11 +77,11 @@ func backupMain() {
 	}
 	db, err := database.NewDB(filepath.Join(sqliteDir, "state.db"))
 	if err != nil {
-		log.Fatalf("Error: cannot open database: %v", err)
+		log.Fatalf("error: cannot open database: %v", err)
 	}
 	defer db.Close()
 	if err := db.CreateTablesIfNotExist(); err != nil {
-		log.Fatalf("Error: cannot initialize database: %v", err)
+		log.Fatalf("error: cannot initialize database: %v", err)
 	}
 
 	// open connection to cloud server
@@ -90,30 +90,13 @@ func backupMain() {
 		log.Fatalln("error: exiting because server not reachable: ", err)
 	}
 
-	// initialize progress bar container
+	// initialize progress bar container and its callbacks
 	progressBarContainer := mpb.New()
-
-	for _, backupDirPath := range cfgDirs {
-		backupDirName := filepath.Base(backupDirPath)
-
-		snapshotName := time.Now().UTC().Format("2006-01-02_15.04.05")
-
-		// Traverse the filesystem looking for changed directory entries
-		prevPaths, err := db.GetAllKnownPaths(backupDirName)
-		if err != nil {
-			log.Fatalf("Error: cannot get paths list: %v", err)
-		}
-		var backupIdsQueue fstraverse.BackupIdsQueue
-		fstraverse.Traverse(backupDirPath, prevPaths, db, nil, &backupIdsQueue, cfgExcludePaths)
-
-		// create the progress bar
-		var progressBarTotalItems int
-		var progressBar *mpb.Bar = nil
+	var progressBar *mpb.Bar = nil
+	setBackupInitialProgress := func(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog) {
 		if !cfgVerbose {
-			progressBarTotalItems = len(backupIdsQueue.Ids)
-
 			progressBar = progressBarContainer.New(
-				int64(progressBarTotalItems),
+				total,
 				mpb.BarStyle().Lbound("[").Filler("=").Tip(">").Rbound("]"),
 				mpb.PrependDecorators(
 					decor.Name(backupDirName, decor.WC{W: len(backupDirName) + 1, C: decor.DidentRight}),
@@ -125,41 +108,31 @@ func backupMain() {
 				mpb.AppendDecorators(decor.Percentage()),
 			)
 		}
-
-		// Any remaining prevPaths represent deleted files, so upload keys to mark them deleted and remove from
-		// dirents table
-		if err = createDeletedPathsKeysAndPurgeFromDb(ctx, objst, cfgBucket, db, encKey, backupDirName, snapshotName, prevPaths, cfgVerbose); err != nil {
-			log.Println("error: failed creating deleted paths keys")
+	}
+	updateBackupProgress := func(finished int64, total int64, globalsLock *sync.Mutex, vlog *util.VLog) {
+		if !cfgVerbose {
+			progressBar.SetCurrent(finished)
 		}
+	}
 
-		// Work through the queue
-		for {
-			var id int = 0
-			if len(backupIdsQueue.Ids) >= 1 {
-				id = backupIdsQueue.Ids[0]
-				backupIdsQueue.Ids = backupIdsQueue.Ids[1:]
-			} else {
-				break
-			}
-			if id != 0 {
-				rootDirName, relPath, err := db.GetDirEntPaths(id)
-				if err != nil {
-					log.Printf("error: db.GetDirEntPaths(): could not get dirent id '%d'\n", id)
-				}
-				if _, _, err := backup.Backup(ctx, encKey, rootDirName, relPath, backupDirPath, snapshotName, objst, cfgBucket, cfgVerbose); err != nil {
-					log.Printf("error: Backup(): %v", err)
-					continue
-				}
-				err = db.UpdateLastBackupTime(id)
-				if err != nil {
-					log.Printf("error: UpdateLastBackupTime(): %v", err)
-				}
-			}
+	// main loop through backup dirs
+	for _, backupDirPath := range cfgDirs {
+		// log what iteration of the loop we're in
+		vlog.Printf("Inspecting %s...\n", backupDirPath)
 
-			// Update the progress bar
-			if !cfgVerbose {
-				progressBar.Increment()
-			}
+		// init the progress bar to nil
+		progressBar = nil
+
+		// Traverse the FS for changed files and do the journaled backup
+		breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, cfgBucket, db, nil, backupDirPath, cfgExcludePaths, vlog, nil, setBackupInitialProgress, updateBackupProgress)
+		if fatalError {
+			goto done
+		}
+		if continueLoop {
+			continue
+		}
+		if breakFromLoop {
+			break
 		}
 	}
 
@@ -169,6 +142,8 @@ func backupMain() {
 		// Give progress bar 0.1 sec to draw itself for final time
 		time.Sleep(1e8)
 	}
+
+done:
 }
 
 func validateDirs() error {
@@ -180,58 +155,5 @@ func validateDirs() error {
 			return fmt.Errorf("backup dir '%s' does not exist)", dir)
 		}
 	}
-	return nil
-}
-
-func createDeletedPathsKeysAndPurgeFromDb(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, key []byte, backupDirName string, snapshotName string, deletedPaths map[string]int, showNameOnSuccess bool) error {
-	// get the encrypted representation of backupDirName and snapshotName
-	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotName)
-	if err != nil {
-		log.Printf("error: createDeletedPathsKeys(): could not encrypt snapshot name (%s): %v\n", snapshotName, err)
-		return err
-	}
-	encryptedBackupDirName, err := cryptography.EncryptFilename(key, backupDirName)
-	if err != nil {
-		log.Printf("error: createDeletedPathsKeys(): could not encrypt backup dir name (%s): %v\n", backupDirName, err)
-		return err
-	}
-
-	// iterate over the deleted paths
-	for deletedPath := range deletedPaths {
-		// deletedPath is backupDirName/deletedRelPath.  Make it just deletedRelPath
-		deletedPath = strings.TrimPrefix(deletedPath, backupDirName)
-		deletedPath = strings.TrimPrefix(deletedPath, "/")
-
-		// encrypt the deleted path name
-		encryptedDeletedRelPath, err := cryptography.EncryptFilename(key, deletedPath)
-		if err != nil {
-			log.Printf("error: createDeletedPathsKeys(): could not encrypt deleted rel path ('%s'): %v\n", deletedPath, err)
-			return err
-		}
-
-		// Insert a slash in the middle of encrypted relPath b/c server won't
-		// allow path components > 255 characters
-		encryptedDeletedRelPath = backup.InsertSlashIntoEncRelPath(encryptedDeletedRelPath)
-
-		// create an object in this snapshot like encBackupDirName/encSnapshotName/##encRelPath
-		// where ## prefix indicates rel path was deleted since prev snapshot
-		objName := encryptedBackupDirName + "/" + encryptedSnapshotName + "/##" + encryptedDeletedRelPath
-		if err = objst.UploadObjFromBuffer(ctx, bucket, objName, make([]byte, 0), objstore.ComputeETag([]byte{})); err != nil {
-			log.Printf("error: createDeletedPathsKeys(): could not UploadObjFromBuffer ('%s'): %v\n", objName, err)
-			return err
-		}
-
-		// Delete dirents row for backupDirName/relPath
-		err = db.DeleteDirEntByPath(backupDirName, deletedPath)
-		if err != nil {
-			log.Printf("DeleteDirEntByPath failed: %v", err)
-			return err
-		}
-
-		if showNameOnSuccess {
-			fmt.Printf("Marked as deleted %s\n", deletedPath)
-		}
-	}
-
 	return nil
 }
