@@ -152,3 +152,40 @@ func GetAllSnapshotInfos(ctx context.Context, key []byte, objst *objstore.ObjSto
 	}
 	return mRet, nil
 }
+
+// An orphaned snapshot has no index or a corrupted index.  All we can do is remove the snapshot files, i.e.,
+// encBackupName/encSnapshotName/* and encBackupName/@encSnapshotName.
+//
+// This mainly comes up when canceling a backup, in which the index has not been written to cloud yet.
+func DeleteOrphanedSnapshot(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, backupDirName string, snapshotName string, vlog *util.VLog) error {
+	encryptedBackupDirName, err := cryptography.EncryptFilename(key, backupDirName)
+	if err != nil {
+		return fmt.Errorf("error: DeleteSnapshot: could not encrypt backup dir name (%s): %v", backupDirName, err)
+	}
+	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotName)
+	if err != nil {
+		return fmt.Errorf("error: DeleteSnapshot: could not encrypt snapshot name (%s): %v", snapshotName, err)
+	}
+
+	// remove corrupted index "encBackupName/@encSnapshotName"
+	objNameIndex := encryptedBackupDirName + "/" + "@" + encryptedSnapshotName
+	if err = objst.DeleteObj(ctx, bucket, objNameIndex); err != nil {
+		log.Println("error: DeleteOrphanedSnapshot: could not delete corrupted index file: ", err)
+		return err
+	}
+
+	// remove all "encBackupName/encSnapshotName/*" objects
+	prefix := encryptedBackupDirName + "/" + encryptedSnapshotName + "/"
+	mObjs, err := objst.GetObjList2(ctx, bucket, prefix, true, vlog)
+	if err != nil {
+		log.Println("error: DeleteOrphanedSnapshot: could not get list of snapshot objects: ", err)
+		return err
+	}
+	for objName := range mObjs {
+		if err = objst.DeleteObj(ctx, bucket, objName); err != nil {
+			log.Println("error: DeleteOrphanedSnapshot: could not delete object: ", err)
+		}
+	}
+
+	return nil
+}

@@ -10,7 +10,6 @@ import (
 	"github.com/fsctl/tless/pkg/backup"
 	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/objstore"
-	"github.com/fsctl/tless/pkg/objstorefs"
 	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
@@ -253,13 +252,9 @@ func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock 
 
 	// Delete the snapshot we've been creating
 	vlog.Printf("CANCEL: Deleting partially created snapshot")
-	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctx, objst, key, bucket, vlog)
+	err := snapshots.DeleteOrphanedSnapshot(ctx, objst, bucket, key, filepath.Base(backupDirPath), snapshotName, vlog)
 	if err != nil {
-		log.Printf("Could not get grouped snapshots for cancelation: %v", err)
-	}
-	err = snapshots.DeleteSnapshot(ctx, key, groupedObjects, filepath.Base(backupDirPath), snapshotName, objst, bucket)
-	if err != nil {
-		log.Printf("Could not delete partially created snapshot: %v", err)
+		log.Printf("error: cancelBackup: could not delete partially created snapshot: %v", err)
 	}
 
 	// Get all completed items in journal and set their dirents.last_backup time to 0
