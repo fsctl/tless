@@ -227,6 +227,7 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 					continue
 				}
 			}
+			vlog.Printf("Done with journal")
 			return
 		} else {
 			progressUpdateClosure()
@@ -290,4 +291,6 @@ func ReplayBackupJournal(ctx context.Context, key []byte, objst *objstore.ObjSto
 
 	// Roll the journal forward
 	_ = PlayBackupJournal(ctx, key, db, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateProgressFunc)
+
+	vlog.Println("Journal replay finished")
 }
