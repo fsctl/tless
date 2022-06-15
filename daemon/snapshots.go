@@ -132,11 +132,11 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 
 			for _, relPath := range relPathKeys {
 				val := groupedObjects[groupName].Snapshots[snapshotName].RelPaths[relPath]
-				deletedMsg := ""
-				if val.IsDeleted {
-					deletedMsg = " (deleted)"
-				}
-				vlog.Printf("Processing objects>>    %s%s\n", relPath, deletedMsg)
+				//deletedMsg := ""
+				//if val.IsDeleted {
+				//	deletedMsg = " (deleted)"
+				//}
+				//vlog.Printf("Processing objects>>    %s%s\n", relPath, deletedMsg)
 
 				if !val.IsDeleted {
 					ret.PartialSnapshot.RawRelPaths = append(ret.PartialSnapshot.RawRelPaths, relPath)
