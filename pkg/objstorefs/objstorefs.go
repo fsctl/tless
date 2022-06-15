@@ -119,7 +119,7 @@ type RenameObj struct {
 	NewSnapshot string
 }
 
-func ComputeSnapshotDelete(key []byte, encBackupDirName string, snapshots map[string]Snapshot, snapshotToDelete string, objst *objstore.ObjStore, ctx context.Context, bucket string) (deleteObjs []map[string]int64, renameObjs []RenameObj, newNextSnapshotObj *Snapshot, err error) {
+func ComputeSnapshotDelete(encBackupDirName string, snapshots map[string]Snapshot, snapshotToDelete string) (deleteObjs []map[string]int64, renameObjs []RenameObj, newNextSnapshotObj *Snapshot, err error) {
 	// Make sure snapshotToDelete is actually a real snapshot
 	if _, ok := snapshots[snapshotToDelete]; !ok {
 		return nil, nil, nil, fmt.Errorf("error: snapshot '%s' not in list of snapshots", snapshotToDelete)

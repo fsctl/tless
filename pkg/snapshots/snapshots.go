@@ -27,7 +27,7 @@ func DeleteSnapshot(ctx context.Context, key []byte, groupedObjects map[string]o
 	}
 
 	// Compute the plan for deleting this snapshot and merging forward
-	deleteObjs, renameObjs, newNextSnapshotObj, err := objstorefs.ComputeSnapshotDelete(key, encryptedBackupDirName, backupDirSnapshotsOnly, snapshotTimestamp, objst, ctx, bucket)
+	deleteObjs, renameObjs, newNextSnapshotObj, err := objstorefs.ComputeSnapshotDelete(encryptedBackupDirName, backupDirSnapshotsOnly, snapshotTimestamp)
 	if err != nil {
 		return fmt.Errorf("error: DeleteSnapshot: could not compute plan for deleting snapshot: %v", err)
 	}
