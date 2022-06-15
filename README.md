@@ -8,11 +8,11 @@ Cloud backup for people who don't trust cloud provider security.  Features:
  - Snapshots
  - Compression
  - Preserves xattrs, file mode, symlinks
- - Clear security guarantees (see [SECURITY.md](SECURITY.md))
+ - Clear security guarantees (see [SECURITY.md](docs/SECURITY.md))
 
 There are plenty of cloud-based backup solutions, many with more elaborate features than this one.  However, I do not know of any other utility like this that leaks zero unencrypted information to the cloud provider.  This means that if your cloud provider is hacked or your cloud data is otherwise leaked onto the Internet, you can have strong confidence that it will not be readable by anyone who does not know your passphrase.  
 
-If you follow the [security recommendations](SECURITY.md), your data is likely to be secure through at least the middle of this century.
+If you follow the [security recommendations](docs/SECURITY.md), your data is likely to be secure through at least the middle of this century.
 
 ## Installation & Usage
 
@@ -20,9 +20,9 @@ If you follow the [security recommendations](SECURITY.md), your data is likely t
 
 1.  Set up a bucket on an S3-compatible blob store and get read-write access credentials for it.
 
-The simplest path is to use an AWS account that has access to S3.  Just create a bucket and a Access Key Id + Secret Access Key pair that can read/write the bucket.
+The simplest path is to use an AWS or Digital Ocean account that has access to S3.  Just create a bucket and a Access Key Id + Secret Access Key pair that can read/write the bucket.  Here's a [tutorial on setting up S3 on Digital Ocean](docs/DO-S3-TUTORIAL.md).
 
-For testing on your LAN, I recommend running [Minio](https://docs.min.io/docs/minio-quickstart-guide.html) on your local machine.  Make sure to enable TLS.  You can use a self-signed certificate, but the Minio documentation for how to make this work is sparse, so see my [instructions here](MINIO-TLS.md).
+For testing on your LAN, I recommend running [Minio](https://docs.min.io/docs/minio-quickstart-guide.html) on your local machine.  Make sure to enable TLS.  You can use a self-signed certificate, but the Minio documentation for how to make this work is sparse, so see my [instructions here](docs/MINIO-TLS.md).
 
 Whatever blobstore you use, make note of these pieces of information:
 

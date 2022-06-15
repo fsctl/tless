@@ -30,4 +30,4 @@ Here is what is protected:
 
 ## Cryptographic Design
 
-See [CRYPTOGRAPHY.md](CRYPTOGRAPHY.md).
+See [CRYPTOGRAPHY.md](docs/CRYPTOGRAPHY.md).
