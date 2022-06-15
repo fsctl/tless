@@ -253,7 +253,7 @@ func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock 
 
 	// Delete the snapshot we've been creating
 	vlog.Printf("CANCEL: Deleting partially created snapshot")
-	groupedObjects, err := objstorefs.GetGroupedSnapshots2(ctx, objst, key, bucket, vlog)
+	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctx, objst, key, bucket, vlog)
 	if err != nil {
 		log.Printf("Could not get grouped snapshots for cancelation: %v", err)
 	}

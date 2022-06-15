@@ -56,7 +56,7 @@ func cloudrmMain() {
 		log.Fatalf("Cannot split '%s' into backupDirName/snapshotTimestamp", cloudrmCfgSnapshot)
 	}
 
-	groupedObjects, err := objstorefs.GetGroupedSnapshots2(ctx, objst, encKey, cfgBucket, vlog)
+	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket, vlog)
 	if err != nil {
 		log.Fatalf("Could not get grouped snapshots: %v", err)
 	}

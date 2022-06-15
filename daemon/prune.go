@@ -56,7 +56,7 @@ func PruneSnapshots() error {
 		return err
 	}
 
-	groupedObjects, err := objstorefs.GetGroupedSnapshots2(ctx, objst, encKey, bucket, vlog)
+	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctx, objst, encKey, bucket, vlog)
 	if err != nil {
 		log.Printf("AUTOPRUNE> error: could not get grouped snapshots: %v", err)
 		return err

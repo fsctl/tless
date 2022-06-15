@@ -52,7 +52,7 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
-	groupedObjects, err := objstorefs.GetGroupedSnapshots2(ctxBkg, objst, key, bucket, vlog)
+	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctxBkg, objst, key, bucket, vlog)
 	if err != nil {
 		log.Printf("Could not get grouped snapshots: %v", err)
 		resp := pb.ReadAllSnapshotsResponse{
@@ -223,7 +223,7 @@ func (s *server) DeleteSnapshot(ctx context.Context, in *pb.DeleteSnapshotReques
 		}, nil
 	}
 
-	groupedObjects, err := objstorefs.GetGroupedSnapshots2(ctx, objst, key, bucket, vlog)
+	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctx, objst, key, bucket, vlog)
 	if err != nil {
 		log.Printf("Could not get grouped snapshots: %v", err)
 		return &pb.DeleteSnapshotResponse{

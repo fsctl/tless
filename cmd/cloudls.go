@@ -61,7 +61,7 @@ func cloudlsMain() {
 	ctx := context.Background()
 	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 
-	groupedObjects, err := objstorefs.GetGroupedSnapshots2(ctx, objst, encKey, cfgBucket, vlog)
+	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket, vlog)
 	if err != nil {
 		log.Fatalf("Could not get grouped snapshots: %v", err)
 	}
@@ -127,7 +127,7 @@ func cloudlsMainGreppableSnapshots() {
 	ctx := context.Background()
 	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 
-	groupedObjects, err := objstorefs.GetGroupedSnapshots2(ctx, objst, encKey, cfgBucket, vlog)
+	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket, vlog)
 	if err != nil {
 		log.Fatalf("Could not get grouped snapshots: %v", err)
 	}

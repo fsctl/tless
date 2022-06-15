@@ -70,7 +70,7 @@ func NewCloudRelPathFromJson(jsonBuf []byte) *CloudRelPath {
 	return &obj
 }
 
-func GetGroupedSnapshots2(ctx context.Context, objst *objstore.ObjStore, key []byte, bucket string, vlog *util.VLog) (map[string]BackupDir, error) {
+func GetGroupedSnapshots(ctx context.Context, objst *objstore.ObjStore, key []byte, bucket string, vlog *util.VLog) (map[string]BackupDir, error) {
 	// setup return map
 	ret := make(map[string]BackupDir)
 

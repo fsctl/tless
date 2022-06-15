@@ -36,7 +36,7 @@ func ReconstructSnapshotFileList(ctx context.Context, objst *objstore.ObjStore, 
 	var err error
 
 	if groupedObjects == nil {
-		groupedObjects, err = GetGroupedSnapshots2(ctx, objst, key, bucket, vlog)
+		groupedObjects, err = GetGroupedSnapshots(ctx, objst, key, bucket, vlog)
 		if err != nil {
 			log.Fatalf("Could not get grouped snapshots: %v", err)
 		}
