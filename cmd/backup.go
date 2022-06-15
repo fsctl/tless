@@ -14,6 +14,7 @@ import (
 	"github.com/fsctl/tless/pkg/backup"
 	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/objstore"
+	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
 
 	"github.com/spf13/cobra"
@@ -26,6 +27,7 @@ var (
 	// Flags
 	cfgDirs         []string
 	cfgExcludePaths []string
+	cfgResumeBackup bool
 
 	// Command
 	backupCmd = &cobra.Command{
@@ -53,7 +55,8 @@ on the cloud provider will be overwritten by these newer local copies.
 
 func init() {
 	backupCmd.Flags().StringArrayVarP(&cfgDirs, "dir", "d", nil, "directories to backup (can use multiple times)")
-	backupCmd.Flags().StringArrayVarP(&cfgExcludePaths, "exclude", "x", nil, "paths starting with this will be excluded from backup (can use multiple times)")
+	backupCmd.Flags().StringArrayVarP(&cfgExcludePaths, "exclude", "x", nil, "paths prefixes to exclude from backup (can use multiple times)")
+	backupCmd.Flags().BoolVar(&cfgResumeBackup, "resume-backup", true, "resume (vs rollback) any previous interrupted run")
 	rootCmd.AddCommand(backupCmd)
 }
 
@@ -115,6 +118,11 @@ func backupMain() {
 		}
 	}
 
+	// replay/rollback check - if there's an interrupted previous backup, deal with it and exit
+	if didResumeOrRollback := handleReplay(ctx, objst, db, vlog, setBackupInitialProgress, updateBackupProgress); didResumeOrRollback {
+		return
+	}
+
 	// main loop through backup dirs
 	for _, backupDirPath := range cfgDirs {
 		// log what iteration of the loop we're in
@@ -144,6 +152,50 @@ func backupMain() {
 	}
 
 done:
+}
+
+func handleReplay(ctx context.Context, objst *objstore.ObjStore, db *database.DB, vlog *util.VLog, setBackupInitialProgressFunc backup.SetReplayInitialProgressFuncType, updateBackupProgressFunc backup.UpdateProgressFuncType) bool {
+	hasDirtyBackupJournal, err := db.HasDirtyBackupJournal()
+	if err != nil {
+		log.Println("error: could not determine if previous backup was interrupted: ", err)
+		return false
+	}
+
+	if hasDirtyBackupJournal {
+		if cfgResumeBackup {
+			fmt.Println("Resuming previous interrupted backup... (--resume-backup=false to roll back)")
+			backup.ReplayBackupJournal(ctx, encKey, objst, cfgBucket, db, nil, vlog, setBackupInitialProgressFunc, nil, updateBackupProgressFunc)
+		} else {
+			fmt.Println("Rolling back previous interrupted backup...")
+
+			// get the backupName and snapshotName
+			backupDirPath, snapshotUnixTime, err := db.GetJournaledBackupInfo()
+			if err != nil {
+				log.Fatalf("error: handleReplay: could not get the journal info: %v", err)
+			}
+			snapshotName := time.Unix(snapshotUnixTime, 0).UTC().Format("2006-01-02_15.04.05")
+
+			// delete the objects already in cloud
+			err = snapshots.DeleteOrphanedSnapshot(ctx, objst, cfgBucket, encKey, filepath.Base(backupDirPath), snapshotName, vlog)
+			if err != nil {
+				log.Fatalf("error: handleReplay: could not delete partially created snapshot: %v", err)
+			}
+
+			// reset the last backup times in db
+			err = db.CancelationResetLastBackupTime()
+			if err != nil {
+				log.Fatalf("error: handleReplay: db.CancelationResetLastBackupTime failed")
+			}
+
+			// clean up the journal
+			err = db.CancelationCleanupJournal()
+			if err != nil {
+				log.Fatalf("error: handleReplay: db.CancelationCleanupJournal failed")
+			}
+		}
+		return true
+	}
+	return false
 }
 
 func validateDirs() error {
