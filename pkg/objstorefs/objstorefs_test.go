@@ -29,11 +29,11 @@ func SetupSnapshots() (snapshots map[string]Snapshot) {
 	//				file3
 	//				file4
 	//
-	// 2021:		##file1
+	// 2021:		file1 deleted
 	//				file2.001 changed
 	//				file2.002 changed
 	//
-	// 2022:		file1
+	// 2022:		file1 added
 	// 				file2.001 changed
 	//				file2.002 changed
 
@@ -64,7 +64,7 @@ func SetupSnapshots() (snapshots map[string]Snapshot) {
 	file1RelPath2021 := CloudRelPath{
 		EncryptedRelPathStripped: "111111",
 		DecryptedRelPath:         "file1",
-		EncryptedChunkNames:      map[string]int64{"##111111": 0},
+		EncryptedChunkNames:      nil,
 		IsDeleted:                true,
 	}
 	file2RelPath2021 := CloudRelPath{
@@ -76,7 +76,7 @@ func SetupSnapshots() (snapshots map[string]Snapshot) {
 	file1RelPath2022 := CloudRelPath{
 		EncryptedRelPathStripped: "111111",
 		DecryptedRelPath:         "file1",
-		EncryptedChunkNames:      map[string]int64{"##111111": 0},
+		EncryptedChunkNames:      map[string]int64{"111111": 0},
 		IsDeleted:                false,
 	}
 	file2RelPath2022 := CloudRelPath{
@@ -110,7 +110,7 @@ func TestContainsRelPath(t *testing.T) {
 	result = containsRelPath(snapshots["2020-01-01_01.02.03"], "file2")
 	assert.Equal(t, true, result)
 	result = containsRelPath(snapshots["2020-01-01_01.02.03"], "file3")
-	assert.Equal(t, false, result)
+	assert.Equal(t, true, result)
 
 	result = containsRelPath(snapshots["2021-01-01_01.02.03"], "file1")
 	assert.Equal(t, true, result)
@@ -119,11 +119,11 @@ func TestContainsRelPath(t *testing.T) {
 	result = containsRelPath(snapshots["2021-01-01_01.02.03"], "file3")
 	assert.Equal(t, false, result)
 
-	result = containsRelPath(snapshots["2021-01-01_01.02.03"], "file1")
+	result = containsRelPath(snapshots["2022-01-01_01.02.03"], "file1")
 	assert.Equal(t, true, result)
-	result = containsRelPath(snapshots["2021-01-01_01.02.03"], "file2")
+	result = containsRelPath(snapshots["2022-01-01_01.02.03"], "file2")
 	assert.Equal(t, true, result)
-	result = containsRelPath(snapshots["2021-01-01_01.02.03"], "file3")
+	result = containsRelPath(snapshots["2022-01-01_01.02.03"], "file3")
 	assert.Equal(t, false, result)
 }
 
