@@ -55,7 +55,7 @@ func (os *ObjStore) IsReachableWithRetries(ctx context.Context, maxWaitSeconds i
 	waitSeconds := 1
 	var err error
 	for waitSeconds < maxWaitSeconds {
-		if _, err = os.GetObjList(ctx, bucket, "doesnotexist", vlog); err != nil {
+		if _, err = os.GetObjList(ctx, bucket, "doesnotexist", false, vlog); err != nil {
 			if vlog == nil {
 				log.Printf("warning: server unreachable: %v\n", err)
 				log.Printf("trying again in %d seconds...\n", waitSeconds)
@@ -130,31 +130,7 @@ func (os *ObjStore) DownloadObjToBuffer(ctx context.Context, bucket string, obje
 	return ret, nil
 }
 
-func (os *ObjStore) GetObjList(ctx context.Context, bucket string, prefix string, vlog *util.VLog) (map[string]int64, error) {
-	mAllObjects := make(map[string]int64, 0)
-
-	opts := minio.ListObjectsOptions{
-		Recursive: true,
-		Prefix:    prefix,
-	}
-
-	for object := range os.minioClient.ListObjects(ctx, bucket, opts) {
-		if object.Err != nil {
-			msg := fmt.Sprintf("warning: GetObjList (ListObjects): %v", object.Err)
-			if vlog != nil {
-				vlog.Println(msg)
-			} else {
-				log.Println(msg)
-			}
-			return nil, object.Err
-		}
-		mAllObjects[object.Key] = object.Size
-	}
-
-	return mAllObjects, nil
-}
-
-func (os *ObjStore) GetObjList2(ctx context.Context, bucket string, prefix string, recursive bool, vlog *util.VLog) (map[string]int64, error) {
+func (os *ObjStore) GetObjList(ctx context.Context, bucket string, prefix string, recursive bool, vlog *util.VLog) (map[string]int64, error) {
 	mObjects := make(map[string]int64, 0)
 
 	opts := minio.ListObjectsOptions{

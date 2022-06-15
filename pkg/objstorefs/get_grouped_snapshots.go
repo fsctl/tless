@@ -125,7 +125,7 @@ func GetGroupedSnapshots(ctx context.Context, objst *objstore.ObjStore, key []by
 func getAllSnapshotIndexFiles(ctx context.Context, objst *objstore.ObjStore, key []byte, encBackupName string, bucket string, vlog *util.VLog) (map[string][]byte, error) {
 	ret := make(map[string][]byte)
 
-	mObjs, err := objst.GetObjList2(ctx, bucket, encBackupName+"/@", false, nil)
+	mObjs, err := objst.GetObjList(ctx, bucket, encBackupName+"/@", false, nil)
 	if err != nil {
 		log.Printf("error: getAllSnapshotIndices: could not get list of snapshot index files for '%s': %v\n", encBackupName, err)
 		return nil, err

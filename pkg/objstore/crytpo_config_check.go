@@ -102,7 +102,7 @@ master password in config.toml?`)
 
 func (os *ObjStore) tryReadSalt(ctx context.Context, key []byte, bucket string, isVerbose bool, vlog *util.VLog) (string, error) {
 	// Try to fetch all objects starting with "SALT-"
-	m, err := os.GetObjList(ctx, bucket, "SALT-", vlog)
+	m, err := os.GetObjList(ctx, bucket, "SALT-", false, vlog)
 	if err != nil {
 		return "", err
 	}

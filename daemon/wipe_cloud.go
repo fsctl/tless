@@ -65,7 +65,7 @@ func WipeCloud(vlog *util.VLog, completion func()) {
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
-	allObjects, err := objst.GetObjList(ctx, bucket, "", nil)
+	allObjects, err := objst.GetObjList(ctx, bucket, "", true, vlog)
 	if err != nil {
 		log.Printf("error: WipeCloud: GetObjList failed: %v", err)
 		return

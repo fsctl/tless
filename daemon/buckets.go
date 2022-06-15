@@ -118,7 +118,7 @@ func (s *server) GetBucketSalt(ctx context.Context, in *pb.GetBucketSaltRequest)
 	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
 	// Try to fetch all objects starting with "SALT-"
-	m, err := objst.GetObjList(ctx, in.GetBucketName(), "SALT-", vlog)
+	m, err := objst.GetObjList(ctx, in.GetBucketName(), "SALT-", false, vlog)
 	if err != nil {
 		log.Println("error: GetBucketSalt: GetObjList failed: ", err)
 		return &pb.GetBucketSaltResponse{
@@ -211,7 +211,7 @@ func (s *server) CheckBucketSaltPassword(ctx context.Context, in *pb.CheckBucket
 	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
 	// Check if a SALT-xxxx file exists at all
-	m, err := objst.GetObjList(ctx, in.GetBucketName(), "SALT-", vlog)
+	m, err := objst.GetObjList(ctx, in.GetBucketName(), "SALT-", false, vlog)
 	if err != nil {
 		log.Println("error: GetBucketSalt: GetObjList failed: ", err)
 		return &pb.CheckBucketSaltPasswordResponse{

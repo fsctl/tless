@@ -176,7 +176,7 @@ func DeleteOrphanedSnapshot(ctx context.Context, objst *objstore.ObjStore, bucke
 
 	// remove all "encBackupName/encSnapshotName/*" objects
 	prefix := encryptedBackupDirName + "/" + encryptedSnapshotName + "/"
-	mObjs, err := objst.GetObjList2(ctx, bucket, prefix, true, vlog)
+	mObjs, err := objst.GetObjList(ctx, bucket, prefix, true, vlog)
 	if err != nil {
 		log.Println("error: DeleteOrphanedSnapshot: could not get list of snapshot objects: ", err)
 		return err

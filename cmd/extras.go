@@ -123,13 +123,15 @@ func checkConnMain() {
 }
 
 func wipeCloudMain() {
+	vlog := util.NewVLog(nil, func() bool { return cfgVerbose })
+
 	objst := objstore.NewObjStore(context.Background(), cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 	ctx := context.Background()
 
 	// initialize progress bar container
 	progressBarContainer := mpb.New()
 
-	allObjects, err := objst.GetObjList(ctx, cfgBucket, "", nil)
+	allObjects, err := objst.GetObjList(ctx, cfgBucket, "", true, vlog)
 	if err != nil {
 		log.Printf("error: wipeCloudMain: GetObjList failed: %v", err)
 	}
