@@ -132,8 +132,6 @@ func getAllSnapshotIndexFiles(ctx context.Context, objst *objstore.ObjStore, key
 	}
 
 	for encObjName := range mObjs {
-		vlog.Printf("Working on index file:  %s", encObjName)
-
 		// strip off the prefix "encBackupName/@"
 		encSsName := strings.TrimPrefix(encObjName, encBackupName+"/@")
 
@@ -143,7 +141,6 @@ func getAllSnapshotIndexFiles(ctx context.Context, objst *objstore.ObjStore, key
 			log.Printf("error: getAllSnapshotIndexFiles: could not decrypt snapshot name (%s): %v\n", encSsName, err)
 			return nil, err
 		}
-		vlog.Printf("Which is for snapshot:  %s", ssName)
 
 		// download actual snapshot file
 		buf, err := objst.DownloadObjToBuffer(ctx, bucket, encObjName)
