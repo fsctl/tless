@@ -180,7 +180,7 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 			crp.IsDeleted = false
 		} else if bjt.ChangeType == database.Deleted {
 			vlog.Printf("Deleting '%s/%s'", rootDirName, relPath)
-			encryptedRelPath, encryptedChunks, err := createDeletedPathKeyAndPurgeFromDb(ctx, objst, bucket, db, globalsLock, key, rootDirName, snapshotName, relPath)
+			encryptedRelPath, err := createDeletedPathKeyAndPurgeFromDb(db, globalsLock, key, rootDirName, relPath)
 			if err != nil {
 				log.Printf("error: PlayBackupJournal: failed on deleting path '%s': %v", relPath, err)
 				continue
@@ -189,7 +189,7 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 			// For JSON serialization into journal
 			crp.DecryptedRelPath = relPath
 			crp.EncryptedRelPathStripped = encryptedRelPath
-			crp.EncryptedChunkNames = encryptedChunks
+			crp.EncryptedChunkNames = nil
 			crp.IsDeleted = true
 		}
 
@@ -234,42 +234,17 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 	}
 }
 
-func createDeletedPathKeyAndPurgeFromDb(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, dbLock *sync.Mutex, key []byte, backupDirName string, snapshotName string, deletedPath string) (encryptedDeletedRelPath string, encryptedChunks map[string]int64, err error) {
-	encryptedChunks = make(map[string]int64)
-
-	// get the encrypted representation of backupDirName and snapshotName
-	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotName)
-	if err != nil {
-		log.Printf("error: createDeletedPathKeyAndPurgeFromDb(): could not encrypt snapshot name (%s): %v\n", snapshotName, err)
-		return "", nil, err
-	}
-	encryptedBackupDirName, err := cryptography.EncryptFilename(key, backupDirName)
-	if err != nil {
-		log.Printf("error: createDeletedPathKeyAndPurgeFromDb(): could not encrypt backup dir name (%s): %v\n", backupDirName, err)
-		return "", nil, err
-	}
-
+func createDeletedPathKeyAndPurgeFromDb(db *database.DB, dbLock *sync.Mutex, key []byte, backupDirName string, deletedPath string) (encryptedDeletedRelPath string, err error) {
 	// encrypt the deleted path name
 	encryptedDeletedRelPath, err = cryptography.EncryptFilename(key, deletedPath)
 	if err != nil {
 		log.Printf("error: createDeletedPathKeyAndPurgeFromDb(): could not encrypt deleted rel path ('%s'): %v\n", deletedPath, err)
-		return "", nil, err
+		return "", err
 	}
 
 	// Insert a slash in the middle of encrypted relPath b/c server won't
 	// allow path components > 255 characters
 	encryptedDeletedRelPath = InsertSlashIntoEncRelPath(encryptedDeletedRelPath)
-
-	// create an object in this snapshot like encBackupDirName/encSnapshotName/##encRelPath
-	// where ## prefix indicates rel path was deleted since prev snapshot
-	objName := encryptedBackupDirName + "/" + encryptedSnapshotName + "/##" + encryptedDeletedRelPath
-	if err = objst.UploadObjFromBuffer(ctx, bucket, objName, make([]byte, 0), objstore.ComputeETag([]byte{})); err != nil {
-		log.Printf("error: createDeletedPathKeyAndPurgeFromDb(): could not UploadObjFromBuffer ('%s'): %v\n", objName, err)
-		return "", nil, err
-	}
-
-	// Save cnrypted chunk map for return value
-	encryptedChunks["##"+encryptedDeletedRelPath] = 0
 
 	// Delete dirents row for backupDirName/relPath
 	util.LockIf(dbLock)
@@ -277,10 +252,10 @@ func createDeletedPathKeyAndPurgeFromDb(ctx context.Context, objst *objstore.Obj
 	util.UnlockIf(dbLock)
 	if err != nil {
 		log.Printf("error: createDeletedPathKeyAndPurgeFromDb: DeleteDirEntByPath failed: %v", err)
-		return "", nil, err
+		return "", err
 	}
 
-	return encryptedDeletedRelPath, encryptedChunks, nil
+	return encryptedDeletedRelPath, nil
 }
 
 func ReplayBackupJournal(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, db *database.DB, globalsLock *sync.Mutex, vlog *util.VLog, setReplayInitialProgressFunc SetReplayInitialProgressFuncType, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, updateProgressFunc UpdateProgressFuncType) {

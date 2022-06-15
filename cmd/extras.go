@@ -196,7 +196,6 @@ func decObjNameMain(encObjectName string) {
 	} else if len(encObjectNameParts) == 2 {
 		// We assume one slash means its a relpath, so join the two parts and decrypt
 		encRelPath := encObjectNameParts[0] + encObjectNameParts[1]
-		encRelPath = strings.TrimPrefix(encRelPath, "##")
 		if strings.Contains(encRelPath, ".") {
 			encRelPath = encRelPath[:len(encRelPath)-4] // strip off .NNN
 		}
@@ -220,7 +219,6 @@ func decObjNameMain(encObjectName string) {
 		}
 
 		encRelPath := encObjectNameParts[2] + encObjectNameParts[3]
-		encRelPath = strings.TrimPrefix(encRelPath, "##")
 		if strings.Contains(encRelPath, ".") {
 			encRelPath = encRelPath[:len(encRelPath)-4] // strip off .NNN
 		}

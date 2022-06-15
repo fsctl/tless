@@ -154,27 +154,21 @@ func ComputeSnapshotDelete(encBackupDirName string, snapshots map[string]Snapsho
 			EncryptedChunkNames:      snapshots[snapshotToDelete].RelPaths[relPath].EncryptedChunkNames,
 		}
 
-		// If relpath in the current snapshot is just a ## deletion marker, we either need to
-		// delete it or roll it forward to the next snapshot.
-		// - Delete if relPath shows up again in the next snapshot
-		// - Else rename and roll it forward
+		// If relpath in the current snapshot is marked as deleted, we either need to do nothing or roll
+		// that forward into the next snapshot.
+		// - Dp nothing if relPath shows up again in the next snapshot as a new file
+		// - Else roll it forward into next snapshot object
 		if snapshots[snapshotToDelete].RelPaths[relPath].IsDeleted {
 			crp.IsDeleted = true
-			deletionMarker := "##" + snapshots[snapshotToDelete].RelPaths[relPath].EncryptedRelPathStripped
 
-			// If rel path is in next snapshot...
-			if containsRelPath(snapshots[nextSnapshot], relPath) {
-				// If rel path is in next snapshot as a non-deleted entry, we can delete relpath in snapshotToDelete
-				deleteObjs = append(deleteObjs, map[string]int64{deletionMarker: 0})
-			} else {
-				// If relpath is NOT in next snapshot change set at all, then we must rename relpath objects in
-				// snapshotToDelete to next snapshot.
-				renameObjs = append(renameObjs, renameDeletionMarkerIntoNextSnapshot(snapshots, relPath, snapshotToDelete, nextSnapshot)...)
+			// If rel path is in next snapshot, do nothing.
+			// If rel path is NOT in next snapshot change set at all, roll it forward to next as a deleted file.
+			if !containsRelPath(snapshots[nextSnapshot], relPath) {
 				newNextSnapshotObj.RelPaths[relPath] = crp
 			}
 		} else {
-			// relPath in snapshotToDelete is a real file.  Delete it if it shows up in the next
-			// snapshot, otherwise roll it forward
+			// If relPath in snapshotToDelete is a real file, delete it if it shows up in the next
+			// snapshot, otherwise roll it forward.
 			crp.IsDeleted = false
 
 			if containsRelPath(snapshots[nextSnapshot], relPath) {
@@ -187,17 +181,6 @@ func ComputeSnapshotDelete(encBackupDirName string, snapshots map[string]Snapsho
 	}
 
 	return deleteObjs, renameObjs, newNextSnapshotObj, nil
-}
-
-func renameDeletionMarkerIntoNextSnapshot(snapshots map[string]Snapshot, relPath, snapshotToDelete, nextSnapshot string) (renameObjs []RenameObj) {
-	renameObjs = make([]RenameObj, 0)
-	renameObj := RenameObj{
-		RelPath:     relPath,
-		OldSnapshot: snapshotToDelete,
-		NewSnapshot: nextSnapshot,
-	}
-	renameObjs = append(renameObjs, renameObj)
-	return renameObjs
 }
 
 func deleteAllKeysInSnapshot(snapshots map[string]Snapshot, snapshotToDelete string) (deleteObjs []map[string]int64) {

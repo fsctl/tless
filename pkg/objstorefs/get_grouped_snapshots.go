@@ -13,7 +13,7 @@ import (
 )
 
 type CloudRelPath struct {
-	// Encrypted relative path, stripped of ## prefix and .NNN suffix. Contains '/'.
+	// Encrypted relative path, stripped of any .NNN suffix. (Still contains '/'.)
 	// Ex:    -hK9_DlG_AFMIE1PKHZaBUebiFvnvV/MjTo0Vx771kwwMbjivWed65LkTSq8A
 	// Ex 2:  0lQjIGkeLOlUMnekodf0alyD1Xq9cXrGD0/9cI0DMhON8b6i0cVsDt9kVePqrvFw4d6d1
 	// Ex 3:  U7j1GWpdrvxmOOGpStOZCJfaRuqkF6Zv5xaTjnTe/E9QzmBJ-_UF54dmvOyybTgtzA2xuxNDfsaNc1xT-
@@ -28,7 +28,7 @@ type CloudRelPath struct {
 	// Map of all chunk names onto their (encrypted & compressed) size
 	// Ex:    map[-hK9_DlG_AFMIE1PKHZaBUebiFvnvV/MjTo0Vx771kwwMbjivWed65LkTSq8A.000:134217879 -hK9_DlG_AFMIE1PKHZaBUebiFvnvV/MjTo0Vx771kwwMbjivWed65LkTSq8A.001:2097180]
 	// Ex 2:  map[0lQjIGkeLOlUMnekodf0alyD1Xq9cXrGD0/9cI0DMhON8b6i0cVsDt9kVePqrvFw4d6d1:168]
-	// Ex 3:  map[##U7j1GWpdrvxmOOGpStOZCJfaRuqkF6Zv5xaTjnTe/E9QzmBJ-_UF54dmvOyybTgtzA2xuxNDfsaNc1xT-:0]  (even though file had .000 and .001 before deletion)
+	// Ex 3:  nil
 	EncryptedChunkNames map[string]int64
 
 	// Bool indicating whether the rel path is deleted in parent snapshot
