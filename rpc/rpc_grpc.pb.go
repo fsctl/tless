@@ -40,6 +40,7 @@ type DaemonCtlClient interface {
 	DeleteSnapshot(ctx context.Context, in *DeleteSnapshotRequest, opts ...grpc.CallOption) (*DeleteSnapshotResponse, error)
 	// Restore command
 	Restore(ctx context.Context, opts ...grpc.CallOption) (DaemonCtl_RestoreClient, error)
+	CancelRestore(ctx context.Context, in *CancelRequest, opts ...grpc.CallOption) (*CancelResponse, error)
 	// Special operations
 	WipeCloud(ctx context.Context, in *WipeCloudRequest, opts ...grpc.CallOption) (*WipeCloudResponse, error)
 	// Bucket operations
@@ -195,6 +196,15 @@ func (x *daemonCtlRestoreClient) CloseAndRecv() (*RestoreResponse, error) {
 	return m, nil
 }
 
+func (c *daemonCtlClient) CancelRestore(ctx context.Context, in *CancelRequest, opts ...grpc.CallOption) (*CancelResponse, error) {
+	out := new(CancelResponse)
+	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/CancelRestore", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daemonCtlClient) WipeCloud(ctx context.Context, in *WipeCloudRequest, opts ...grpc.CallOption) (*WipeCloudResponse, error) {
 	out := new(WipeCloudResponse)
 	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/WipeCloud", in, out, opts...)
@@ -262,6 +272,7 @@ type DaemonCtlServer interface {
 	DeleteSnapshot(context.Context, *DeleteSnapshotRequest) (*DeleteSnapshotResponse, error)
 	// Restore command
 	Restore(DaemonCtl_RestoreServer) error
+	CancelRestore(context.Context, *CancelRequest) (*CancelResponse, error)
 	// Special operations
 	WipeCloud(context.Context, *WipeCloudRequest) (*WipeCloudResponse, error)
 	// Bucket operations
@@ -305,6 +316,9 @@ func (UnimplementedDaemonCtlServer) DeleteSnapshot(context.Context, *DeleteSnaps
 }
 func (UnimplementedDaemonCtlServer) Restore(DaemonCtl_RestoreServer) error {
 	return status.Errorf(codes.Unimplemented, "method Restore not implemented")
+}
+func (UnimplementedDaemonCtlServer) CancelRestore(context.Context, *CancelRequest) (*CancelResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelRestore not implemented")
 }
 func (UnimplementedDaemonCtlServer) WipeCloud(context.Context, *WipeCloudRequest) (*WipeCloudResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method WipeCloud not implemented")
@@ -525,6 +539,24 @@ func (x *daemonCtlRestoreServer) Recv() (*RestoreRequest, error) {
 	return m, nil
 }
 
+func _DaemonCtl_CancelRestore_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonCtlServer).CancelRestore(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/rpc.DaemonCtl/CancelRestore",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonCtlServer).CancelRestore(ctx, req.(*CancelRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _DaemonCtl_WipeCloud_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(WipeCloudRequest)
 	if err := dec(in); err != nil {
@@ -653,6 +685,10 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteSnapshot",
 			Handler:    _DaemonCtl_DeleteSnapshot_Handler,
+		},
+		{
+			MethodName: "CancelRestore",
+			Handler:    _DaemonCtl_CancelRestore_Handler,
 		},
 		{
 			MethodName: "WipeCloud",

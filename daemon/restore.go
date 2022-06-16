@@ -169,6 +169,19 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 	// loop over all the relpaths and restore each
 	dirChmodQueue := make([]backup.DirChmodQueueItem, 0) // all directory mode bits are set at end
 	for relPath := range mRelPathsObjsMap {
+		// Check if cancel signal has been received
+		util.LockIf(&gGlobalsLock)
+		isCancelRequested := gCancelRequested
+		util.UnlockIf(&gGlobalsLock)
+		if isCancelRequested {
+			util.LockIf(&gGlobalsLock)
+			gCancelRequested = false
+			util.UnlockIf(&gGlobalsLock)
+			vlog.Println("Canceled restore")
+			done()
+			return
+		}
+
 		vlog.Printf("RESTORING: '%s' from %s/%s", relPath, backupName, snapshotName)
 
 		if len(mRelPathsObjsMap[relPath]) > 1 {
@@ -208,4 +221,19 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 	}
 
 	done()
+}
+
+// Callback for rpc.DaemonCtlServer.Restore requests
+func (s *server) CancelRestore(ctx context.Context, in *pb.CancelRequest) (*pb.CancelResponse, error) {
+	log.Println(">> GOT COMMAND: CancelRestore")
+
+	gGlobalsLock.Lock()
+	gCancelRequested = true
+	gStatus.msg = "Canceling..."
+	gGlobalsLock.Unlock()
+
+	return &pb.CancelResponse{
+		IsStarting: true,
+		ErrMsg:     "",
+	}, nil
 }

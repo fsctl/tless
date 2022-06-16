@@ -30,6 +30,7 @@ service DaemonCtl {
 
   // Restore command
   rpc Restore (stream RestoreRequest) returns (RestoreResponse) {}
+  rpc CancelRestore (CancelRequest) returns (CancelResponse) {}
 
   // Special operations
   rpc WipeCloud (WipeCloudRequest) returns (WipeCloudResponse) {}
