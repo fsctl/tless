@@ -91,8 +91,16 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 			SnapshotRawName:   "",
 			RawRelPaths:       make([]string, 0),
 		},
+		PercentDone: 0.0,
 	}
 	relPathsSinceLastSend := 0
+
+	// progress tracking numerator and denominator
+	finishedSnapshots := 0
+	totalSnapshots := 0
+	for backupName := range groupedObjects {
+		totalSnapshots += len(groupedObjects[backupName].Snapshots)
+	}
 
 	groupNameKeys := make([]string, 0, len(groupedObjects))
 	for groupName := range groupedObjects {
@@ -159,6 +167,10 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 			}
 			ret.PartialSnapshot.RawRelPaths = make([]string, 0)
 			relPathsSinceLastSend = 0
+
+			// Done with another snapshot, so increment progress
+			finishedSnapshots += 1
+			ret.PercentDone = (float64(finishedSnapshots) / float64(totalSnapshots)) * 100
 		}
 	}
 

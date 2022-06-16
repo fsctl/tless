@@ -14,6 +14,8 @@ const (
 	wakeEveryNSeconds            int = 60
 	automaticBackupEveryNSeconds int = 1 * 60 * 60
 	automaticPruneEveryNSeconds  int = 2 * 60 * 60
+
+	dbgDisableAutoprune bool = false
 )
 
 func timerLoop(signals chan os.Signal, server *server) {
@@ -81,7 +83,7 @@ func timerLoop(signals chan os.Signal, server *server) {
 		//
 		// Automatic snapshot prune
 		//
-		if secondsCnt-lastAutomaticPruneStarted >= automaticPruneEveryNSeconds {
+		if !dbgDisableAutoprune && (secondsCnt-lastAutomaticPruneStarted >= automaticPruneEveryNSeconds) {
 			// Attempt to start a prune of snapshots, updating lastAutomaticPruneStarted if successful
 			gGlobalsLock.Lock()
 			isIdle := gStatus.state == Idle

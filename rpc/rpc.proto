@@ -150,6 +150,7 @@ message ReadAllSnapshotsResponse {
   bool DidSucceed = 1;
   string ErrMsg = 2;
   PartialSnapshot PartialSnapshot = 3;
+  double PercentDone = 4;
 }
 
 message DeleteSnapshotRequest {
