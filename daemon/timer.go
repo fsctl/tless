@@ -15,7 +15,7 @@ const (
 	automaticBackupEveryNSeconds int = 1 * 60 * 60
 	automaticPruneEveryNSeconds  int = 2 * 60 * 60
 
-	dbgDisableAutoprune bool = false
+	dbgDisableAutoprune bool = true
 )
 
 func timerLoop(signals chan os.Signal, server *server) {

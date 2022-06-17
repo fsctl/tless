@@ -177,7 +177,7 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 			util.LockIf(&gGlobalsLock)
 			gCancelRequested = false
 			util.UnlockIf(&gGlobalsLock)
-			vlog.Println("Canceled restore")
+			vlog.Println("RESTORING: Canceled restore")
 			done()
 			return
 		}
