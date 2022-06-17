@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fsctl/tless/pkg/backup"
+	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
@@ -76,11 +77,30 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 	// initialize progress bar container
 	progressBarContainer := mpb.New()
 
-	// get all the relpaths for this snapshot
-	mRelPathsObjsMap, err := snapshots.ReconstructSnapshotFileList(ctx, objst, cfgBucket, encKey, backupName, snapshotName, cfgPartialRestore, nil, nil, vlog)
+	// Encrypt the backup name and snapshot name so we can form the index file name
+	encBackupName, err := cryptography.EncryptFilename(encKey, backupName)
 	if err != nil {
-		log.Fatalln("error: reconstructSnapshotFileList failed: ", err)
+		log.Fatalf("error: cannot encrypt backup name '%s': %v", backupName, err)
 	}
+	encSnapshotName, err := cryptography.EncryptFilename(encKey, snapshotName)
+	if err != nil {
+		log.Fatalf("error: cannot encrypt snapshot name '%s': %v", backupName, err)
+	}
+
+	// Get the snapshot index
+	encSsIndexObjName := encBackupName + "/@" + encSnapshotName
+	ssIndexJson, err := snapshots.GetSnapshotIndexFile(ctx, objst, cfgBucket, encKey, encSsIndexObjName)
+	if err != nil {
+		log.Fatalf("error: cannot get snapshot index file for '%s': %v", backupAndSnapshotName, err)
+	}
+	snapshotObj, err := snapshots.UnmarshalSnapshotObj(ssIndexJson)
+	if err != nil {
+		log.Fatalf("error: cannot get snapshot object for '%s': %v", backupAndSnapshotName, err)
+	}
+
+	// Filter the rel paths we want to restore
+	selectedRelPaths := []string{cfgPartialRestore}
+	mRelPathsObjsMap := backup.FilterRelPaths(snapshotObj, selectedRelPaths)
 
 	// create the progress bar
 	var progressBarTotalItems int
@@ -105,22 +125,9 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 	// loop over all the relpaths and restore each
 	dirChmodQueue := make([]backup.DirChmodQueueItem, 0) // all directory mode bits are set at end
 	for relPath := range mRelPathsObjsMap {
-		if len(mRelPathsObjsMap[relPath]) > 1 {
-			relPathChunks := mRelPathsObjsMap[relPath]
-
-			err = backup.RestoreDirEntryFromChunks(ctx, encKey, pathToRestoreInto, relPathChunks, backupName, snapshotName, relPath, objst, cfgBucket, cfgVerbose, -1, -1)
-			if err != nil {
-				log.Printf("error: could not restore a dir entry '%s'", relPath)
-			}
-		} else if len(mRelPathsObjsMap[relPath]) == 1 {
-			objName := mRelPathsObjsMap[relPath][0]
-
-			err = backup.RestoreDirEntry(ctx, encKey, pathToRestoreInto, objName, backupName, snapshotName, relPath, objst, cfgBucket, cfgVerbose, &dirChmodQueue, -1, -1)
-			if err != nil {
-				log.Printf("error: could not restore a dir entry '%s'", relPath)
-			}
-		} else {
-			log.Fatalf("error: invalid number of chunks planned for %s", relPath)
+		err = backup.RestoreDirEntry(ctx, encKey, pathToRestoreInto, mRelPathsObjsMap[relPath], backupName, snapshotName, relPath, objst, cfgBucket, vlog, &dirChmodQueue, -1, -1)
+		if err != nil {
+			log.Printf("error: could not restore a dir entry '%s'", relPath)
 		}
 
 		// Update the progress bar

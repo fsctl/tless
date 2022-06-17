@@ -9,9 +9,11 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/objstore"
+	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
 )
 
@@ -20,22 +22,30 @@ type DirChmodQueueItem struct {
 	FinalMode fs.FileMode
 }
 
-func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string, objName string, rootDirName string, snapshotName string, relPath string, objst *objstore.ObjStore, bucket string, printOnSuccess bool, dirChmodQueue *[]DirChmodQueueItem, uid int, gid int) error {
+func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string, crp snapshots.CloudRelPath, rootDirName string, snapshotName string, relPath string, objst *objstore.ObjStore, bucket string, vlog *util.VLog, dirChmodQueue *[]DirChmodQueueItem, uid int, gid int) error {
 	// Strip any trailing slashes on destination path
 	restoreIntoDirPath = util.StripTrailingSlashes(restoreIntoDirPath)
 
-	// Retrieve the ciphertext
-	ciphertextBuf, err := objst.DownloadObjToBuffer(ctx, bucket, objName)
+	// Retrieve the first chunk of ciphertext
+	if len(crp.ChunkExtents) == 0 {
+		msg := fmt.Sprintf("error: crp.ChunkExtents has no elements on '%s'", relPath)
+		log.Println(msg)
+		return fmt.Errorf(msg)
+	}
+	ciphertextFirstChunkBuf, err := objst.DownloadObjToBuffer(ctx, bucket, "chunks/"+crp.ChunkExtents[0].ChunkName)
 	if err != nil {
 		log.Fatalf("Error retrieving file: %v", err)
 	}
 
-	// decrypt the ciphertext
-	plaintextBuf, err := cryptography.DecryptBuffer(key, ciphertextBuf)
+	// decrypt the first chunk, saving nonce as prevNonce for comparison with later chunks
+	plaintextFirstChunkBuf, prevNonce, err := cryptography.DecryptBufferReturningNonce(key, ciphertextFirstChunkBuf)
 	if err != nil {
-		log.Printf("error: DecryptBuffer failed: %v\n", err)
+		log.Printf("error: DecryptBufferReturningNonce failed: %v\n", err)
 		return err
 	}
+
+	// Extract just [offset:len]
+	plaintextBuf := plaintextFirstChunkBuf[crp.ChunkExtents[0].Offset:crp.ChunkExtents[0].Len]
 
 	// read metadata header from plaintext
 	metadataPtr, fileContents, err := deserializeMetadataStruct(plaintextBuf)
@@ -78,9 +88,10 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 			return err
 		}
 	} else {
+		// create the directory containing this file in case it does not exist yet
+		// (We can create dirs initially as 0755 b/c they'll get fixed later when we process
+		// the dirs' entries themselves.)
 		dir, filename := filepath.Split(relPath)
-		// We can create the dir(s) initially as 0755 b/c they'll get fixed later when we process
-		// the dirs' entry themselves.
 		err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, dir, 0755, uid, gid)
 		if err != nil {
 			log.Printf("error: could not create dir '%s': %v\n",
@@ -88,12 +99,63 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 			return err
 		}
 
+		// Create the file and write first + all subsequent chunks to it
 		filenameAbsPath := filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, dir, filename)
-		err = writeBufferToFile(fileContents, filenameAbsPath, fs.FileMode(metadataPtr.Mode))
+		file, err := os.Create(filenameAbsPath)
 		if err != nil {
-			log.Printf("error: could not write file '%s': %v\n", filenameAbsPath, err)
+			log.Fatalf("error: RestoreDirEntry: %v", err)
 			return err
 		}
+		defer file.Close()
+
+		// Fix the mode bits on new file
+		if err := os.Chmod(filenameAbsPath, fs.FileMode(metadataPtr.Mode)); err != nil {
+			log.Fatalf("error:  RestoreDirEntry: could not chmod newly created file (desired mode %#o)", fs.FileMode(metadataPtr.Mode))
+			return errors.New("could not chmod file")
+		}
+
+		_, err = file.Write(fileContents)
+		if err != nil {
+			log.Fatalf("RestoreDirEntry: Write() failed: %v", err)
+			return err
+		}
+
+		// for each of the remaining chunks
+		for _, chunkExtent := range crp.ChunkExtents[1:] {
+			// download the chunk
+			objName := "chunks/" + chunkExtent.ChunkName
+			ciphertextNextChunkBuf, err := objst.DownloadObjToBuffer(ctx, bucket, objName)
+			if err != nil {
+				log.Fatalf("error: RestoreDirEntry: error retrieving file: %v", err)
+			}
+
+			// decrypt the chunk
+			plaintextNextChunkBuf, nonce, err := cryptography.DecryptBufferReturningNonce(key, ciphertextNextChunkBuf)
+			if err != nil {
+				log.Printf("error: RestoreDirEntry: DecryptBufferReturningNonce failed: %v\n", err)
+				return err
+			}
+
+			// Extract just the [offset:len] bytes
+			plaintextBuf := plaintextNextChunkBuf[chunkExtent.Offset:chunkExtent.Len]
+
+			// check that the nonce is one larger than prev nonce
+			isNonceOneMore := isNonceOneMoreThanPrev(nonce, prevNonce)
+			if !isNonceOneMore {
+				log.Println("error: RestoreDirEntry: nonce ordering expectation violated, data may have been tampered with (chunk reordering)")
+			}
+
+			// append plaintext to file
+			_, err = file.Write(plaintextBuf)
+			if err != nil {
+				log.Fatalf("error: RestoreDirEntry: Write() failed: %v", err)
+				return err
+			}
+
+			// save nonce as new prevNonce
+			prevNonce = nonce
+		}
+
 		if err = deserializeAndSetXAttrs(filenameAbsPath, metadataPtr.XAttrs); err != nil {
 			log.Printf("error: could not set xattrs on file '%s': %v\n", filenameAbsPath, err)
 			return err
@@ -104,9 +166,7 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 		}
 	}
 
-	if printOnSuccess {
-		fmt.Printf("Restored %s\n", filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, relPath))
-	}
+	vlog.Printf("Restored %s\n", filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, relPath))
 
 	return nil
 }
@@ -148,33 +208,6 @@ func createFullPath(basePath string, backupRootDirName string, snapshotName stri
 	return nil
 }
 
-func writeBufferToFile(buf []byte, path string, mode fs.FileMode) error {
-	file, err := os.Create(path)
-	if err != nil {
-		log.Fatalf("writeEntireFile: %v", err)
-		return err
-	}
-	defer file.Close()
-
-	n, err := file.Write(buf)
-	if err != nil {
-		log.Fatalf("writeEntireFile: Write() failed: %v", err)
-		return err
-	}
-	if n != len(buf) {
-		log.Fatalf("writeEntireFile: wrote %d bytes but buffer is %d bytes", n, len(buf))
-		return errors.New("wrote wrong number of bytes")
-	}
-
-	// Fix the mode bits
-	if err := os.Chmod(path, mode); err != nil {
-		log.Fatalf("writeEntireFile: could not chmod newly created file (desired mode %#o)", mode)
-		return errors.New("could not chmod file")
-	}
-
-	return nil
-}
-
 func isNonceOneMoreThanPrev(nonce []byte, prevNonce []byte) bool {
 	// set z = prevNonce+1
 	z := new(big.Int)
@@ -189,100 +222,20 @@ func isNonceOneMoreThanPrev(nonce []byte, prevNonce []byte) bool {
 	return z.Cmp(y) == 0
 }
 
-func RestoreDirEntryFromChunks(ctx context.Context, key []byte, restoreIntoDirPath string, objNames []string, rootDirName string, snapshotName string, relPath string, objst *objstore.ObjStore, bucket string, printOnSuccess bool, uid int, gid int) error {
-	// Strip any trailing slashes on destination path
-	restoreIntoDirPath = util.StripTrailingSlashes(restoreIntoDirPath)
-
-	// download the first chunk
-	ciphertextFirstChunkBuf, err := objst.DownloadObjToBuffer(ctx, bucket, objNames[0])
-	if err != nil {
-		log.Fatalf("Error retrieving file: %v", err)
-	}
-
-	// decrypt the first chunk, saving nonce as prevNonce for comparison with later chunks
-	plaintextFirstChunkBuf, prevNonce, err := cryptography.DecryptBufferReturningNonce(key, ciphertextFirstChunkBuf)
-	if err != nil {
-		log.Printf("error: DecryptBufferReturningNonce failed: %v\n", err)
-		return err
-	}
-
-	// extract the first chunk's metadata from plaintext
-	metadataPtr, fileContents, err := deserializeMetadataStruct(plaintextFirstChunkBuf)
-	if err != nil {
-		log.Printf("error: deserializeMetadataStruct failed: %v\n", err)
-		return err
-	}
-
-	// create the directory containing this file in case it does not exist yet
-	dir, filename := filepath.Split(relPath)
-	err = createFullPath(restoreIntoDirPath, rootDirName, snapshotName, dir, 0755, uid, gid) // TODO: fix hardcoded mode
-	if err != nil {
-		log.Printf("error: could not create dir '%s': %v\n",
-			filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, dir), err)
-		return err
-	}
-
-	// create the file and write first chunk to it
-	_ = metadataPtr // not currently using metadata to create file
-	filenameAbsPath := filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, dir, filename)
-	file, err := os.Create(filenameAbsPath)
-	if err != nil {
-		log.Fatalf("RestoreDirEntryFromChunks: %v", err)
-		return err
-	}
-	defer file.Close()
-
-	if err := os.Chown(filenameAbsPath, uid, gid); err != nil {
-		log.Printf("error: could not chown file '%s' to '%d/%d': %v", filenameAbsPath, uid, gid, err)
-		return err
-	}
-
-	_, err = file.Write(fileContents)
-	if err != nil {
-		log.Fatalf("RestoreDirEntryFromChunks: Write() failed: %v", err)
-		return err
-	}
-
-	// for each of the remaining chunks
-	for _, objName := range objNames[1:] {
-		// download the chunk
-		ciphertextNextChunkBuf, err := objst.DownloadObjToBuffer(ctx, bucket, objName)
-		if err != nil {
-			log.Fatalf("Error retrieving file: %v", err)
+// Filters the relpaths in snapshotObj by checking whether they match any prefix in selectedRelPathPrefixes.
+// If selectedRelPathPrefixes is nil or an empty slice, we just accept everything.
+func FilterRelPaths(snapshotObj *snapshots.Snapshot, selectedRelPathPrefixes []string) map[string]snapshots.CloudRelPath {
+	ret := make(map[string]snapshots.CloudRelPath)
+	for relPath := range snapshotObj.RelPaths {
+		if len(selectedRelPathPrefixes) == 0 {
+			ret[relPath] = snapshotObj.RelPaths[relPath]
+		} else {
+			for _, prefix := range selectedRelPathPrefixes {
+				if strings.HasPrefix(relPath, prefix) {
+					ret[relPath] = snapshotObj.RelPaths[relPath]
+				}
+			}
 		}
-
-		// decrypt the chunk
-		plaintextNextChunkBuf, nonce, err := cryptography.DecryptBufferReturningNonce(key, ciphertextNextChunkBuf)
-		if err != nil {
-			log.Printf("error: DecryptBufferReturningNonce failed: %v\n", err)
-			return err
-		}
-
-		// check that the nonce is one larger than prev nonce
-		isNonceOneMore := isNonceOneMoreThanPrev(nonce, prevNonce)
-		if !isNonceOneMore {
-			log.Println("error: nonce ordering expectation violated, data may have been tampered with (chunk reordering)")
-		}
-
-		// append plaintext to file
-		_, err = file.Write(plaintextNextChunkBuf)
-		if err != nil {
-			log.Fatalf("RestoreDirEntryFromChunks: Write() failed: %v", err)
-			return err
-		}
-
-		// save nonce as new prevNonce
-		prevNonce = nonce
 	}
-
-	if err = deserializeAndSetXAttrs(filenameAbsPath, metadataPtr.XAttrs); err != nil {
-		log.Printf("error: could not set xattrs on multi-chunk file '%s': %v\n", filenameAbsPath, err)
-		return err
-	}
-
-	if printOnSuccess {
-		fmt.Printf("Restored %s\n", filepath.Join(restoreIntoDirPath, rootDirName, snapshotName, relPath))
-	}
-
-	return nil
+	return ret
 }

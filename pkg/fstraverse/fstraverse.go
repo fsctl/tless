@@ -18,8 +18,13 @@ import (
 	"github.com/fsctl/tless/pkg/util"
 )
 
+type BackupIdsQueueItem struct {
+	Id         int
+	ChangeType database.ChangeType
+}
+
 type BackupIdsQueue struct {
-	Ids []int
+	Items []BackupIdsQueueItem
 }
 
 func relativizePath(path string, prefix string) string {
@@ -118,7 +123,15 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 
 		if hasDirEnt {
 			if mtimeUnix > lastBackupUnix {
-				backupIdsQueue.Ids = append(backupIdsQueue.Ids, id)
+				backupIdsQueue.Items = append(backupIdsQueue.Items, BackupIdsQueueItem{
+					Id:         id,
+					ChangeType: database.Updated,
+				})
+			} else {
+				backupIdsQueue.Items = append(backupIdsQueue.Items, BackupIdsQueueItem{
+					Id:         id,
+					ChangeType: database.Unchanged,
+				})
 			}
 		} else {
 			pendingDirEntryInserts = append(pendingDirEntryInserts, dirEntryInsert{rootPath: rootDirName, relPath: relPath, lastBackupUnixtime: 0})
@@ -146,7 +159,10 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 		if err != nil {
 			log.Printf("error: Traverse: db.HasDirEnt: %v\n", err)
 		}
-		backupIdsQueue.Ids = append(backupIdsQueue.Ids, id)
+		backupIdsQueue.Items = append(backupIdsQueue.Items, BackupIdsQueueItem{
+			Id:         id,
+			ChangeType: database.Updated,
+		})
 	}
 
 	// print summary statistics

@@ -12,10 +12,8 @@ import (
 	"github.com/fsctl/tless/pkg/util"
 )
 
-func DeleteSnapshot(ctx context.Context, key []byte, groupedObjects map[string]BackupDir, backupDirName string, snapshotTimestamp string, objst *objstore.ObjStore, bucket string) error {
-	backupDirSnapshotsOnly := groupedObjects[backupDirName].Snapshots
-
-	// get the encrypted representation of backupDirName and snapshotName
+func DeleteSnapshot(ctx context.Context, key []byte, backupDirName string, snapshotTimestamp string, objst *objstore.ObjStore, bucket string, vlog *util.VLog) error {
+	// Get the encrypted representation of backupDirName and snapshotName
 	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotTimestamp)
 	if err != nil {
 		return fmt.Errorf("error: DeleteSnapshot: could not encrypt snapshot name (%s): %v", snapshotTimestamp, err)
@@ -25,56 +23,16 @@ func DeleteSnapshot(ctx context.Context, key []byte, groupedObjects map[string]B
 		return fmt.Errorf("error: DeleteSnapshot: could not encrypt backup dir name (%s): %v", backupDirName, err)
 	}
 
-	// Compute the plan for deleting this snapshot and merging forward
-	deleteObjs, renameObjs, newNextSnapshotObj, err := ComputeSnapshotDelete(encryptedBackupDirName, backupDirSnapshotsOnly, snapshotTimestamp)
-	if err != nil {
-		return fmt.Errorf("error: DeleteSnapshot: could not compute plan for deleting snapshot: %v", err)
-	}
-
-	// Object deletes
-	for _, m := range deleteObjs {
-		for encRelPath := range m {
-			objName := encryptedBackupDirName + "/" + encryptedSnapshotName + "/" + encRelPath
-
-			err = objst.DeleteObj(ctx, bucket, objName)
-			if err != nil {
-				return fmt.Errorf("error: DeleteSnapshot: could not delete object (%s): %v", objName, err)
-			}
-		}
-	}
-
-	// Object renames
-	for _, renObj := range renameObjs {
-		encryptedOldSnapshotName, err := cryptography.EncryptFilename(key, renObj.OldSnapshot)
-		if err != nil {
-			log.Fatalf("error: DeleteSnapshot: could not encrypt snapshot name (%s): %v\n", renObj.OldSnapshot, err)
-		}
-		encryptedNewSnapshotName, err := cryptography.EncryptFilename(key, renObj.NewSnapshot)
-		if err != nil {
-			log.Fatalf("error: DeleteSnapshot: could not encrypt snapshot name (%s): %v\n", renObj.NewSnapshot, err)
-		}
-		oldObjName := encryptedBackupDirName + "/" + encryptedOldSnapshotName + "/" + renObj.RelPath
-		newObjName := encryptedBackupDirName + "/" + encryptedNewSnapshotName + "/" + renObj.RelPath
-
-		err = objst.RenameObj(ctx, bucket, oldObjName, newObjName)
-		if err != nil {
-			log.Fatalf("error: DeleteSnapshot: could not rename object (%s): %v\n", oldObjName, err)
-		}
-	}
-
-	// Overwrite the new snapshot index for NEXT snapshot (one we merged into)
-	if newNextSnapshotObj != nil {
-		if err = SerializeAndWriteSnapshotObj(newNextSnapshotObj, key, encryptedBackupDirName, newNextSnapshotObj.EncryptedName, objst, ctx, bucket); err != nil {
-			log.Printf("error: DeleteSnapshot: failed in SerializeAndSaveSnapshotObj: %v\n", err)
-			return err
-		}
-	}
-
-	// Delete index file for deleted snapshot
+	// Delete index file for snapshot
 	indexObjName := encryptedBackupDirName + "/@" + encryptedSnapshotName
 	err = objst.DeleteObj(ctx, bucket, indexObjName)
 	if err != nil {
 		return fmt.Errorf("error: DeleteSnapshot: could not delete old snapshot's index file (%s): %v", indexObjName, err)
+	}
+
+	// Garbage collect orphaned chunks
+	if err = GCChunks(ctx, objst, bucket, key, vlog); err != nil {
+		return fmt.Errorf("error: DeleteSnapshot: could not garbage collect chunks: %v", err)
 	}
 
 	return nil
@@ -117,7 +75,7 @@ type SnapshotInfo struct {
 // Used by prune (cmd/prune.go) and autoprune (daemon/timer.go)
 func GetAllSnapshotInfos(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string) (map[string][]SnapshotInfo, error) {
 	// Get the backup:snapshots map with encrypted names
-	encryptedSnapshotsMap, err := objst.GetObjListTopTwoLevels(ctx, bucket, []string{"SALT-", "VERSION"}, []string{"@"})
+	encryptedSnapshotsMap, err := objst.GetObjListTopTwoLevels(ctx, bucket, []string{"salt-", "version", "chunks", "keys"}, []string{"@"})
 	if err != nil {
 		log.Println("error: GetAllSnapshotInfos: ", err)
 		return nil, err
@@ -152,39 +110,8 @@ func GetAllSnapshotInfos(ctx context.Context, key []byte, objst *objstore.ObjSto
 	return mRet, nil
 }
 
-// An orphaned snapshot has no index or a corrupted index.  All we can do is remove the snapshot files, i.e.,
-// encBackupName/encSnapshotName/* and encBackupName/@encSnapshotName.
-//
-// This mainly comes up when canceling a backup, in which the index has not been written to cloud yet.
-func DeleteOrphanedSnapshot(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, backupDirName string, snapshotName string, vlog *util.VLog) error {
-	encryptedBackupDirName, err := cryptography.EncryptFilename(key, backupDirName)
-	if err != nil {
-		return fmt.Errorf("error: DeleteSnapshot: could not encrypt backup dir name (%s): %v", backupDirName, err)
-	}
-	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotName)
-	if err != nil {
-		return fmt.Errorf("error: DeleteSnapshot: could not encrypt snapshot name (%s): %v", snapshotName, err)
-	}
-
-	// remove corrupted index "encBackupName/@encSnapshotName"
-	objNameIndex := encryptedBackupDirName + "/" + "@" + encryptedSnapshotName
-	if err = objst.DeleteObj(ctx, bucket, objNameIndex); err != nil {
-		log.Println("error: DeleteOrphanedSnapshot: could not delete corrupted index file: ", err)
-		return err
-	}
-
-	// remove all "encBackupName/encSnapshotName/*" objects
-	prefix := encryptedBackupDirName + "/" + encryptedSnapshotName + "/"
-	mObjs, err := objst.GetObjList(ctx, bucket, prefix, true, vlog)
-	if err != nil {
-		log.Println("error: DeleteOrphanedSnapshot: could not get list of snapshot objects: ", err)
-		return err
-	}
-	for objName := range mObjs {
-		if err = objst.DeleteObj(ctx, bucket, objName); err != nil {
-			log.Println("error: DeleteOrphanedSnapshot: could not delete object: ", err)
-		}
-	}
-
+// Garbage collects orphaned chunks
+func GCChunks(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, vlog *util.VLog) error {
+	// TODO
 	return nil
 }

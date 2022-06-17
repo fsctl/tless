@@ -52,11 +52,13 @@ func WriteIndexFile(ctx context.Context, dbLock *sync.Mutex, db *database.DB, ob
 	}
 
 	for _, indexEntry := range indexEntries {
-		// reconstruct the crp object from json
-		crp := NewCloudRelPathFromJson(indexEntry)
+		if len(indexEntry) > 0 {
+			// reconstruct the crp object from json
+			crp := NewCloudRelPathFromJson(indexEntry)
 
-		// add object to snapshot obj's map
-		snapshotObj.RelPaths[crp.DecryptedRelPath] = *crp
+			// add object to snapshot obj's map
+			snapshotObj.RelPaths[crp.RelPath] = *crp
+		}
 	}
 
 	if err = SerializeAndWriteSnapshotObj(&snapshotObj, key, encryptedBackupDirName, encryptedSnapshotName, objst, ctx, bucket); err != nil {

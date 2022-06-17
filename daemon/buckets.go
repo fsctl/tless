@@ -117,8 +117,8 @@ func (s *server) GetBucketSalt(ctx context.Context, in *pb.GetBucketSaltRequest)
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
-	// Try to fetch all objects starting with "SALT-"
-	m, err := objst.GetObjList(ctx, in.GetBucketName(), "SALT-", false, vlog)
+	// Try to fetch all objects starting with "salt-"
+	m, err := objst.GetObjList(ctx, in.GetBucketName(), "salt-", false, vlog)
 	if err != nil {
 		log.Println("error: GetBucketSalt: GetObjList failed: ", err)
 		return &pb.GetBucketSaltResponse{
@@ -128,7 +128,7 @@ func (s *server) GetBucketSalt(ctx context.Context, in *pb.GetBucketSaltRequest)
 		}, nil
 	}
 
-	// Check if there's >1 SALT-xxxx file and warn user if so
+	// Check if there's >1 salt-xxxx file and warn user if so
 	var saltObjName string
 	if len(m) > 1 {
 		for k := range m {
@@ -139,14 +139,14 @@ func (s *server) GetBucketSalt(ctx context.Context, in *pb.GetBucketSaltRequest)
 				log.Println(msg)
 			}
 		}
-		log.Println("warning: there are multiple SALT-xxxx files in bucket '$s'; you need to manually delete the wrong one(s)", in.GetBucketName())
+		log.Println("warning: there are multiple salt-xxxx files in bucket '$s'; you need to manually delete the wrong one(s)", in.GetBucketName())
 		return &pb.GetBucketSaltResponse{
 			Result: pb.GetBucketSaltResponse_ERR_MULTIPLE_SALTS,
 			ErrMsg: "",
 			Salt:   "",
 		}, nil
 	} else if len(m) == 0 {
-		// There is no SALT-xxxx file.
+		// There is no salt-xxxx file.
 		return &pb.GetBucketSaltResponse{
 			Result: pb.GetBucketSaltResponse_ERR_NO_SALT,
 			ErrMsg: "",
@@ -210,8 +210,8 @@ func (s *server) CheckBucketSaltPassword(ctx context.Context, in *pb.CheckBucket
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
-	// Check if a SALT-xxxx file exists at all
-	m, err := objst.GetObjList(ctx, in.GetBucketName(), "SALT-", false, vlog)
+	// Check if a salt-xxxx file exists at all
+	m, err := objst.GetObjList(ctx, in.GetBucketName(), "salt-", false, vlog)
 	if err != nil {
 		log.Println("error: GetBucketSalt: GetObjList failed: ", err)
 		return &pb.CheckBucketSaltPasswordResponse{
@@ -226,8 +226,8 @@ func (s *server) CheckBucketSaltPassword(ctx context.Context, in *pb.CheckBucket
 		}, nil
 	}
 
-	// Try to fetch "SALT-" + input salt file
-	saltObjName := "SALT-" + in.GetSalt()
+	// Try to fetch "salt-" + input salt file
+	saltObjName := "salt-" + in.GetSalt()
 	saltFileContents, err := objst.DownloadObjToBuffer(ctx, in.GetBucketName(), saltObjName)
 	if err != nil {
 		log.Printf("error: CheckBucketSaltPassword: could not download '%s': %v", saltObjName, err)

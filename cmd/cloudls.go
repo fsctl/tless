@@ -98,21 +98,11 @@ func cloudlsMain() {
 
 				for _, relPath := range relPathKeys {
 					val := groupedObjects[groupName].Snapshots[snapshotName].RelPaths[relPath]
-					deletedMsg := ""
-					if val.IsDeleted {
-						deletedMsg = " (deleted)"
-					}
-					fmt.Printf("    %s%s\n", relPath, deletedMsg)
+					fmt.Printf("    %s\n", relPath)
 
 					if cloudlsCfgShowChunks {
-						chunkNameKeys := make([]string, 0, len(val.EncryptedChunkNames))
-						for chunkName := range val.EncryptedChunkNames {
-							chunkNameKeys = append(chunkNameKeys, chunkName)
-						}
-						sort.Strings(chunkNameKeys)
-
-						for _, chunkName := range chunkNameKeys {
-							fmt.Printf("      Chunk: %s (%d bytes)\n", chunkName, val.EncryptedChunkNames[chunkName])
+						for _, chunkExtent := range val.ChunkExtents {
+							fmt.Printf("      Chunk: %s (offset: %d, len: %d)\n", chunkExtent.ChunkName, chunkExtent.Offset, chunkExtent.Len)
 						}
 					}
 				}
@@ -171,18 +161,19 @@ func cloudlsMainShowSnapshot() {
 	snapshotName := snapshotFlagParts[1]
 	// TODO: check both parts for regex validity
 
-	mRelPathsObjsMap, err := snapshots.ReconstructSnapshotFileList(ctx, objst, cfgBucket, encKey, backupName, snapshotName, "", nil, nil, vlog)
+	groupedObjects, err := snapshots.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket, vlog)
 	if err != nil {
-		log.Fatalln("error: reconstructSnapshotFileList failed: ", err)
+		log.Fatalf("Could not get grouped snapshots: %v", err)
 	}
-	for relPath := range mRelPathsObjsMap {
+	mRelPathsObjsMap := groupedObjects[backupName].Snapshots[snapshotName].RelPaths
+	for relPath := range groupedObjects[backupName].Snapshots[snapshotName].RelPaths {
 		fmt.Printf("\nFILE> %s\n", relPath)
 
-		if len(mRelPathsObjsMap[relPath]) == 1 {
-			fmt.Printf("  +- %s\n", mRelPathsObjsMap[relPath][0])
-		} else if len(mRelPathsObjsMap[relPath]) > 1 {
-			for _, objName := range mRelPathsObjsMap[relPath] {
-				fmt.Printf("  |- %s\n", objName)
+		if len(mRelPathsObjsMap[relPath].ChunkExtents) == 1 {
+			fmt.Printf("  +- %s (offset: %d, len: %d)\n", mRelPathsObjsMap[relPath].ChunkExtents[0].ChunkName, mRelPathsObjsMap[relPath].ChunkExtents[0].Offset, mRelPathsObjsMap[relPath].ChunkExtents[0].Len)
+		} else if len(mRelPathsObjsMap[relPath].ChunkExtents) > 1 {
+			for _, chunkExtent := range mRelPathsObjsMap[relPath].ChunkExtents {
+				fmt.Printf("  |- %s (offset: %d, len: %d)\n", chunkExtent.ChunkName, chunkExtent.Offset, chunkExtent.Len)
 			}
 		} else {
 			log.Fatalf("error: invalid number of chunks planned for %s", relPath)

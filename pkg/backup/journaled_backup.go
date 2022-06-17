@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/fstraverse"
 	"github.com/fsctl/tless/pkg/objstore"
@@ -52,9 +51,9 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 		fatalError = true
 		return
 	}
-	for _, dirEntId := range backupIdsQueue.Ids {
+	for _, backupQueueItem := range backupIdsQueue.Items {
 		util.LockIf(globalsLock)
-		insertBJTxn.InsertBackupJournalRow(int64(dirEntId), database.Unstarted, database.Updated)
+		insertBJTxn.InsertBackupJournalRow(int64(backupQueueItem.Id), database.Unstarted, backupQueueItem.ChangeType)
 		util.UnlockIf(globalsLock)
 	}
 	for deletedPath := range prevPaths {
@@ -66,7 +65,7 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 		isFound, _, dirEntId, err := db.HasDirEnt(backupDirName, deletedPath)
 		util.UnlockIf(globalsLock)
 		if err != nil {
-			log.Printf("error: DoJournaledBackup: hile trying to find '%s'/'%s' in dirents: %v", backupDirName, deletedPath, err)
+			log.Printf("error: DoJournaledBackup: failed while trying to find '%s'/'%s' in dirents: %v", backupDirName, deletedPath, err)
 			continue
 		}
 		if !isFound {
@@ -131,6 +130,13 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 		}
 	}
 
+	// Get the previous snapshot so we know the chunk extents for all the unchanged files
+	groupedObjects, err := snapshots.GetGroupedSnapshots(ctx, objst, key, bucket, vlog)
+	if err != nil {
+		log.Fatalf("Could not get grouped snapshots: %v", err)
+	}
+	prevSnapshot := groupedObjects[filepath.Base(backupDirPath)].GetMostRecentSnapshot()
+
 	for {
 		// Sleep this go routine briefly on every iteration of the for loop
 		time.Sleep(time.Millisecond * 50)
@@ -160,36 +166,35 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 		rootDirName, relPath, err := db.GetDirEntPaths(int(bjt.DirEntId))
 		util.UnlockIf(globalsLock)
 		if err != nil {
-			log.Printf("error: PlayBackupJournal: db.GetDirEntPaths(): could not get dirent id '%d'\n", bjt.DirEntId)
+			log.Printf("error: PlayBackupJournal: db.GetDirEntPaths: could not get dirent id '%d'\n", bjt.DirEntId)
 		}
 
-		crp := snapshots.CloudRelPath{}
+		// For JSON serialization into journal
+		crp := &snapshots.CloudRelPath{
+			RelPath: relPath,
+		}
+
 		if bjt.ChangeType == database.Updated {
 			vlog.Printf("Backing up '%s/%s'", rootDirName, relPath)
-			encryptedRelPath, encryptedChunks, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, false)
+			chunkExtents, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, false)
 			if err != nil {
-				log.Printf("error: PlayBackupJournal: backup.Backup(): %v", err)
+				log.Printf("error: PlayBackupJournal: backup.Backup: %v", err)
 				continue
 			}
 
-			// For JSON serialization into journal
-			crp.DecryptedRelPath = relPath
-			crp.EncryptedRelPathStripped = encryptedRelPath
-			crp.EncryptedChunkNames = encryptedChunks
-			crp.IsDeleted = false
+			crp.ChunkExtents = chunkExtents
+		} else if bjt.ChangeType == database.Unchanged {
+			// Just use the same extents as prev snapshot had
+			chunkExtents := prevSnapshot.RelPaths[relPath].ChunkExtents
+			crp.ChunkExtents = chunkExtents
 		} else if bjt.ChangeType == database.Deleted {
-			vlog.Printf("Deleting '%s/%s'", rootDirName, relPath)
-			encryptedRelPath, err := createDeletedPathKeyAndPurgeFromDb(db, globalsLock, key, rootDirName, relPath)
-			if err != nil {
-				log.Printf("error: PlayBackupJournal: failed on deleting path '%s': %v", relPath, err)
-				continue
+			// Remove from dirents table
+			if err = purgeFromDb(db, globalsLock, filepath.Base(backupDirPath), relPath); err != nil {
+				log.Printf("error: PlayBackupJournal: failed to purge from dirents '%s': %v", relPath, err)
 			}
-
-			// For JSON serialization into journal
-			crp.DecryptedRelPath = relPath
-			crp.EncryptedRelPathStripped = encryptedRelPath
-			crp.EncryptedChunkNames = nil
-			crp.IsDeleted = true
+			crp = nil
+		} else {
+			log.Printf("error: PlayBackupJournal: unrecognized journal type '%v' on '%s'", bjt.ChangeType, relPath)
 		}
 
 		util.LockIf(globalsLock)
@@ -199,8 +204,13 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 			log.Printf("error: PlayBackupJournal: db.UpdateLastBackupTime(): %v", err)
 		}
 
+		var isJournalComplete bool
 		util.LockIf(globalsLock)
-		isJournalComplete, err := db.CompleteBackupJournalTask(bjt, crp.ToJson())
+		if crp == nil {
+			isJournalComplete, err = db.CompleteBackupJournalTask(bjt, nil)
+		} else {
+			isJournalComplete, err = db.CompleteBackupJournalTask(bjt, crp.ToJson())
+		}
 		util.UnlockIf(globalsLock)
 		if err != nil {
 			log.Printf("error: PlayBackupJournal: db.CompleteBackupJournalTask: %v", err)
@@ -234,28 +244,17 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 	}
 }
 
-func createDeletedPathKeyAndPurgeFromDb(db *database.DB, dbLock *sync.Mutex, key []byte, backupDirName string, deletedPath string) (encryptedDeletedRelPath string, err error) {
-	// encrypt the deleted path name
-	encryptedDeletedRelPath, err = cryptography.EncryptFilename(key, deletedPath)
-	if err != nil {
-		log.Printf("error: createDeletedPathKeyAndPurgeFromDb(): could not encrypt deleted rel path ('%s'): %v\n", deletedPath, err)
-		return "", err
-	}
-
-	// Insert a slash in the middle of encrypted relPath b/c server won't
-	// allow path components > 255 characters
-	encryptedDeletedRelPath = InsertSlashIntoEncRelPath(encryptedDeletedRelPath)
-
+func purgeFromDb(db *database.DB, dbLock *sync.Mutex, backupDirName string, deletedPath string) error {
 	// Delete dirents row for backupDirName/relPath
 	util.LockIf(dbLock)
-	err = db.DeleteDirEntByPath(backupDirName, deletedPath)
+	err := db.DeleteDirEntByPath(backupDirName, deletedPath)
 	util.UnlockIf(dbLock)
 	if err != nil {
 		log.Printf("error: createDeletedPathKeyAndPurgeFromDb: DeleteDirEntByPath failed: %v", err)
-		return "", err
+		return err
 	}
 
-	return encryptedDeletedRelPath, nil
+	return nil
 }
 
 func ReplayBackupJournal(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, db *database.DB, globalsLock *sync.Mutex, vlog *util.VLog, setReplayInitialProgressFunc SetReplayInitialProgressFuncType, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, updateProgressFunc UpdateProgressFuncType) {

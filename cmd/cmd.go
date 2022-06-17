@@ -179,7 +179,7 @@ func validateConfigVars() error {
 		return fmt.Errorf("master password invalid (value='%s')", cfgMasterPassword)
 	}
 
-	// Check crypto config in SALT-xxxx file
+	// Check crypto config in salt-xxxx file
 	if !cfgForce {
 		ctx := context.Background()
 		objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)

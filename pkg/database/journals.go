@@ -20,8 +20,9 @@ const (
 type ChangeType int
 
 const (
-	Updated ChangeType = 1
-	Deleted ChangeType = 2
+	Updated   ChangeType = 1
+	Unchanged ChangeType = 2
+	Deleted   ChangeType = 3
 )
 
 var (

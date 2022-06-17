@@ -55,12 +55,6 @@ func PruneSnapshots() error {
 		return err
 	}
 
-	groupedObjects, err := snapshots.GetGroupedSnapshots(ctx, objst, encKey, bucket, vlog)
-	if err != nil {
-		log.Printf("AUTOPRUNE> error: could not get grouped snapshots: %v", err)
-		return err
-	}
-
 	for backupName := range mSnapshots {
 		// Mark what is to be kept
 		keeps := snapshots.GetPruneKeepsList(mSnapshots[backupName])
@@ -76,7 +70,9 @@ func PruneSnapshots() error {
 
 			if !keepCurr {
 				log.Printf("AUTOPRUNE> Deleting snapshot '%s'\n", ss.RawSnapshotName)
-				snapshots.DeleteSnapshot(ctx, encKey, groupedObjects, backupName, ss.Name, objst, bucket)
+				if err = snapshots.DeleteSnapshot(ctx, encKey, backupName, ss.Name, objst, bucket, vlog); err != nil {
+					log.Printf("AUTOPRUNE> error: could not delete snapshot '%s': %v\n", ss.RawSnapshotName, err)
+				}
 			} else {
 				log.Printf("AUTOPRUNE> Keeping snapshot '%s'\n", ss.RawSnapshotName)
 			}

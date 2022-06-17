@@ -12,8 +12,9 @@ import (
 
 const (
 	wakeEveryNSeconds            int = 60
-	automaticBackupEveryNSeconds int = 1 * 60 * 60
+	automaticBackupEveryNSeconds int = 60 //1 * 60 * 60
 	automaticPruneEveryNSeconds  int = 2 * 60 * 60
+	firstAutomaticBackupAfterMin int = 1 // 15
 
 	dbgDisableAutoprune bool = true
 )
@@ -23,7 +24,7 @@ func timerLoop(signals chan os.Signal, server *server) {
 
 	// Start the first automatic backup 15 minutes after this loop starts running
 	var (
-		secondsCnt                 int = automaticBackupEveryNSeconds - (15 * 60)
+		secondsCnt                 int = automaticBackupEveryNSeconds - (firstAutomaticBackupAfterMin * 60)
 		lastAutomaticBackupStarted int = 0
 		lastAutomaticPruneStarted  int = 0
 	)

@@ -55,12 +55,7 @@ func cloudrmMain() {
 		log.Fatalf("Cannot split '%s' into backupDirName/snapshotTimestamp", cloudrmCfgSnapshot)
 	}
 
-	groupedObjects, err := snapshots.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket, vlog)
-	if err != nil {
-		log.Fatalf("Could not get grouped snapshots: %v", err)
-	}
-
-	err = snapshots.DeleteSnapshot(ctx, encKey, groupedObjects, backupDirName, snapshotTimestamp, objst, cfgBucket)
+	err = snapshots.DeleteSnapshot(ctx, encKey, backupDirName, snapshotTimestamp, objst, cfgBucket, vlog)
 	if err != nil {
 		log.Fatalf("Failed to delete snapshot: %v", err)
 	}
