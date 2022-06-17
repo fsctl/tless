@@ -181,6 +181,9 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 		log.Printf("error: cannot get user'%s's UID/GID: %v", username, err)
 	}
 
+	// Initialize a chunk cache
+	cc := backup.NewChunkCache(objst, vlog)
+
 	// For locality of reference reasons, we'll get the best cache hit rate if we restore in lexiconigraphical
 	// order of rel paths.
 	relPathKeys := make([]string, 0, len(mRelPathsObjsMap))
@@ -207,7 +210,7 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 
 		vlog.Printf("RESTORING: '%s' from %s/%s", relPath, backupName, snapshotName)
 
-		err = backup.RestoreDirEntry(ctx, encKey, restorePath, mRelPathsObjsMap[relPath], backupName, snapshotName, relPath, objst, bucket, vlog, &dirChmodQueue, uid, gid)
+		err = backup.RestoreDirEntry(ctx, encKey, restorePath, mRelPathsObjsMap[relPath], backupName, snapshotName, relPath, objst, bucket, vlog, &dirChmodQueue, uid, gid, cc)
 		if err != nil {
 			log.Printf("error: could not restore a dir entry '%s'", relPath)
 		}

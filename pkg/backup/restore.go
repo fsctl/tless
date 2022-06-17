@@ -22,7 +22,7 @@ type DirChmodQueueItem struct {
 	FinalMode fs.FileMode
 }
 
-func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string, crp snapshots.CloudRelPath, rootDirName string, snapshotName string, relPath string, objst *objstore.ObjStore, bucket string, vlog *util.VLog, dirChmodQueue *[]DirChmodQueueItem, uid int, gid int) error {
+func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string, crp snapshots.CloudRelPath, rootDirName string, snapshotName string, relPath string, objst *objstore.ObjStore, bucket string, vlog *util.VLog, dirChmodQueue *[]DirChmodQueueItem, uid int, gid int, cc *ChunkCache) error {
 	// Strip any trailing slashes on destination path
 	restoreIntoDirPath = util.StripTrailingSlashes(restoreIntoDirPath)
 
@@ -32,9 +32,14 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 		log.Println(msg)
 		return fmt.Errorf(msg)
 	}
-	ciphertextFirstChunkBuf, err := objst.DownloadObjToBuffer(ctx, bucket, "chunks/"+crp.ChunkExtents[0].ChunkName)
+	objName := "chunks/" + crp.ChunkExtents[0].ChunkName
+	// ciphertextFirstChunkBuf, err := objst.DownloadObjToBuffer(ctx, bucket, objName)
+	// if err != nil {
+	// 	log.Fatalf("Error retrieving file: %v", err)
+	// }
+	ciphertextFirstChunkBuf, err := cc.FetchObjIntoBuffer(ctx, bucket, objName)
 	if err != nil {
-		log.Fatalf("Error retrieving file: %v", err)
+		log.Fatalf("error: RestoreDirEntry: failed to retrieve obj '%s': %v", objName, err)
 	}
 
 	// decrypt the first chunk, saving nonce as prevNonce for comparison with later chunks
@@ -126,9 +131,13 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 		for _, chunkExtent := range crp.ChunkExtents[1:] {
 			// download the chunk
 			objName := "chunks/" + chunkExtent.ChunkName
-			ciphertextNextChunkBuf, err := objst.DownloadObjToBuffer(ctx, bucket, objName)
+			// ciphertextNextChunkBuf, err := objst.DownloadObjToBuffer(ctx, bucket, objName)
+			// if err != nil {
+			// 	log.Fatalf("error: RestoreDirEntry: error retrieving file: %v", err)
+			// }
+			ciphertextNextChunkBuf, err := cc.FetchObjIntoBuffer(ctx, bucket, objName)
 			if err != nil {
-				log.Fatalf("error: RestoreDirEntry: error retrieving file: %v", err)
+				log.Fatalf("error: RestoreDirEntry: failed to retrieve obj '%s': %v", objName, err)
 			}
 
 			// decrypt the chunk

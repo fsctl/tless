@@ -123,6 +123,9 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 		)
 	}
 
+	// Initialize a chunk cache
+	cc := backup.NewChunkCache(objst, vlog)
+
 	// For locality of reference reasons, we'll get the best cache hit rate if we restore in lexiconigraphical
 	// order of rel paths.
 	relPathKeys := make([]string, 0, len(mRelPathsObjsMap))
@@ -134,7 +137,7 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 	// loop over all the relpaths and restore each
 	dirChmodQueue := make([]backup.DirChmodQueueItem, 0) // all directory mode bits are set at end
 	for _, relPath := range relPathKeys {
-		err = backup.RestoreDirEntry(ctx, encKey, pathToRestoreInto, mRelPathsObjsMap[relPath], backupName, snapshotName, relPath, objst, cfgBucket, vlog, &dirChmodQueue, -1, -1)
+		err = backup.RestoreDirEntry(ctx, encKey, pathToRestoreInto, mRelPathsObjsMap[relPath], backupName, snapshotName, relPath, objst, cfgBucket, vlog, &dirChmodQueue, -1, -1, cc)
 		if err != nil {
 			log.Printf("error: could not restore a dir entry '%s'", relPath)
 		}
