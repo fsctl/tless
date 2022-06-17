@@ -162,4 +162,6 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 		}
 	}
 
+	// Print the cache hit rate to vlog for diagnostics
+	cc.PrintCacheStatistics()
 }

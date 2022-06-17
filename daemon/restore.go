@@ -233,6 +233,9 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 		}
 	}
 
+	// Print the cache hit rate to vlog for diagnostics
+	cc.PrintCacheStatistics()
+
 	done()
 }
 

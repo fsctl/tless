@@ -26,10 +26,16 @@ type CachedChunk struct {
 	lastUsedUnixTime int64
 }
 
+type CacheStatistics struct {
+	hits  int
+	total int
+}
+
 type ChunkCache struct {
 	objst  *objstore.ObjStore
 	vlog   *util.VLog
 	chunks map[string]CachedChunk
+	stats  *CacheStatistics
 }
 
 func NewChunkCache(objst *objstore.ObjStore, vlog *util.VLog) *ChunkCache {
@@ -38,6 +44,10 @@ func NewChunkCache(objst *objstore.ObjStore, vlog *util.VLog) *ChunkCache {
 		objst:  objst,
 		vlog:   vlog,
 		chunks: make(map[string]CachedChunk, 0),
+		stats: &CacheStatistics{
+			hits:  0,
+			total: 0,
+		},
 	}
 
 	// Make cache directory if it doesn't already exist
@@ -83,11 +93,13 @@ func (cc *ChunkCache) FetchObjIntoBuffer(ctx context.Context, bucket string, obj
 	chunkName := strings.TrimPrefix(objectName, "chunks/")
 
 	cc.vlog.Printf("FetchObjIntoBuffer: searching for chunk '%s'", chunkName)
+	cc.stats.total += 1
 
 	var err error
 	var ciphertextChunkBuf []byte
 	if cc.isObjCached(chunkName) {
 		cc.vlog.Printf("FetchObjIntoBuffer: found in cache '%s'", chunkName)
+		cc.stats.hits += 1
 		ciphertextChunkBuf, err = cc.readEntireFile(chunkName)
 		if err != nil {
 			log.Printf("error: FetchObjToBuffer: failed to read file cache of obj '%s': %v", objectName, err)
@@ -198,5 +210,14 @@ func (cc *ChunkCache) evictLeastRecentlyUsed() {
 	}
 	if lruObjName != "" {
 		delete(cc.chunks, lruObjName)
+	}
+}
+
+func (cc *ChunkCache) PrintCacheStatistics() {
+	if cc.stats.total == 0 {
+		cc.vlog.Println("ChunkCache: cache hit rate undefined (cache unused")
+	} else {
+		percentageHitRate := float64(100) * (float64(cc.stats.hits) / float64(cc.stats.total))
+		cc.vlog.Printf("ChunkCache: cache hit rate %d / %d (%02f%%)", cc.stats.hits, cc.stats.total, percentageHitRate)
 	}
 }
