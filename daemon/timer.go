@@ -12,11 +12,11 @@ import (
 
 const (
 	wakeEveryNSeconds            int = 60
-	automaticBackupEveryNSeconds int = 60 //1 * 60 * 60
-	automaticPruneEveryNSeconds  int = 2 * 60 * 60
-	firstAutomaticBackupAfterMin int = 60
+	automaticBackupEveryNSeconds int = 6 * 60 * 60
+	automaticPruneEveryNSeconds  int = 12 * 60 * 60
+	firstAutomaticBackupAfterMin int = 15
 
-	dbgDisableAutoprune bool = true
+	dbgDisableAutoprune bool = false
 )
 
 func timerLoop(signals chan os.Signal, server *server) {
