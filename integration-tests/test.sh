@@ -3,7 +3,7 @@
 #
 # Set this to '-v' for verbose output on all commands
 #
-VERBOSE=-v
+VERBOSE=
 
 #
 # Can't use tmpfs on Linux because it does not allow user-defined xattrs

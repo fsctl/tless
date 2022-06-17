@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
@@ -33,26 +32,24 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 		return fmt.Errorf(msg)
 	}
 	objName := "chunks/" + crp.ChunkExtents[0].ChunkName
-	// ciphertextFirstChunkBuf, err := objst.DownloadObjToBuffer(ctx, bucket, objName)
-	// if err != nil {
-	// 	log.Fatalf("Error retrieving file: %v", err)
-	// }
-	ciphertextFirstChunkBuf, err := cc.FetchObjIntoBuffer(ctx, bucket, objName)
+	offset := crp.ChunkExtents[0].Offset
+	len := crp.ChunkExtents[0].Len
+	plaintextBuf, prevNonce, err := cc.FetchExtentIntoBuffer(ctx, bucket, objName, offset, len)
 	if err != nil {
 		log.Fatalf("error: RestoreDirEntry: failed to retrieve obj '%s': %v", objName, err)
 	}
 
-	// decrypt the first chunk, saving nonce as prevNonce for comparison with later chunks
-	plaintextFirstChunkBuf, prevNonce, err := cryptography.DecryptBufferReturningNonce(key, ciphertextFirstChunkBuf)
-	if err != nil {
-		log.Printf("error: DecryptBufferReturningNonce failed: %v\n", err)
-		return err
-	}
+	// // decrypt the first chunk, saving nonce as prevNonce for comparison with later chunks
+	// plaintextFirstChunkBuf, prevNonce, err := cryptography.DecryptBufferReturningNonce(key, ciphertextFirstChunkBuf)
+	// if err != nil {
+	// 	log.Printf("error: DecryptBufferReturningNonce failed: %v\n", err)
+	// 	return err
+	// }
 
-	// Extract just [offset:len]
-	offset := crp.ChunkExtents[0].Offset
-	len := crp.ChunkExtents[0].Len
-	plaintextBuf := plaintextFirstChunkBuf[offset : offset+len]
+	// // Extract just [offset:len]
+	// offset := crp.ChunkExtents[0].Offset
+	// len := crp.ChunkExtents[0].Len
+	// plaintextBuf := plaintextFirstChunkBuf[offset : offset+len]
 
 	// read metadata header from plaintext
 	metadataPtr, fileContents, err := deserializeMetadataStruct(plaintextBuf)
@@ -131,26 +128,23 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 		for _, chunkExtent := range crp.ChunkExtents[1:] {
 			// download the chunk
 			objName := "chunks/" + chunkExtent.ChunkName
-			// ciphertextNextChunkBuf, err := objst.DownloadObjToBuffer(ctx, bucket, objName)
-			// if err != nil {
-			// 	log.Fatalf("error: RestoreDirEntry: error retrieving file: %v", err)
-			// }
-			ciphertextNextChunkBuf, err := cc.FetchObjIntoBuffer(ctx, bucket, objName)
+			offset := chunkExtent.Offset
+			len := chunkExtent.Len
+			plaintextBuf, nonce, err := cc.FetchExtentIntoBuffer(ctx, bucket, objName, offset, len)
 			if err != nil {
 				log.Fatalf("error: RestoreDirEntry: failed to retrieve obj '%s': %v", objName, err)
 			}
+			// // decrypt the chunk
+			// plaintextNextChunkBuf, nonce, err := cryptography.DecryptBufferReturningNonce(key, ciphertextNextChunkBuf)
+			// if err != nil {
+			// 	log.Printf("error: RestoreDirEntry: DecryptBufferReturningNonce failed: %v\n", err)
+			// 	return err
+			// }
 
-			// decrypt the chunk
-			plaintextNextChunkBuf, nonce, err := cryptography.DecryptBufferReturningNonce(key, ciphertextNextChunkBuf)
-			if err != nil {
-				log.Printf("error: RestoreDirEntry: DecryptBufferReturningNonce failed: %v\n", err)
-				return err
-			}
-
-			// Extract just the [offset:len] bytes
-			offset := chunkExtent.Offset
-			len := chunkExtent.Len
-			plaintextBuf := plaintextNextChunkBuf[offset : offset+len]
+			// // Extract just the [offset:len] bytes
+			// offset := chunkExtent.Offset
+			// len := chunkExtent.Len
+			// plaintextBuf := plaintextNextChunkBuf[offset : offset+len]
 
 			// check that the nonce is one larger than prev nonce
 			isNonceOneMore := isNonceOneMoreThanPrev(nonce, prevNonce)
