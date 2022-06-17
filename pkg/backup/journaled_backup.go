@@ -133,7 +133,8 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 	// Get the previous snapshot so we know the chunk extents for all the unchanged files
 	groupedObjects, err := snapshots.GetGroupedSnapshots(ctx, objst, key, bucket, vlog)
 	if err != nil {
-		log.Fatalf("Could not get grouped snapshots: %v", err)
+		log.Printf("Could not get grouped snapshots: %v", err)
+		return true
 	}
 	prevSnapshot := groupedObjects[filepath.Base(backupDirPath)].GetMostRecentSnapshot()
 
