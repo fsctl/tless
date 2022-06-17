@@ -206,7 +206,7 @@ func checkAndHandleCancelation(ctx context.Context, key []byte, objst *objstore.
 }
 
 func updateBackupProgress(finished int64, total int64, globalsLock *sync.Mutex, vlog *util.VLog) {
-	percentDone := (float32(finished)/float32(total))*float32(100) + 0.1
+	percentDone := (float32(finished) / float32(total)) * float32(100)
 	util.LockIf(globalsLock)
 	gStatus.percentage = percentDone
 	util.UnlockIf(globalsLock)
@@ -214,14 +214,14 @@ func updateBackupProgress(finished int64, total int64, globalsLock *sync.Mutex, 
 }
 
 func setBackupInitialProgress(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog) {
-	percentDone := (float32(finished)/float32(total))*float32(100) + 0.1
+	percentDone := (float32(finished) / float32(total)) * float32(100)
 	util.LockIf(globalsLock)
 	gStatus.percentage = float32(percentDone)
 	util.UnlockIf(globalsLock)
 }
 
 func setReplayInitialProgress(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog) {
-	percentDone := (float32(finished)/float32(total))*float32(100) + 0.1
+	percentDone := (float32(finished) / float32(total)) * float32(100)
 	util.LockIf(globalsLock)
 	gStatus.state = BackingUp
 	gStatus.msg = backupDirName
