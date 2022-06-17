@@ -75,7 +75,7 @@ func (cp *chunkPacker) Complete() (isJournalComplete bool) {
 
 		// Upload chunk
 		objName := "chunks/" + chunkName
-		cp.vlog.Printf("chunkPacker: Complete: writing object '%s' to cloud (%d bytes)", objName, len(ciphertextChunkBuf))
+		cp.vlog.Printf("chunkPacker: Complete: writing object '%s' to cloud (%s)", objName, util.FormatBytesAsString(len(ciphertextChunkBuf)))
 		err = cp.objst.UploadObjFromBuffer(cp.ctx, cp.bucket, objName, ciphertextChunkBuf, objstore.ComputeETag(ciphertextChunkBuf))
 		if err != nil {
 			log.Printf("error: chunkPacker.Complete: failed while uploading '%s': %v\n", chunkName, err)

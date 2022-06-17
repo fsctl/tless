@@ -300,3 +300,20 @@ func UnlockIf(lock *sync.Mutex) {
 		lock.Unlock()
 	}
 }
+
+// Returns a formatted string representing the number of bytes in a sensible unit,
+// such as "36.0 mb" for input of 37748736.  Ranges from "b" to "gb".
+func FormatBytesAsString(bcount int) string {
+	if bcount < 1024 {
+		return fmt.Sprintf("%d bytes", bcount)
+	} else if bcount < 1024*1024 {
+		return fmt.Sprintf("%01f kb", float64(bcount)/1024)
+	} else if bcount < 1024*1024*1024 {
+		return fmt.Sprintf("%01f mb", float64(bcount)/float64(1024*1024))
+	} else if bcount < 1024*1024*1024*1024 {
+		return fmt.Sprintf("%01f gb", float64(bcount)/float64(1024*1024*1024))
+	} else {
+		// default to just printing number of bytes
+		return fmt.Sprintf("%d bytes", bcount)
+	}
+}
