@@ -112,6 +112,48 @@ func GetAllSnapshotInfos(ctx context.Context, key []byte, objst *objstore.ObjSto
 
 // Garbage collects orphaned chunks
 func GCChunks(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, vlog *util.VLog) error {
-	// TODO
+	// re-read every snapshot file
+	groupedObjects, err := GetGroupedSnapshots(ctx, objst, key, bucket, vlog)
+	if err != nil {
+		log.Printf("error: GCChunks: could not get grouped snapshots: %v", err)
+		return err
+	}
+
+	// assemble a chunk reference count
+	chunkRefCount := make(map[string]int, 0)
+	for backupName := range groupedObjects {
+		for snapshotName := range groupedObjects[backupName].Snapshots {
+			for _, crp := range groupedObjects[backupName].Snapshots[snapshotName].RelPaths {
+				for _, chunkExtent := range crp.ChunkExtents {
+					chunkName := chunkExtent.ChunkName
+					if val, ok := chunkRefCount[chunkName]; ok {
+						chunkRefCount[chunkName] = val + 1
+					} else {
+						chunkRefCount[chunkName] = 1
+					}
+				}
+			}
+		}
+	}
+
+	// Now iterate over all chunks and see if any have no references (not in map). Delete those.
+	mCloudChunks, err := objst.GetObjList(ctx, bucket, "chunks/", false, vlog)
+	if err != nil {
+		log.Printf("error: GCChunks: could not iterate over chunks in cloud: %v", err)
+		return err
+	}
+	for cloudChunkObjName := range mCloudChunks {
+		cloudChunkName := strings.TrimPrefix(cloudChunkObjName, "chunks/")
+		if _, ok := chunkRefCount[cloudChunkName]; !ok {
+			vlog.Printf("Deleting chunk: '%s'", cloudChunkName)
+			if err = objst.DeleteObj(ctx, bucket, cloudChunkObjName); err != nil {
+				log.Printf("error: GCChunks: cannot delete orphaned chunk '%s': %v", cloudChunkName, err)
+				return err
+			}
+		} else {
+			vlog.Printf("Keeping chunk '%s' (%d references)", cloudChunkName, chunkRefCount[cloudChunkName])
+		}
+	}
+
 	return nil
 }

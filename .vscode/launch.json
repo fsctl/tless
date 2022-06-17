@@ -15,7 +15,8 @@
             // "args": ["backup", "-d", "/tmp/test-backup-src"],
             // "args": ["cloudls"],
             // "args": ["cloudrm", "-S", "backedup2/2022-05-29_13:37:47"],
-            "args": ["restore", "test-backup-src/2022-06-17_06.30.45", "/tmp/test-restore-dst"],
+            // "args": ["restore", "test-backup-src/2022-06-17_06.30.45", "/tmp/test-restore-dst"],
+            "args": ["cloudrm", "--snapshot=backedup4/2022-06-17_09.02.27"],
         },
     ]
 }

@@ -185,9 +185,19 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 
 			crp.ChunkExtents = chunkExtents
 		} else if bjt.ChangeType == database.Unchanged {
-			// Just use the same extents as prev snapshot had
-			chunkExtents := prevSnapshot.RelPaths[relPath].ChunkExtents
-			crp.ChunkExtents = chunkExtents
+			if prevSnapshot != nil {
+				// Just use the same extents as prev snapshot had
+				chunkExtents := prevSnapshot.RelPaths[relPath].ChunkExtents
+				crp.ChunkExtents = chunkExtents
+			} else {
+				log.Printf("warning: found an unchanged file but have no previous snapshot; treating it as updated: '%s/%s'", rootDirName, relPath)
+				chunkExtents, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, false)
+				if err != nil {
+					log.Printf("error: PlayBackupJournal: backup.Backup: %v", err)
+					continue
+				}
+				crp.ChunkExtents = chunkExtents
+			}
 		} else if bjt.ChangeType == database.Deleted {
 			// Remove from dirents table
 			if err = purgeFromDb(db, globalsLock, filepath.Base(backupDirPath), relPath); err != nil {
