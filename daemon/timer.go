@@ -14,7 +14,7 @@ const (
 	wakeEveryNSeconds            int = 60
 	automaticBackupEveryNSeconds int = 60 //1 * 60 * 60
 	automaticPruneEveryNSeconds  int = 2 * 60 * 60
-	firstAutomaticBackupAfterMin int = 1 // 15
+	firstAutomaticBackupAfterMin int = 60
 
 	dbgDisableAutoprune bool = true
 )
