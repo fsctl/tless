@@ -210,7 +210,7 @@ func updateBackupProgress(finished int64, total int64, globalsLock *sync.Mutex, 
 	util.LockIf(globalsLock)
 	gStatus.percentage = percentDone
 	util.UnlockIf(globalsLock)
-	vlog.Printf("%.2f%% done", percentDone)
+	vlog.Printf("%.2f%% written to cloud", percentDone)
 }
 
 func setBackupInitialProgress(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog) {
@@ -227,7 +227,7 @@ func setReplayInitialProgress(finished int64, total int64, backupDirName string,
 	gStatus.msg = backupDirName
 	gStatus.percentage = percentDone
 	util.UnlockIf(globalsLock)
-	vlog.Printf("%.2f%% done replay", percentDone)
+	vlog.Printf("%.2f%% written to cloud (starting replay)", percentDone)
 }
 
 func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string) {

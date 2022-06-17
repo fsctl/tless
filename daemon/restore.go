@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/fsctl/tless/pkg/backup"
@@ -180,9 +181,17 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 		log.Printf("error: cannot get user'%s's UID/GID: %v", username, err)
 	}
 
+	// For locality of reference reasons, we'll get the best cache hit rate if we restore in lexiconigraphical
+	// order of rel paths.
+	relPathKeys := make([]string, 0, len(mRelPathsObjsMap))
+	for relPath := range mRelPathsObjsMap {
+		relPathKeys = append(relPathKeys, relPath)
+	}
+	sort.Strings(relPathKeys)
+
 	// loop over all the relpaths and restore each
 	dirChmodQueue := make([]backup.DirChmodQueueItem, 0) // all directory mode bits are set at end
-	for relPath := range mRelPathsObjsMap {
+	for _, relPath := range relPathKeys {
 		// Check if cancel signal has been received
 		util.LockIf(&gGlobalsLock)
 		isCancelRequested := gCancelRequested

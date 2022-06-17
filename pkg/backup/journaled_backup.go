@@ -226,7 +226,7 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 
 		finishTaskImmediately := true
 		if bjt.ChangeType == database.Updated {
-			vlog.Printf("Backing up '%s/%s'", rootDirName, relPath)
+			//vlog.Printf("Backing up '%s/%s'", rootDirName, relPath)
 			chunkExtents, pendingInChunkPacker, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, vlog, cp, bjt)
 			if err != nil {
 				log.Printf("error: PlayBackupJournal: backup.Backup: %v", err)
@@ -275,10 +275,10 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 				} else if shouldReturn {
 					return
 				}
-			} else {
-				progressUpdateClosure()
 			}
 		}
+
+		progressUpdateClosure()
 	}
 }
 

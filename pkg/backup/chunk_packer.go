@@ -33,16 +33,16 @@ type chunkPacker struct {
 }
 
 func (cp *chunkPacker) AddDirEntry(relPath string, buf []byte, bjt *database.BackupJournalTask) (succeeded bool) {
-	cp.vlog.Printf("chunkPacker: AddDirEntry: asked to add %d byte buffer", len(buf))
+	//cp.vlog.Printf("chunkPacker: AddDirEntry: asked to add %d byte buffer", len(buf))
 
 	// If adding this buffer would exceed chunk's capacity, return false immediately
 	if int64(len(buf)+cp.posInPlaintextChunk) > ChunkSize {
-		cp.vlog.Printf("chunkPacker: AddDirEntry: declining to add dir entry (would exceed ChunkSize)")
+		//cp.vlog.Printf("chunkPacker: AddDirEntry: declining to add dir entry (would exceed ChunkSize)")
 		return false
 	}
 
 	// Otherwise, add the chunk
-	cp.vlog.Printf("chunkPacker: AddDirEntry: adding dir entry")
+	//cp.vlog.Printf("chunkPacker: AddDirEntry: adding dir entry")
 	newItem := chunkPackerItem{
 		relPath: relPath,
 		Offset:  cp.posInPlaintextChunk,
@@ -62,9 +62,9 @@ func (cp *chunkPacker) Complete() (isJournalComplete bool) {
 	// Commit the chunk to the cloud if there's anything in it
 	//
 	chunkName := generateRandomChunkName()
-	cp.vlog.Printf("chunkPacker: Complete: completing the current chunk as %s", chunkName)
+	//cp.vlog.Printf("chunkPacker: Complete: completing the current chunk as %s", chunkName)
 	if len(cp.plaintextChunkBuf) > 0 {
-		cp.vlog.Printf("chunkPacker: Complete: found %d byte plaintextChunkBuf with posInChunkBuf = %d", len(cp.plaintextChunkBuf), cp.posInPlaintextChunk)
+		//cp.vlog.Printf("chunkPacker: Complete: found %d byte plaintextChunkBuf with posInChunkBuf = %d", len(cp.plaintextChunkBuf), cp.posInPlaintextChunk)
 
 		// Encrypt the chunk
 		ciphertextChunkBuf, err := cryptography.EncryptBuffer(cp.key, cp.plaintextChunkBuf)
@@ -75,13 +75,12 @@ func (cp *chunkPacker) Complete() (isJournalComplete bool) {
 
 		// Upload chunk
 		objName := "chunks/" + chunkName
+		cp.vlog.Printf("chunkPacker: Complete: writing object '%s' to cloud (%d bytes)", objName, len(ciphertextChunkBuf))
 		err = cp.objst.UploadObjFromBuffer(cp.ctx, cp.bucket, objName, ciphertextChunkBuf, objstore.ComputeETag(ciphertextChunkBuf))
 		if err != nil {
 			log.Printf("error: chunkPacker.Complete: failed while uploading '%s': %v\n", chunkName, err)
 			return
 		}
-
-		cp.vlog.Printf("chunkPacker: Complete: wrote object '%s' to cloud", objName)
 	}
 
 	//
@@ -102,7 +101,7 @@ func (cp *chunkPacker) Complete() (isJournalComplete bool) {
 				},
 			},
 		}
-		cp.vlog.Printf("chunkPacker: Complete: finalizing '%s' with offset=%d, len=%d", crp.RelPath, crp.ChunkExtents[0].Offset, crp.ChunkExtents[0].Len)
+		//cp.vlog.Printf("chunkPacker: Complete: finalizing '%s' with offset=%d, len=%d", crp.RelPath, crp.ChunkExtents[0].Offset, crp.ChunkExtents[0].Len)
 		updateLastBackupTime(cp.db, cp.dbLock, item.bjt.DirEntId)
 		isJournalComplete = completeTask(cp.db, cp.dbLock, item.bjt, crp)
 	}
@@ -112,7 +111,7 @@ func (cp *chunkPacker) Complete() (isJournalComplete bool) {
 	cp.plaintextChunkBuf = make([]byte, 0)
 	cp.posInPlaintextChunk = 0
 
-	cp.vlog.Printf("chunkPacker: Complete: return isJournalComplete=%s", isJournalComplete)
+	//cp.vlog.Printf("chunkPacker: Complete: return isJournalComplete=%s", isJournalComplete)
 	return isJournalComplete
 }
 
