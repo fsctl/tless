@@ -1,4 +1,4 @@
-package objstorefs
+package snapshots
 
 import (
 	"testing"

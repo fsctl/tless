@@ -14,7 +14,6 @@ import (
 	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/fstraverse"
 	"github.com/fsctl/tless/pkg/objstore"
-	"github.com/fsctl/tless/pkg/objstorefs"
 	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
 )
@@ -164,7 +163,7 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 			log.Printf("error: PlayBackupJournal: db.GetDirEntPaths(): could not get dirent id '%d'\n", bjt.DirEntId)
 		}
 
-		crp := objstorefs.CloudRelPath{}
+		crp := snapshots.CloudRelPath{}
 		if bjt.ChangeType == database.Updated {
 			vlog.Printf("Backing up '%s/%s'", rootDirName, relPath)
 			encryptedRelPath, encryptedChunks, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, false)

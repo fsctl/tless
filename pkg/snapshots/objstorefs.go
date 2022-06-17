@@ -1,7 +1,4 @@
-// Package objstorefs is a filesystem-like abstraction on top of the objstore package that
-// can determine the full list of files in a snapshot, or the full list of snapshots for a
-// backup name group.
-package objstorefs
+package snapshots
 
 import (
 	"context"

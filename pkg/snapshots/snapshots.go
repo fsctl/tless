@@ -9,11 +9,10 @@ import (
 
 	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/objstore"
-	"github.com/fsctl/tless/pkg/objstorefs"
 	"github.com/fsctl/tless/pkg/util"
 )
 
-func DeleteSnapshot(ctx context.Context, key []byte, groupedObjects map[string]objstorefs.BackupDir, backupDirName string, snapshotTimestamp string, objst *objstore.ObjStore, bucket string) error {
+func DeleteSnapshot(ctx context.Context, key []byte, groupedObjects map[string]BackupDir, backupDirName string, snapshotTimestamp string, objst *objstore.ObjStore, bucket string) error {
 	backupDirSnapshotsOnly := groupedObjects[backupDirName].Snapshots
 
 	// get the encrypted representation of backupDirName and snapshotName
@@ -27,7 +26,7 @@ func DeleteSnapshot(ctx context.Context, key []byte, groupedObjects map[string]o
 	}
 
 	// Compute the plan for deleting this snapshot and merging forward
-	deleteObjs, renameObjs, newNextSnapshotObj, err := objstorefs.ComputeSnapshotDelete(encryptedBackupDirName, backupDirSnapshotsOnly, snapshotTimestamp)
+	deleteObjs, renameObjs, newNextSnapshotObj, err := ComputeSnapshotDelete(encryptedBackupDirName, backupDirSnapshotsOnly, snapshotTimestamp)
 	if err != nil {
 		return fmt.Errorf("error: DeleteSnapshot: could not compute plan for deleting snapshot: %v", err)
 	}
@@ -93,7 +92,7 @@ func SplitSnapshotName(snapshotName string) (backupDirName string, snapshotTime 
 }
 
 // Returns true if the specified backupName+snapshotName is the most recent snapshot existing for backup backupName
-func IsMostRecentSnapshotForBackup(ctx context.Context, objst *objstore.ObjStore, bucket string, groupedObjects map[string]objstorefs.BackupDir, backupDirName string, snapshotTimestamp string) bool {
+func IsMostRecentSnapshotForBackup(ctx context.Context, objst *objstore.ObjStore, bucket string, groupedObjects map[string]BackupDir, backupDirName string, snapshotTimestamp string) bool {
 	backupDirSnapshotsOnly := groupedObjects[backupDirName].Snapshots
 
 	// Get an ordered list of all snapshots from earliest to most recent

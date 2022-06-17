@@ -5,7 +5,6 @@ import (
 	"log"
 
 	"github.com/fsctl/tless/pkg/objstore"
-	"github.com/fsctl/tless/pkg/objstorefs"
 	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
 	"github.com/spf13/cobra"
@@ -56,7 +55,7 @@ func cloudrmMain() {
 		log.Fatalf("Cannot split '%s' into backupDirName/snapshotTimestamp", cloudrmCfgSnapshot)
 	}
 
-	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket, vlog)
+	groupedObjects, err := snapshots.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket, vlog)
 	if err != nil {
 		log.Fatalf("Could not get grouped snapshots: %v", err)
 	}

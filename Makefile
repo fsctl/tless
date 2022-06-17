@@ -16,7 +16,7 @@ RPC_PB=$(RPC_PROTO:.proto=.pb.go)
 
 all: tless
 
-tless: *.go cmd/*.go pkg/backup/*.go pkg/cryptography/*.go pkg/database/*.go pkg/fstraverse/*.go pkg/objstore/*.go pkg/objstorefs/*.go pkg/util/*.go daemon/*.go pkg/snapshots/*.go ${RPC_PB}
+tless: *.go cmd/*.go pkg/backup/*.go pkg/cryptography/*.go pkg/database/*.go pkg/fstraverse/*.go pkg/objstore/*.go pkg/util/*.go daemon/*.go pkg/snapshots/*.go ${RPC_PB}
 	go build -ldflags "-X main.Version=$(VERSION) -X main.CommitHash=$(COMMIT) -X main.BuildTimestamp=$(BUILD_TIMESTAMP)"
 
 clean:

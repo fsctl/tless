@@ -9,7 +9,7 @@ import (
 
 	"github.com/fsctl/tless/pkg/backup"
 	"github.com/fsctl/tless/pkg/objstore"
-	"github.com/fsctl/tless/pkg/objstorefs"
+	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
 )
@@ -147,7 +147,7 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 		}
 	}
 	//log.Printf("RESTORE: selectedRelPathsMap (%d) = %v\n", len(selectedRelPathsMap), selectedRelPathsMap)
-	mRelPathsObjsMap, err := objstorefs.ReconstructSnapshotFileList(ctx, objst, bucket, encKey, backupName, snapshotName, "", selectedRelPathsMap, nil, vlog)
+	mRelPathsObjsMap, err := snapshots.ReconstructSnapshotFileList(ctx, objst, bucket, encKey, backupName, snapshotName, "", selectedRelPathsMap, nil, vlog)
 	if err != nil {
 		log.Println("error: reconstructSnapshotFileList failed: ", err)
 		done()

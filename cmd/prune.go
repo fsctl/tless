@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/fsctl/tless/pkg/objstore"
-	"github.com/fsctl/tless/pkg/objstorefs"
 	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
 	"github.com/spf13/cobra"
@@ -70,9 +69,9 @@ func pruneMain(backupName string, isDryRun bool) {
 
 	fmt.Printf("Backup '%s'\n", backupName)
 
-	var groupedObjects map[string]objstorefs.BackupDir
+	var groupedObjects map[string]snapshots.BackupDir
 	if !isDryRun {
-		groupedObjects, err = objstorefs.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket, vlog)
+		groupedObjects, err = snapshots.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket, vlog)
 		if err != nil {
 			log.Fatalf("Could not get grouped snapshots: %v", err)
 		}

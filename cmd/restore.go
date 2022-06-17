@@ -9,7 +9,7 @@ import (
 
 	"github.com/fsctl/tless/pkg/backup"
 	"github.com/fsctl/tless/pkg/objstore"
-	"github.com/fsctl/tless/pkg/objstorefs"
+	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
 	"github.com/spf13/cobra"
 	"github.com/vbauerster/mpb/v7"
@@ -77,7 +77,7 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 	progressBarContainer := mpb.New()
 
 	// get all the relpaths for this snapshot
-	mRelPathsObjsMap, err := objstorefs.ReconstructSnapshotFileList(ctx, objst, cfgBucket, encKey, backupName, snapshotName, cfgPartialRestore, nil, nil, vlog)
+	mRelPathsObjsMap, err := snapshots.ReconstructSnapshotFileList(ctx, objst, cfgBucket, encKey, backupName, snapshotName, cfgPartialRestore, nil, nil, vlog)
 	if err != nil {
 		log.Fatalln("error: reconstructSnapshotFileList failed: ", err)
 	}

@@ -6,7 +6,6 @@ import (
 	"log"
 
 	"github.com/fsctl/tless/pkg/objstore"
-	"github.com/fsctl/tless/pkg/objstorefs"
 	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
 )
@@ -56,7 +55,7 @@ func PruneSnapshots() error {
 		return err
 	}
 
-	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctx, objst, encKey, bucket, vlog)
+	groupedObjects, err := snapshots.GetGroupedSnapshots(ctx, objst, encKey, bucket, vlog)
 	if err != nil {
 		log.Printf("AUTOPRUNE> error: could not get grouped snapshots: %v", err)
 		return err
