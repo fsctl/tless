@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -122,9 +123,17 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 		)
 	}
 
+	// For locality of reference reasons, we'll get the best cache hit rate if we restore in lexiconigraphical
+	// order of rel paths.
+	relPathKeys := make([]string, 0, len(mRelPathsObjsMap))
+	for relPath := range mRelPathsObjsMap {
+		relPathKeys = append(relPathKeys, relPath)
+	}
+	sort.Strings(relPathKeys)
+
 	// loop over all the relpaths and restore each
 	dirChmodQueue := make([]backup.DirChmodQueueItem, 0) // all directory mode bits are set at end
-	for relPath := range mRelPathsObjsMap {
+	for _, relPath := range relPathKeys {
 		err = backup.RestoreDirEntry(ctx, encKey, pathToRestoreInto, mRelPathsObjsMap[relPath], backupName, snapshotName, relPath, objst, cfgBucket, vlog, &dirChmodQueue, -1, -1)
 		if err != nil {
 			log.Printf("error: could not restore a dir entry '%s'", relPath)
