@@ -45,7 +45,9 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 	}
 
 	// Extract just [offset:len]
-	plaintextBuf := plaintextFirstChunkBuf[crp.ChunkExtents[0].Offset:crp.ChunkExtents[0].Len]
+	offset := crp.ChunkExtents[0].Offset
+	len := crp.ChunkExtents[0].Len
+	plaintextBuf := plaintextFirstChunkBuf[offset : offset+len]
 
 	// read metadata header from plaintext
 	metadataPtr, fileContents, err := deserializeMetadataStruct(plaintextBuf)
@@ -137,7 +139,9 @@ func RestoreDirEntry(ctx context.Context, key []byte, restoreIntoDirPath string,
 			}
 
 			// Extract just the [offset:len] bytes
-			plaintextBuf := plaintextNextChunkBuf[chunkExtent.Offset:chunkExtent.Len]
+			offset := chunkExtent.Offset
+			len := chunkExtent.Len
+			plaintextBuf := plaintextNextChunkBuf[offset : offset+len]
 
 			// check that the nonce is one larger than prev nonce
 			isNonceOneMore := isNonceOneMoreThanPrev(nonce, prevNonce)

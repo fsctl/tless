@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 
 	"github.com/fsctl/tless/pkg/cryptography"
+	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
@@ -31,8 +32,9 @@ type dirEntMetadata struct {
 	SymlinkOrigin string
 }
 
-func Backup(ctx context.Context, key []byte, rootDirName string, relPath string, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string, showNameOnSuccess bool) (chunkExtents []snapshots.ChunkExtent, err error) {
+func Backup(ctx context.Context, key []byte, rootDirName string, relPath string, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string, vlog *util.VLog, cp *chunkPacker, bjt *database.BackupJournalTask) (chunkExtents []snapshots.ChunkExtent, pendingInChunkPacker bool, err error) {
 	chunkExtents = make([]snapshots.ChunkExtent, 0)
+	pendingInChunkPacker = false
 
 	// strip any trailing slashes on destination path
 	backupDirPath = util.StripTrailingSlashes(backupDirPath)
@@ -45,14 +47,14 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 	//
 	info, err := os.Lstat(absPath)
 	if err != nil {
-		log.Printf("error: Backup(): could not stat '%s'\n", absPath)
-		return nil, err
+		log.Printf("error: Backup: could not stat '%s'\n", absPath)
+		return nil, false, err
 	}
 	// get symlink origin if it's a symlink
 	symlinkOrigin, err := getSymlinkOriginIfSymlink(absPath)
 	if err != nil {
-		log.Printf("error: Backup(): could not get symlink info on '%s'\n", absPath)
-		return nil, err
+		log.Printf("error: Backup: could not get symlink info on '%s'\n", absPath)
+		return nil, false, err
 	}
 	var isSymlink bool = false
 	if symlinkOrigin != "" {
@@ -79,7 +81,7 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 	buf, err := serializeMetadataStruct(metadata)
 	if err != nil {
 		log.Printf("error: Backup(): serializeMetadata failed: %v\n", err)
-		return nil, err
+		return nil, false, err
 	}
 
 	// If dir or small file (<ChunkSize bytes), process as single chunk.
@@ -92,39 +94,49 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 			buf, err = cryptography.AppendEntireFileToBuffer(absPath, buf)
 			if err != nil {
 				log.Printf("error: Backup: AppendEntireFileToBuffer failed: %v\n", err)
-				return nil, err
+				return nil, false, err
 			}
 		}
 
-		// Encrypt buffer
-		ciphertextBuf, err := cryptography.EncryptBuffer(key, buf)
-		if err != nil {
-			log.Printf("error: Backup: EncryptBuffer failed: %v\n", err)
-			return nil, err
-		}
+		/*
+			// Encrypt buffer
+			ciphertextBuf, err := cryptography.EncryptBuffer(key, buf)
+			if err != nil {
+				log.Printf("error: Backup: EncryptBuffer failed: %v\n", err)
+				return nil, false, err
+			}
 
-		// Generate chunk name
-		randBytes := make([]byte, 32)
-		if _, err = io.ReadFull(rand.Reader, randBytes); err != nil {
-			log.Printf("error: Backup: rand.Reader.Read failed: %v\n", err)
-			return nil, err
-		}
-		chunkName := base64.URLEncoding.EncodeToString([]byte(randBytes))
+			// Generate chunk name
+			chunkName := generateRandomChunkName()
 
-		// Save the single chunk name to return
-		chunkExtents = append(chunkExtents, snapshots.ChunkExtent{
-			ChunkName: chunkName,
-			Offset:    0,
-			Len:       int64(len(buf)),
-		})
+			// Save the single chunk name to return
+			chunkExtents = append(chunkExtents, snapshots.ChunkExtent{
+				ChunkName: chunkName,
+				Offset:    0,
+				Len:       int64(len(buf)),
+			})
 
-		// try to put the chunk to obj store
-		objName := "chunks/" + chunkName
-		err = objst.UploadObjFromBuffer(ctx, bucket, objName, ciphertextBuf, objstore.ComputeETag(ciphertextBuf))
-		if err != nil {
-			log.Printf("error: Backup(): backing up file: %v\n", err)
-			return nil, err
+			// try to put the chunk to obj store
+			objName := "chunks/" + chunkName
+			err = objst.UploadObjFromBuffer(ctx, bucket, objName, ciphertextBuf, objstore.ComputeETag(ciphertextBuf))
+			if err != nil {
+				log.Printf("error: Backup(): backing up file: %v\n", err)
+				return nil, false, err
+			}
+		*/
+		didSucceed := cp.AddDirEntry(relPath, buf, bjt)
+		if !didSucceed {
+			cp.Complete()
+			didSucceedNow := cp.AddDirEntry(relPath, buf, bjt)
+			if !didSucceedNow {
+				log.Fatalf("Failed to add dir entry to chunk packer even after clearing it (%s)", relPath)
+			}
 		}
+		pendingInChunkPacker = true
+
+		vlog.Printf("Backed up %s (pending in chunkPacker)\n", relPath)
+
+		return chunkExtents, pendingInChunkPacker, nil
 
 	} else {
 		// File is larger than ChunkSize
@@ -132,14 +144,14 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 		// Generate initial nonce randomly; subsequent chunks will increment this value
 		nonce := make([]byte, 12)
 		if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 
 		// Open the file for reading
 		f, err := os.Open(absPath)
 		if err != nil {
 			log.Printf("error: could not open '%s': %v", absPath, err)
-			return nil, err
+			return nil, false, err
 		}
 		defer f.Close()
 
@@ -154,7 +166,7 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 			}
 			if err != nil {
 				log.Printf("error: could not read from '%s': %v", absPath, err)
-				return nil, err
+				return nil, false, err
 			}
 			if bytesRead < len(readBuf) {
 				readBuf = readBuf[0:bytesRead]
@@ -169,16 +181,11 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 			ciphertextReadBuf, err := cryptography.EncryptBufferWithNonce(key, readBuf, nonce)
 			if err != nil {
 				log.Printf("error: could not encrypt buffer: %v", err)
-				return nil, err
+				return nil, false, err
 			}
 
 			// Generate chunk name
-			randBytes := make([]byte, 32)
-			if _, err = io.ReadFull(rand.Reader, randBytes); err != nil {
-				log.Printf("error: Backup: rand.Reader.Read failed: %v\n", err)
-				return nil, err
-			}
-			chunkName := base64.URLEncoding.EncodeToString([]byte(randBytes))
+			chunkName := generateRandomChunkName()
 
 			// Save the current chunk extent to return
 			chunkExtents = append(chunkExtents, snapshots.ChunkExtent{
@@ -191,21 +198,19 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 			objName := "chunks/" + chunkName
 			err = objst.UploadObjFromBuffer(ctx, bucket, objName, ciphertextReadBuf, objstore.ComputeETag(ciphertextReadBuf))
 			if err != nil {
-				log.Printf("error: Backup(): backing up file: %v\n", err)
-				return nil, err
+				log.Printf("error: Backup: failed while backing up file: %v\n", err)
+				return nil, false, err
 			}
 
 			// For next iteration:  increment nonce
 			i += 1
 			nonce = incrementNonce(nonce)
 		}
-	}
 
-	if showNameOnSuccess {
-		fmt.Printf("Backed up %s\n", relPath)
-	}
+		vlog.Printf("Backed up %s (chunkExtents: %v)\n", relPath, chunkExtents)
 
-	return chunkExtents, nil
+		return chunkExtents, pendingInChunkPacker, nil
+	}
 }
 
 func incrementNonce(nonce []byte) []byte {
@@ -214,6 +219,15 @@ func incrementNonce(nonce []byte) []byte {
 	z.Add(z, big.NewInt(1))
 	buf := make([]byte, 12)
 	return z.FillBytes(buf)
+}
+
+func generateRandomChunkName() string {
+	randBytes := make([]byte, 32)
+	if _, err := io.ReadFull(rand.Reader, randBytes); err != nil {
+		log.Fatalf("error: Backup: rand.Reader.Read failed: %v\n", err)
+	}
+	chunkName := base64.URLEncoding.EncodeToString([]byte(randBytes))
+	return chunkName
 }
 
 func getSymlinkOriginIfSymlink(pathToInspect string) (string, error) {

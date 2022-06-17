@@ -138,6 +138,39 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 	}
 	prevSnapshot := groupedObjects[filepath.Base(backupDirPath)].GetMostRecentSnapshot()
 
+	// closure used inside loop to eliminate duplicated code
+	onJournalExhausted := func() (shouldContinue bool, shouldReturn bool) {
+		shouldContinue = false
+		shouldReturn = false
+
+		vlog.Printf("Finished the journal (re-)play")
+		progressUpdateClosure()
+
+		err = snapshots.WriteIndexFile(ctx, globalsLock, db, objst, bucket, key, filepath.Base(backupDirPath), snapshotName)
+		if err != nil {
+			log.Println("error: PlayBackupJournal: onJournalExhausted: couldn't write index file: ", err)
+		}
+		vlog.Printf("Deleting all journal rows")
+		util.LockIf(globalsLock)
+		err = db.CompleteBackupJournal()
+		util.UnlockIf(globalsLock)
+		if err != nil {
+			if errors.Is(err, database.ErrJournalHasUnfinishedTasks) {
+				log.Println("error: PlayBackupJournal: onJournalExhausted: tried to complete journal while it still had unfinished tasks")
+				shouldContinue = true
+				return
+			} else {
+				log.Println("error: PlayBackupJournal: onJournalExhausted: db.CompleteBackupJournal failed: ", err)
+				shouldContinue = true
+				return
+			}
+		}
+		vlog.Printf("Done with journal")
+		shouldReturn = true
+		return
+	}
+
+	cp := newChunkPacker(ctx, objst, bucket, db, globalsLock, key, vlog)
 	for {
 		// Sleep this go routine briefly on every iteration of the for loop
 		time.Sleep(time.Millisecond * 50)
@@ -156,7 +189,23 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 		if err != nil {
 			if errors.Is(err, database.ErrNoWork) {
 				vlog.Println("PlayBackupJournal: no work found in journal... done")
-				return
+
+				// Commit the pending chunk packer if it has anything in it
+				isJournalComplete := cp.Complete()
+				if !isJournalComplete {
+					log.Println("error: PlayBackupJournal: something's wrong, journal should be complete at this point")
+				}
+
+				// Journal is exhausted; complete it and return
+				shouldContinue, shouldReturn := onJournalExhausted()
+				if shouldContinue {
+					continue
+				} else if shouldReturn {
+					return
+				} else {
+					log.Println("error: PlayBackupJournal: this point should never be reached")
+					return
+				}
 			} else {
 				log.Println("error: PlayBackupJournal: db.ClaimNextBackupJournalTask: ", err)
 				return
@@ -175,15 +224,19 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 			RelPath: relPath,
 		}
 
+		finishTaskImmediately := true
 		if bjt.ChangeType == database.Updated {
 			vlog.Printf("Backing up '%s/%s'", rootDirName, relPath)
-			chunkExtents, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, false)
+			chunkExtents, pendingInChunkPacker, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, vlog, cp, bjt)
 			if err != nil {
 				log.Printf("error: PlayBackupJournal: backup.Backup: %v", err)
 				continue
 			}
-
-			crp.ChunkExtents = chunkExtents
+			if pendingInChunkPacker {
+				finishTaskImmediately = false
+			} else {
+				crp.ChunkExtents = chunkExtents
+			}
 		} else if bjt.ChangeType == database.Unchanged {
 			if prevSnapshot != nil {
 				// Just use the same extents as prev snapshot had
@@ -191,12 +244,16 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 				crp.ChunkExtents = chunkExtents
 			} else {
 				log.Printf("warning: found an unchanged file but have no previous snapshot; treating it as updated: '%s/%s'", rootDirName, relPath)
-				chunkExtents, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, false)
+				chunkExtents, pendingInChunkPacker, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, vlog, cp, bjt)
 				if err != nil {
 					log.Printf("error: PlayBackupJournal: backup.Backup: %v", err)
 					continue
 				}
-				crp.ChunkExtents = chunkExtents
+				if pendingInChunkPacker {
+					finishTaskImmediately = false
+				} else {
+					crp.ChunkExtents = chunkExtents
+				}
 			}
 		} else if bjt.ChangeType == database.Deleted {
 			// Remove from dirents table
@@ -208,51 +265,45 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 			log.Printf("error: PlayBackupJournal: unrecognized journal type '%v' on '%s'", bjt.ChangeType, relPath)
 		}
 
-		util.LockIf(globalsLock)
-		err = db.UpdateLastBackupTime(int(bjt.DirEntId))
-		util.UnlockIf(globalsLock)
-		if err != nil {
-			log.Printf("error: PlayBackupJournal: db.UpdateLastBackupTime(): %v", err)
-		}
-
-		var isJournalComplete bool
-		util.LockIf(globalsLock)
-		if crp == nil {
-			isJournalComplete, err = db.CompleteBackupJournalTask(bjt, nil)
-		} else {
-			isJournalComplete, err = db.CompleteBackupJournalTask(bjt, crp.ToJson())
-		}
-		util.UnlockIf(globalsLock)
-		if err != nil {
-			log.Printf("error: PlayBackupJournal: db.CompleteBackupJournalTask: %v", err)
-		}
-		if isJournalComplete {
-			vlog.Printf("Finished the journal (re)play")
-			progressUpdateClosure()
-
-			err = snapshots.WriteIndexFile(ctx, globalsLock, db, objst, bucket, key, filepath.Base(backupDirPath), snapshotName)
-			if err != nil {
-				log.Println("error: PlayBackupJournal: couldn't write index file: ", err)
-			}
-			vlog.Printf("Deleting all journal rows")
-			util.LockIf(globalsLock)
-			err = db.CompleteBackupJournal()
-			util.UnlockIf(globalsLock)
-			if err != nil {
-				if errors.Is(err, database.ErrJournalHasUnfinishedTasks) {
-					log.Println("error: PlayBackupJournal: tried to complete journal while it still had unfinished tasks")
+		if finishTaskImmediately {
+			updateLastBackupTime(db, globalsLock, bjt.DirEntId)
+			isJournalComplete := completeTask(db, globalsLock, bjt, crp)
+			if isJournalComplete {
+				shouldContinue, shouldReturn := onJournalExhausted()
+				if shouldContinue {
 					continue
-				} else {
-					log.Println("error: PlayBackupJournal: db.CompleteBackupJournal() failed: ", err)
-					continue
+				} else if shouldReturn {
+					return
 				}
+			} else {
+				progressUpdateClosure()
 			}
-			vlog.Printf("Done with journal")
-			return
-		} else {
-			progressUpdateClosure()
 		}
 	}
+}
+
+func updateLastBackupTime(db *database.DB, dbLock *sync.Mutex, dirEntId int64) {
+	util.LockIf(dbLock)
+	err := db.UpdateLastBackupTime(int(dirEntId))
+	util.UnlockIf(dbLock)
+	if err != nil {
+		log.Printf("error: updateLastBackupTime: db.UpdateLastBackupTime: %v", err)
+	}
+}
+
+func completeTask(db *database.DB, dbLock *sync.Mutex, bjt *database.BackupJournalTask, crp *snapshots.CloudRelPath) (isJournalComplete bool) {
+	var err error
+	util.LockIf(dbLock)
+	if crp == nil {
+		isJournalComplete, err = db.CompleteBackupJournalTask(bjt, nil)
+	} else {
+		isJournalComplete, err = db.CompleteBackupJournalTask(bjt, crp.ToJson())
+	}
+	util.UnlockIf(dbLock)
+	if err != nil {
+		log.Printf("error: completeTask: db.CompleteBackupJournalTask: %v", err)
+	}
+	return
 }
 
 func purgeFromDb(db *database.DB, dbLock *sync.Mutex, backupDirName string, deletedPath string) error {
