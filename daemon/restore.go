@@ -5,11 +5,13 @@ import (
 	"io"
 	"log"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/fsctl/tless/pkg/backup"
+	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/objstore"
-	"github.com/fsctl/tless/pkg/objstorefs"
+	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
 )
@@ -128,31 +130,44 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 	// Split the name to get both parts
 	parts := strings.Split(snapshotRawName, "/")
 	if len(parts) != 2 {
-		log.Printf("Malformed restore snapshot: '%s'", snapshotRawName)
+		log.Printf("error: malformed restore snapshot: '%s'", snapshotRawName)
 		done()
 		return
 	}
 	backupName := parts[0]
 	snapshotName := parts[1]
 
-	// get all the relpaths for this snapshot
-	var selectedRelPathsMap map[string]int
-	//log.Printf("RESTORE: selectedRelPaths = %v\n", selectedRelPaths)
-	if len(selectedRelPaths) == 0 {
-		selectedRelPathsMap = nil
-	} else {
-		selectedRelPathsMap = make(map[string]int, len(selectedRelPaths))
-		for _, rp := range selectedRelPaths {
-			selectedRelPathsMap[rp] = 1
-		}
-	}
-	//log.Printf("RESTORE: selectedRelPathsMap (%d) = %v\n", len(selectedRelPathsMap), selectedRelPathsMap)
-	mRelPathsObjsMap, err := objstorefs.ReconstructSnapshotFileList(ctx, objst, bucket, encKey, backupName, snapshotName, "", selectedRelPathsMap, nil, vlog)
+	// Encrypt the backup name and snapshot name so we can form the index file name
+	encBackupName, err := cryptography.EncryptFilename(encKey, backupName)
 	if err != nil {
-		log.Println("error: reconstructSnapshotFileList failed: ", err)
+		log.Printf("error: cannot encrypt backup name '%s': %v", backupName, err)
 		done()
 		return
 	}
+	encSnapshotName, err := cryptography.EncryptFilename(encKey, snapshotName)
+	if err != nil {
+		log.Printf("error: cannot encrypt snapshot name '%s': %v", backupName, err)
+		done()
+		return
+	}
+
+	// Get the snapshot index
+	encSsIndexObjName := encBackupName + "/@" + encSnapshotName
+	ssIndexJson, err := snapshots.GetSnapshotIndexFile(ctx, objst, bucket, encKey, encSsIndexObjName)
+	if err != nil {
+		log.Printf("error: cannot get snapshot index file for '%s/%s': %v", backupName, snapshotName, err)
+		done()
+		return
+	}
+	snapshotObj, err := snapshots.UnmarshalSnapshotObj(ssIndexJson)
+	if err != nil {
+		log.Printf("error: cannot get snapshot object for '%s/%s': %v", backupName, snapshotName, err)
+		done()
+		return
+	}
+
+	// Filter the rel paths we want to restore
+	mRelPathsObjsMap := backup.FilterRelPaths(snapshotObj, selectedRelPaths)
 	totalItems := len(mRelPathsObjsMap)
 	doneItems := 0
 	vlog.Printf("RESTORE: have %d items to restore", totalItems)
@@ -166,9 +181,20 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 		log.Printf("error: cannot get user'%s's UID/GID: %v", username, err)
 	}
 
+	// Initialize a chunk cache
+	cc := backup.NewChunkCache(objst, encKey, vlog)
+
+	// For locality of reference reasons, we'll get the best cache hit rate if we restore in lexiconigraphical
+	// order of rel paths.
+	relPathKeys := make([]string, 0, len(mRelPathsObjsMap))
+	for relPath := range mRelPathsObjsMap {
+		relPathKeys = append(relPathKeys, relPath)
+	}
+	sort.Strings(relPathKeys)
+
 	// loop over all the relpaths and restore each
 	dirChmodQueue := make([]backup.DirChmodQueueItem, 0) // all directory mode bits are set at end
-	for relPath := range mRelPathsObjsMap {
+	for _, relPath := range relPathKeys {
 		// Check if cancel signal has been received
 		util.LockIf(&gGlobalsLock)
 		isCancelRequested := gCancelRequested
@@ -184,22 +210,9 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 
 		vlog.Printf("RESTORING: '%s' from %s/%s", relPath, backupName, snapshotName)
 
-		if len(mRelPathsObjsMap[relPath]) > 1 {
-			relPathChunks := mRelPathsObjsMap[relPath]
-
-			err = backup.RestoreDirEntryFromChunks(ctx, encKey, restorePath, relPathChunks, backupName, snapshotName, relPath, objst, bucket, false, uid, gid)
-			if err != nil {
-				log.Printf("error: could not restore a dir entry '%s'", relPath)
-			}
-		} else if len(mRelPathsObjsMap[relPath]) == 1 {
-			objName := mRelPathsObjsMap[relPath][0]
-
-			err = backup.RestoreDirEntry(ctx, encKey, restorePath, objName, backupName, snapshotName, relPath, objst, bucket, false, &dirChmodQueue, uid, gid)
-			if err != nil {
-				log.Printf("error: could not restore a dir entry '%s'", relPath)
-			}
-		} else {
-			log.Fatalf("error: invalid number of chunks planned for %s", relPath)
+		err = backup.RestoreDirEntry(ctx, encKey, restorePath, mRelPathsObjsMap[relPath], backupName, snapshotName, relPath, objst, bucket, vlog, &dirChmodQueue, uid, gid, cc)
+		if err != nil {
+			log.Printf("error: could not restore a dir entry '%s'", relPath)
 		}
 
 		// Update the percentage done
@@ -219,6 +232,9 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 			log.Printf("error: could not chmod dir '%s' to final %#o\n", dirChmodQueueItem.AbsPath, dirChmodQueueItem.FinalMode)
 		}
 	}
+
+	// Print the cache hit rate to vlog for diagnostics
+	cc.PrintCacheStatistics()
 
 	done()
 }

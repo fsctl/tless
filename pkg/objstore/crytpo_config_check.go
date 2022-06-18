@@ -13,22 +13,22 @@ import (
 )
 
 var (
-	ErrMultipleSalts       = errors.New("there is more than one SALT-xxxx file on server")
+	ErrMultipleSalts       = errors.New("there is more than one salt-xxxx file on server")
 	ErrCantDecryptSaltFile = errors.New("the salt file could not be decrypted with your master password")
 	ErrNoSaltOnServer      = errors.New("there is no salt file on server")
 	ErrMismatchedSalts     = errors.New("the local salt does not match the salt saved on cloud server")
 )
 
-// Here is the basic logic of the server SALT-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx file:
+// Here is the basic logic of the server salt-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx file:
 //
-// - The SALT-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx file should have encrypted AES-GCM contents equal
+// - The salt-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx file should have encrypted AES-GCM contents equal
 // to some random bytes. Their value is not important.
-// - On startup, try to retrieve all SALT-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx files
+// - On startup, try to retrieve all salt-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx files
 //     - If there's more than one, warn user of multiple salts.
 //     - If there's exactly one, make sure the salt string matches the config
 //         - If not, warn the user that there's a mismatch between the config and the server.
 //		     Only a --force flag can allow the requested operation to proceed.
-//         - If yes, download that one, matching SALT-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx file and
+//         - If yes, download that one, matching salt-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx file and
 //         try to decrypt it with master password.
 //             - If it does not decrypt+authenticate, warn the user that password has changed
 //			     in config file.  Only a --force flag can allow the requested operation to proceed.
@@ -40,19 +40,19 @@ func (os *ObjStore) CheckCryptoConfigMatchesServer(ctx context.Context, key []by
 	salt, err := os.tryReadSalt(ctx, key, bucket, isVerbose, nil)
 	if err != nil {
 		if errors.Is(err, ErrMultipleSalts) {
-			fmt.Println(`warning: there are multiple SALT-xxxx files in the bucket. You need to delete
+			fmt.Println(`warning: there are multiple salt-xxxx files in the bucket. You need to delete
 the wrong one(s) manually. Use --force to override this check and use the salt
 in your config.toml.`)
 			return false
 		} else if errors.Is(err, ErrCantDecryptSaltFile) {
-			fmt.Println(`warning: cannot decrypt the SALT-xxxx files in the bucket. Did you change your
+			fmt.Println(`warning: cannot decrypt the salt-xxxx files in the bucket. Did you change your
 master password in config.toml? Note: use --force to override this check and 
 use the master password in your config.toml, but doing so may corrupt the 
 backup.`)
 			return false
 		} else if errors.Is(err, ErrNoSaltOnServer) {
 			if isVerbose {
-				fmt.Println("warning: no SALT-xxxx file on server; saving the salt from your config.toml")
+				fmt.Println("warning: no salt-xxxx file on server; saving the salt from your config.toml")
 			}
 			if err = os.tryWriteSalt(ctx, key, bucket, expectedSalt); err != nil {
 				log.Printf("warning: failed to write salt to server for backup: %v\n", err)
@@ -75,15 +75,15 @@ func (os *ObjStore) CheckCryptoConfigMatchesServerDaemon(ctx context.Context, ke
 	salt, err := os.tryReadSalt(ctx, key, bucket, false, vlog)
 	if err != nil {
 		if errors.Is(err, ErrMultipleSalts) {
-			log.Println(`warning: there are multiple SALT-xxxx files in the bucket. You need to delete
+			log.Println(`warning: there are multiple salt-xxxx files in the bucket. You need to delete
 the wrong one(s) manually.`)
 			return false, err
 		} else if errors.Is(err, ErrCantDecryptSaltFile) {
-			log.Println(`warning: cannot decrypt the SALT-xxxx files in the bucket. Did you change your
+			log.Println(`warning: cannot decrypt the salt-xxxx files in the bucket. Did you change your
 master password in config.toml?`)
 			return false, err
 		} else if errors.Is(err, ErrNoSaltOnServer) {
-			log.Println("warning: no SALT-xxxx file on server; saving the salt from your config.toml")
+			log.Println("warning: no salt-xxxx file on server; saving the salt from your config.toml")
 			if err = os.tryWriteSalt(ctx, key, bucket, expectedSalt); err != nil {
 				log.Printf("warning: failed to write salt to server for backup: %v\n", err)
 			}
@@ -101,13 +101,13 @@ master password in config.toml?`)
 }
 
 func (os *ObjStore) tryReadSalt(ctx context.Context, key []byte, bucket string, isVerbose bool, vlog *util.VLog) (string, error) {
-	// Try to fetch all objects starting with "SALT-"
-	m, err := os.GetObjList(ctx, bucket, "SALT-", false, vlog)
+	// Try to fetch all objects starting with "salt-"
+	m, err := os.GetObjList(ctx, bucket, "salt-", false, vlog)
 	if err != nil {
 		return "", err
 	}
 
-	// Check if there's >1 SALT-xxxx file and warn user if so
+	// Check if there's >1 salt-xxxx file and warn user if so
 	var saltObjName string
 	if len(m) > 1 {
 		for k := range m {
@@ -118,10 +118,10 @@ func (os *ObjStore) tryReadSalt(ctx context.Context, key []byte, bucket string, 
 				log.Println(msg)
 			}
 		}
-		log.Printf("warning: there are multiple SALT-xxxx files on the server; you need to manually delete the wrong one(s)")
+		log.Printf("warning: there are multiple salt-xxxx files on the server; you need to manually delete the wrong one(s)")
 		return "", ErrMultipleSalts
 	} else if len(m) == 0 {
-		// There is no SALT-xxxx file.
+		// There is no salt-xxxx file.
 		return "", ErrNoSaltOnServer
 	} else {
 		// There is only one salt; get its value
@@ -148,7 +148,7 @@ func (os *ObjStore) tryReadSalt(ctx context.Context, key []byte, bucket string, 
 	}
 
 	// Return the salt and no error
-	salt := strings.TrimPrefix(saltObjName, "SALT-")
+	salt := strings.TrimPrefix(saltObjName, "salt-")
 	return salt, nil
 }
 
@@ -168,6 +168,6 @@ func (os *ObjStore) tryWriteSalt(ctx context.Context, key []byte, bucket string,
 		return err
 	}
 
-	err = os.UploadObjFromBuffer(ctx, bucket, "SALT-"+salt, ciphertextBuf, ComputeETag(ciphertextBuf))
+	err = os.UploadObjFromBuffer(ctx, bucket, "salt-"+salt, ciphertextBuf, ComputeETag(ciphertextBuf))
 	return err
 }

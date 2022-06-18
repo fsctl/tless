@@ -1,9 +1,10 @@
-package objstorefs
+package snapshots
 
 import (
 	"context"
 	"encoding/json"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -12,43 +13,15 @@ import (
 	"github.com/fsctl/tless/pkg/util"
 )
 
+type ChunkExtent struct {
+	ChunkName string
+	Offset    int64
+	Len       int64
+}
+
 type CloudRelPath struct {
-	// Encrypted relative path, stripped of any .NNN suffix. (Still contains '/'.)
-	// Ex:    -hK9_DlG_AFMIE1PKHZaBUebiFvnvV/MjTo0Vx771kwwMbjivWed65LkTSq8A
-	// Ex 2:  0lQjIGkeLOlUMnekodf0alyD1Xq9cXrGD0/9cI0DMhON8b6i0cVsDt9kVePqrvFw4d6d1
-	// Ex 3:  U7j1GWpdrvxmOOGpStOZCJfaRuqkF6Zv5xaTjnTe/E9QzmBJ-_UF54dmvOyybTgtzA2xuxNDfsaNc1xT-
-	EncryptedRelPathStripped string
-
-	// The plaintext rel path
-	// Ex:    file4
-	// Ex 2:  subdir2/subdir2a
-	// Ex 3:  will-delete-dir/file
-	DecryptedRelPath string
-
-	// Map of all chunk names onto their (encrypted & compressed) size
-	// Ex:    map[-hK9_DlG_AFMIE1PKHZaBUebiFvnvV/MjTo0Vx771kwwMbjivWed65LkTSq8A.000:134217879 -hK9_DlG_AFMIE1PKHZaBUebiFvnvV/MjTo0Vx771kwwMbjivWed65LkTSq8A.001:2097180]
-	// Ex 2:  map[0lQjIGkeLOlUMnekodf0alyD1Xq9cXrGD0/9cI0DMhON8b6i0cVsDt9kVePqrvFw4d6d1:168]
-	// Ex 3:  nil
-	EncryptedChunkNames map[string]int64
-
-	// Bool indicating whether the rel path is deleted in parent snapshot
-	// Ex:    false
-	// Ex 2:  false
-	// Ex 3:  true
-	IsDeleted bool
-}
-
-type Snapshot struct {
-	EncryptedName string
-	DecryptedName string
-	Datetime      time.Time
-	RelPaths      map[string]CloudRelPath
-}
-
-type BackupDir struct {
-	EncryptedName string
-	DecryptedName string
-	Snapshots     map[string]Snapshot
+	RelPath      string
+	ChunkExtents []ChunkExtent
 }
 
 func (crp *CloudRelPath) ToJson() []byte {
@@ -70,14 +43,43 @@ func NewCloudRelPathFromJson(jsonBuf []byte) *CloudRelPath {
 	return &obj
 }
 
+type Snapshot struct {
+	EncryptedName string
+	DecryptedName string
+	Datetime      time.Time
+	RelPaths      map[string]CloudRelPath
+}
+
+type BackupDir struct {
+	EncryptedName string
+	DecryptedName string
+	Snapshots     map[string]Snapshot
+}
+
+func (bd BackupDir) GetMostRecentSnapshot() *Snapshot {
+	snapshotKeys := make([]string, 0)
+	for ssName := range bd.Snapshots {
+		snapshotKeys = append(snapshotKeys, ssName)
+	}
+	sort.Strings(snapshotKeys)
+
+	if len(snapshotKeys) == 0 {
+		return nil
+	} else {
+		mostRecentSnapshotName := snapshotKeys[len(snapshotKeys)-1]
+		mostRecentSnapshot := bd.Snapshots[mostRecentSnapshotName]
+		return &mostRecentSnapshot
+	}
+}
+
 func GetGroupedSnapshots(ctx context.Context, objst *objstore.ObjStore, key []byte, bucket string, vlog *util.VLog) (map[string]BackupDir, error) {
 	// setup return map
 	ret := make(map[string]BackupDir)
 
 	// get all backup names from cloud (top level paths)
-	topLevelObjs, err := objst.GetObjListTopLevel(ctx, bucket, []string{"SALT-", "VERSION"})
+	topLevelObjs, err := objst.GetObjListTopLevel(ctx, bucket, []string{"salt-", "version", "chunks", "keys"})
 	if err != nil {
-		log.Println("error: GetGroupedSnapshots2: objst.GetObjListTopLevel: ", err)
+		log.Println("error: GetGroupedSnapshots: objst.GetObjListTopLevel: ", err)
 		return nil, err
 	}
 
@@ -85,7 +87,7 @@ func GetGroupedSnapshots(ctx context.Context, objst *objstore.ObjStore, key []by
 		// get decrypted backup name
 		backupName, err := cryptography.DecryptFilename(key, encBackupName)
 		if err != nil {
-			log.Printf("error: GetGroupedSnapshots2: could not decrypt backup dir name (%s): %v\n", encBackupName, err)
+			log.Printf("error: GetGroupedSnapshots: could not decrypt backup dir name (%s): %v\n", encBackupName, err)
 			return nil, err
 		}
 
@@ -99,20 +101,18 @@ func GetGroupedSnapshots(ctx context.Context, objst *objstore.ObjStore, key []by
 		// get all snapshot index files for this backup
 		indexFiles, err := getAllSnapshotIndexFiles(ctx, objst, key, encBackupName, bucket, vlog)
 		if err != nil {
-			log.Printf("error: GetGroupedSnapshots2: could not get snapshot index files for '%s': %v\n", backupName, err)
+			log.Printf("error: GetGroupedSnapshots: could not get snapshot index files for '%s': %v\n", backupName, err)
 			return nil, err
 		}
 
 		for ssName, indexFileJsonBuf := range indexFiles {
 			// reconstruct object hierarchy for this snapshot, placing into BackupDir objects in map
-			ssObj := Snapshot{}
-			err := json.Unmarshal(indexFileJsonBuf, &ssObj)
+			ssObj, err := UnmarshalSnapshotObj(indexFileJsonBuf)
 			if err != nil {
-				log.Println("error: GetGroupedSnapshots2 unmarshal failed: ", err)
+				log.Printf("error: GetGroupedSnapshots: could not get snapshot obj for '%s': %v\n", ssName, err)
 				return nil, err
 			}
-
-			ret[backupName].Snapshots[ssName] = ssObj
+			ret[backupName].Snapshots[ssName] = *ssObj
 		}
 	}
 
@@ -120,8 +120,17 @@ func GetGroupedSnapshots(ctx context.Context, objst *objstore.ObjStore, key []by
 	return ret, nil
 }
 
+func UnmarshalSnapshotObj(indexFileJsonBuf []byte) (*Snapshot, error) {
+	ssObj := Snapshot{}
+	err := json.Unmarshal(indexFileJsonBuf, &ssObj)
+	if err != nil {
+		log.Println("error: GetSnapshotObj unmarshal failed: ", err)
+		return nil, err
+	}
+	return &ssObj, nil
+}
+
 // Returns a map of [decrypted snapshot index obj names] onto [slices of (encrypted, compressed) bytes] for that index file
-// TODO:  cache decrypted/uncompressed files, and then look in cache first
 func getAllSnapshotIndexFiles(ctx context.Context, objst *objstore.ObjStore, key []byte, encBackupName string, bucket string, vlog *util.VLog) (map[string][]byte, error) {
 	ret := make(map[string][]byte)
 
@@ -142,17 +151,9 @@ func getAllSnapshotIndexFiles(ctx context.Context, objst *objstore.ObjStore, key
 			return nil, err
 		}
 
-		// download actual snapshot file
-		buf, err := objst.DownloadObjToBuffer(ctx, bucket, encObjName)
+		plaintextIndexFileBuf, err := GetSnapshotIndexFile(ctx, objst, bucket, key, encObjName)
 		if err != nil {
-			log.Printf("error: getAllSnapshotIndices: could not download snapshot index file '%s': %v\n", encObjName, err)
-			return nil, err
-		}
-
-		// decrypt and uncompress snapshot file
-		plaintextIndexFileBuf, err := decryptAndUncompressIndexFile(key, buf)
-		if err != nil {
-			log.Printf("error: getAllSnapshotIndices: could not decrypt+uncompress snapshot index file '%s': %v\n", ssName, err)
+			log.Printf("error: getAllSnapshotIndexFiles: could not retrieve snapshot index file (%s): %v\n", ssName, err)
 			return nil, err
 		}
 
@@ -160,6 +161,24 @@ func getAllSnapshotIndexFiles(ctx context.Context, objst *objstore.ObjStore, key
 	}
 
 	return ret, nil
+}
+
+func GetSnapshotIndexFile(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, encObjName string) ([]byte, error) {
+	// download actual snapshot file
+	buf, err := objst.DownloadObjToBuffer(ctx, bucket, encObjName)
+	if err != nil {
+		log.Printf("error: getAllSnapshotIndices: could not download snapshot index file '%s': %v\n", encObjName, err)
+		return nil, err
+	}
+
+	// decrypt and uncompress snapshot file
+	plaintextIndexFileBuf, err := decryptAndUncompressIndexFile(key, buf)
+	if err != nil {
+		log.Printf("error: getAllSnapshotIndices: could not decrypt+uncompress snapshot index file '%s': %v\n", encObjName, err)
+		return nil, err
+	}
+
+	return plaintextIndexFileBuf, nil
 }
 
 func decryptAndUncompressIndexFile(key []byte, encBuf []byte) ([]byte, error) {

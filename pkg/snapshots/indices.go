@@ -11,7 +11,6 @@ import (
 	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/objstore"
-	"github.com/fsctl/tless/pkg/objstorefs"
 	"github.com/fsctl/tless/pkg/util"
 )
 
@@ -36,11 +35,11 @@ func WriteIndexFile(ctx context.Context, dbLock *sync.Mutex, db *database.DB, ob
 	}
 
 	// Construct the objstorefs.Snapshot object
-	snapshotObj := objstorefs.Snapshot{
+	snapshotObj := Snapshot{
 		EncryptedName: encryptedSnapshotName,
 		DecryptedName: snapshotName,
 		Datetime:      snapShotDateTime,
-		RelPaths:      make(map[string]objstorefs.CloudRelPath),
+		RelPaths:      make(map[string]CloudRelPath),
 	}
 
 	// Add to snapshot:  every journal row's index_entry
@@ -53,11 +52,13 @@ func WriteIndexFile(ctx context.Context, dbLock *sync.Mutex, db *database.DB, ob
 	}
 
 	for _, indexEntry := range indexEntries {
-		// reconstruct the crp object from json
-		crp := objstorefs.NewCloudRelPathFromJson(indexEntry)
+		if len(indexEntry) > 0 {
+			// reconstruct the crp object from json
+			crp := NewCloudRelPathFromJson(indexEntry)
 
-		// add object to snapshot obj's map
-		snapshotObj.RelPaths[crp.DecryptedRelPath] = *crp
+			// add object to snapshot obj's map
+			snapshotObj.RelPaths[crp.RelPath] = *crp
+		}
 	}
 
 	if err = SerializeAndWriteSnapshotObj(&snapshotObj, key, encryptedBackupDirName, encryptedSnapshotName, objst, ctx, bucket); err != nil {
@@ -68,7 +69,7 @@ func WriteIndexFile(ctx context.Context, dbLock *sync.Mutex, db *database.DB, ob
 	return nil
 }
 
-func SerializeAndWriteSnapshotObj(snapshotObj *objstorefs.Snapshot, key []byte, encryptedBackupDirName string, encryptedSnapshotName string, objst *objstore.ObjStore, ctx context.Context, bucket string) error {
+func SerializeAndWriteSnapshotObj(snapshotObj *Snapshot, key []byte, encryptedBackupDirName string, encryptedSnapshotName string, objst *objstore.ObjStore, ctx context.Context, bucket string) error {
 	// Serialize fully linked snapshot obj to json bytes
 	buf, err := json.Marshal(snapshotObj)
 	if err != nil {

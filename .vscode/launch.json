@@ -14,7 +14,10 @@
             // "args": ["backup", "-d", "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Kernel.framework"],
             // "args": ["backup", "-d", "/tmp/test-backup-src"],
             // "args": ["cloudls"],
-            "args": ["cloudrm", "-S", "backedup2/2022-05-29_13:37:47"],
+            // "args": ["cloudrm", "-S", "backedup2/2022-05-29_13:37:47"],
+            "args": ["restore", "backedup4/2022-06-17_11.26.29", "/tmp/restore-here"],
+            // "args": ["cloudrm", "--snapshot=backedup4/2022-06-17_09.02.27"],
+            // "args": ["backup", "-v"],
         },
     ]
 }

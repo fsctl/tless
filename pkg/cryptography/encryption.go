@@ -196,6 +196,9 @@ func DecryptBuffer(key []byte, ciphertext []byte) ([]byte, error) {
 }
 
 func EncryptBufferWithNonce(key []byte, plaintext []byte, nonce []byte) ([]byte, error) {
+	// gzip the plaintext
+	plaintext = []byte(gz(string(plaintext)))
+
 	// do AES-GCM encryption of plaintext buffer using nonce
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -233,6 +236,9 @@ func DecryptBufferReturningNonce(key []byte, ciphertext []byte) (plaintext []byt
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// gunzip the plaintext
+	plaintext = []byte(gunzip(string(plaintext)))
 
 	return plaintext, nonce, nil
 }

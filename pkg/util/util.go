@@ -149,7 +149,7 @@ master_password = "`
 
 # This salt has been randomly generated for you; there's no need to change it.
 # The salt does not need to be kept secret. In fact, a backup copy is stored 
-# on the object store server as 'SALT-[salt_string]' in the bucket root.
+# on the object store server as 'salt-[salt_string]' in the bucket root.
 salt = "`
 
 	if configValues != nil && configValues.Salt != "" {
@@ -298,5 +298,22 @@ func LockIf(lock *sync.Mutex) {
 func UnlockIf(lock *sync.Mutex) {
 	if lock != nil {
 		lock.Unlock()
+	}
+}
+
+// Returns a formatted string representing the number of bytes in a sensible unit,
+// such as "36.0 mb" for input of 37748736.  Ranges from "b" to "gb".
+func FormatBytesAsString(bcount int) string {
+	if bcount < 1024 {
+		return fmt.Sprintf("%d bytes", bcount)
+	} else if bcount < 1024*1024 {
+		return fmt.Sprintf("%01f kb", float64(bcount)/1024)
+	} else if bcount < 1024*1024*1024 {
+		return fmt.Sprintf("%01f mb", float64(bcount)/float64(1024*1024))
+	} else if bcount < 1024*1024*1024*1024 {
+		return fmt.Sprintf("%01f gb", float64(bcount)/float64(1024*1024*1024))
+	} else {
+		// default to just printing number of bytes
+		return fmt.Sprintf("%d bytes", bcount)
 	}
 }

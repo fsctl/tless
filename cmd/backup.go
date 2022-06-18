@@ -175,10 +175,16 @@ func handleReplay(ctx context.Context, objst *objstore.ObjStore, db *database.DB
 			}
 			snapshotName := time.Unix(snapshotUnixTime, 0).UTC().Format("2006-01-02_15.04.05")
 
-			// delete the objects already in cloud
-			err = snapshots.DeleteOrphanedSnapshot(ctx, objst, cfgBucket, encKey, filepath.Base(backupDirPath), snapshotName, vlog)
+			// Delete the snapshot if it exists
+			err = snapshots.DeleteSnapshot(ctx, encKey, filepath.Base(backupDirPath), snapshotName, objst, cfgBucket, vlog)
 			if err != nil {
-				log.Fatalf("error: handleReplay: could not delete partially created snapshot: %v", err)
+				// This is ok and just means snapshot index file wasn't writetn to cloud yet
+				vlog.Printf("warning: handleReplay: could not delete partially created snapshot index (probably does not exist yet): %v", err)
+
+				// Garbage collect any orphaned chunks that were written while creating unused snapshot index file
+				if err = snapshots.GCChunks(ctx, objst, cfgBucket, encKey, vlog); err != nil {
+					log.Println("error: handleReplay: could not garbage collect chunks: ", err)
+				}
 			}
 
 			// reset the last backup times in db

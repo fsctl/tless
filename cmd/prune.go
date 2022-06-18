@@ -3,11 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/fsctl/tless/pkg/objstore"
-	"github.com/fsctl/tless/pkg/objstorefs"
 	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
 	"github.com/spf13/cobra"
@@ -70,14 +68,6 @@ func pruneMain(backupName string, isDryRun bool) {
 
 	fmt.Printf("Backup '%s'\n", backupName)
 
-	var groupedObjects map[string]objstorefs.BackupDir
-	if !isDryRun {
-		groupedObjects, err = objstorefs.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket, vlog)
-		if err != nil {
-			log.Fatalf("Could not get grouped snapshots: %v", err)
-		}
-	}
-
 	// Mark what is to be kept
 	keeps := snapshots.GetPruneKeepsList(mSnapshots[backupName])
 
@@ -106,7 +96,9 @@ func pruneMain(backupName string, isDryRun bool) {
 
 			if !keepCurr {
 				fmt.Printf("  Deleting snapshot '%s'\n", ss.RawSnapshotName)
-				snapshots.DeleteSnapshot(ctx, encKey, groupedObjects, backupName, ss.Name, objst, cfgBucket)
+				if err = snapshots.DeleteSnapshot(ctx, encKey, backupName, ss.Name, objst, cfgBucket, vlog); err != nil {
+					fmt.Printf("error: could not delete '%s': %v\n", ss.RawSnapshotName, err)
+				}
 			} else {
 				fmt.Printf("  Keeping snapshot '%s'\n", ss.RawSnapshotName)
 			}

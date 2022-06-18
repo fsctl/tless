@@ -7,7 +7,6 @@ import (
 	"sort"
 
 	"github.com/fsctl/tless/pkg/objstore"
-	"github.com/fsctl/tless/pkg/objstorefs"
 	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
@@ -52,7 +51,7 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
-	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctxBkg, objst, key, bucket, vlog)
+	groupedObjects, err := snapshots.GetGroupedSnapshots(ctxBkg, objst, key, bucket, vlog)
 	if err != nil {
 		log.Printf("Could not get grouped snapshots: %v", err)
 		resp := pb.ReadAllSnapshotsResponse{
@@ -129,35 +128,25 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 			ret.PartialSnapshot.SnapshotTimestamp = util.GetUnixTimeFromSnapshotName(snapshotName)
 
 			relPathKeys := make([]string, 0, len(groupedObjects[groupName].Snapshots[snapshotName].RelPaths))
-			mFilelist, err := objstorefs.ReconstructSnapshotFileList(ctxBkg, objst, bucket, key, groupName, snapshotName, "", nil, groupedObjects, vlog)
-			if err != nil {
-				log.Println("error: ReadAllSnapshots: objstorefs.ReconstructSnapshotFileList: ", err)
-			}
+			mFilelist := groupedObjects[groupName].Snapshots[snapshotName].RelPaths
 			for relPath := range mFilelist {
 				relPathKeys = append(relPathKeys, relPath)
 			}
 			sort.Strings(relPathKeys)
 
 			for _, relPath := range relPathKeys {
-				val := groupedObjects[groupName].Snapshots[snapshotName].RelPaths[relPath]
-				//deletedMsg := ""
-				//if val.IsDeleted {
-				//	deletedMsg = " (deleted)"
-				//}
-				//vlog.Printf("Processing objects>>    %s%s\n", relPath, deletedMsg)
+				vlog.Printf("Processing objects>>    %s\n", relPath)
 
-				if !val.IsDeleted {
-					ret.PartialSnapshot.RawRelPaths = append(ret.PartialSnapshot.RawRelPaths, relPath)
-					relPathsSinceLastSend += 1
+				ret.PartialSnapshot.RawRelPaths = append(ret.PartialSnapshot.RawRelPaths, relPath)
+				relPathsSinceLastSend += 1
 
-					// time for partial send?
-					if relPathsSinceLastSend >= SendPartialResponseEveryNRelPaths {
-						if err := srv.Send(&ret); err != nil {
-							log.Println("error: server.Send failed: ", err)
-						}
-						ret.PartialSnapshot.RawRelPaths = make([]string, 0)
-						relPathsSinceLastSend = 0
+				// time for partial send?
+				if relPathsSinceLastSend >= SendPartialResponseEveryNRelPaths {
+					if err := srv.Send(&ret); err != nil {
+						log.Println("error: server.Send failed: ", err)
 					}
+					ret.PartialSnapshot.RawRelPaths = make([]string, 0)
+					relPathsSinceLastSend = 0
 				}
 			}
 
@@ -235,7 +224,7 @@ func (s *server) DeleteSnapshot(ctx context.Context, in *pb.DeleteSnapshotReques
 		}, nil
 	}
 
-	groupedObjects, err := objstorefs.GetGroupedSnapshots(ctx, objst, key, bucket, vlog)
+	groupedObjects, err := snapshots.GetGroupedSnapshots(ctx, objst, key, bucket, vlog)
 	if err != nil {
 		log.Printf("Could not get grouped snapshots: %v", err)
 		return &pb.DeleteSnapshotResponse{
@@ -259,7 +248,7 @@ func (s *server) DeleteSnapshot(ctx context.Context, in *pb.DeleteSnapshotReques
 		}
 	}
 
-	err = snapshots.DeleteSnapshot(ctx, key, groupedObjects, backupDirName, snapshotTimestamp, objst, bucket)
+	err = snapshots.DeleteSnapshot(ctx, key, backupDirName, snapshotTimestamp, objst, bucket, vlog)
 	if err != nil {
 		return &pb.DeleteSnapshotResponse{
 			DidSucceed: false,

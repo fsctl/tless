@@ -206,28 +206,28 @@ func checkAndHandleCancelation(ctx context.Context, key []byte, objst *objstore.
 }
 
 func updateBackupProgress(finished int64, total int64, globalsLock *sync.Mutex, vlog *util.VLog) {
-	percentDone := (float32(finished)/float32(total))*float32(100) + 0.1
+	percentDone := (float32(finished) / float32(total)) * float32(100)
 	util.LockIf(globalsLock)
 	gStatus.percentage = percentDone
 	util.UnlockIf(globalsLock)
-	vlog.Printf("%.2f%% done", percentDone)
+	vlog.Printf("%.2f%% written to cloud", percentDone)
 }
 
 func setBackupInitialProgress(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog) {
-	percentDone := (float32(finished)/float32(total))*float32(100) + 0.1
+	percentDone := (float32(finished) / float32(total)) * float32(100)
 	util.LockIf(globalsLock)
 	gStatus.percentage = float32(percentDone)
 	util.UnlockIf(globalsLock)
 }
 
 func setReplayInitialProgress(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog) {
-	percentDone := (float32(finished)/float32(total))*float32(100) + 0.1
+	percentDone := (float32(finished) / float32(total)) * float32(100)
 	util.LockIf(globalsLock)
 	gStatus.state = BackingUp
 	gStatus.msg = backupDirName
 	gStatus.percentage = percentDone
 	util.UnlockIf(globalsLock)
-	vlog.Printf("%.2f%% done replay", percentDone)
+	vlog.Printf("%.2f%% written to cloud (starting replay)", percentDone)
 }
 
 func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string) {
@@ -244,9 +244,15 @@ func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock 
 
 	// Delete the snapshot we've been creating
 	vlog.Printf("CANCEL: Deleting partially created snapshot")
-	err := snapshots.DeleteOrphanedSnapshot(ctx, objst, bucket, key, filepath.Base(backupDirPath), snapshotName, vlog)
+	err := snapshots.DeleteSnapshot(ctx, key, filepath.Base(backupDirPath), snapshotName, objst, bucket, vlog)
 	if err != nil {
-		log.Printf("error: cancelBackup: could not delete partially created snapshot: %v", err)
+		// This is ok and just means snapshot index file wasn't writetn to cloud yet
+		log.Printf("warning: cancelBackup: could not delete partially created snapshot's index (probably doesn't exist yet): %v", err)
+
+		// Garbage collect any orphaned chunks that were written while creating unused snapshot index file
+		if err = snapshots.GCChunks(ctx, objst, bucket, key, vlog); err != nil {
+			log.Println("error: handleReplay: could not garbage collect chunks: ", err)
+		}
 	}
 
 	// Get all completed items in journal and set their dirents.last_backup time to 0
