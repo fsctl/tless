@@ -66,14 +66,14 @@ func (db *DB) DropAllTables() error {
 }
 
 func (db *DB) CreateTablesIfNotExist() error {
-	sql := "SELECT count(*) FROM sqlite_master WHERE type='table' AND (name='dirents' OR name='backup_info' OR name='backup_journal' OR name='rm_snapshot_info' OR name='rm_snapshot_journal');"
+	sql := "SELECT count(*) FROM sqlite_master WHERE type='table' AND (name='dirents' OR name='backup_info' OR name='backup_journal');"
 	cnt, err := db.querySingleRowCount(sql)
 	if err != nil {
 		log.Printf("%q: %s\n", err, sql)
 		return err
 	}
 
-	if cnt != 5 {
+	if cnt != 3 {
 		err = db.createTables()
 		if err != nil {
 			log.Printf("Error: could not create tables")
