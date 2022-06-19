@@ -53,6 +53,9 @@ func GenerateConfigTemplate(configValues *CfgSettings) string {
 # Customize this section with the real host:port of your S3-compatible object 
 # store, your credentials for the object store, and a bucket you have ALREADY 
 # created for storing backups.
+#
+# You can leave access_key_id blank; you then will need to supply it on each
+# run of the program.
 endpoint = "`
 
 	if configValues != nil && configValues.Endpoint != "" {
@@ -137,6 +140,9 @@ excludes = [ `
 # cracking through at least the middle of this century.
 #
 # Note that your passphrase resides in this file but never leaves this machine.
+#
+# You can leave this field blank; you will need to supply your passphrase on
+# each run of the program.
 master_password = "`
 
 	if configValues != nil && configValues.MasterPassword != "" {

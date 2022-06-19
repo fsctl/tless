@@ -101,7 +101,7 @@ func initConfig() {
 	}
 
 	// Read viper for any cfg variables not already overridden by CLI args
-	configFallbackToTomlFile()
+	configFallbackToTomlFileOrInteractivePrompt()
 	if err := validateConfigVars(); err != nil {
 		log.Fatalf("Error validating config: %v", err)
 	}
@@ -134,7 +134,7 @@ func writeTemplateConfigToPath(configFilePath string) {
 	}
 }
 
-func configFallbackToTomlFile() {
+func configFallbackToTomlFileOrInteractivePrompt() {
 	if cfgEndpoint == "" {
 		cfgEndpoint = viper.GetString("objectstore.endpoint")
 	}
@@ -143,6 +143,9 @@ func configFallbackToTomlFile() {
 	}
 	if cfgSecretAccessKey == "" {
 		cfgSecretAccessKey = viper.GetString("objectstore.access_secret")
+		if cfgSecretAccessKey == "" {
+			cfgSecretAccessKey = promptForSecretKeyId()
+		}
 	}
 	if cfgBucket == "" {
 		cfgBucket = viper.GetString("objectstore.bucket")
@@ -152,6 +155,9 @@ func configFallbackToTomlFile() {
 	}
 	if cfgMasterPassword == "" {
 		cfgMasterPassword = viper.GetString("backups.master_password")
+		if cfgMasterPassword == "" {
+			cfgMasterPassword = promptForMasterPassword()
+		}
 	}
 	if cfgSalt == "" {
 		cfgSalt = viper.GetString("backups.salt")
@@ -159,6 +165,20 @@ func configFallbackToTomlFile() {
 	if len(cfgDirs) == 0 {
 		cfgDirs = viper.GetStringSlice("backups.dirs")
 	}
+}
+
+func promptForMasterPassword() string {
+	var masterPass string
+	fmt.Println("Enter your master password: ")
+	fmt.Scanln(&masterPass)
+	return masterPass
+}
+
+func promptForSecretKeyId() string {
+	var secretKeyId string
+	fmt.Println("Enter your cloud Secret Key Id: ")
+	fmt.Scanln(&secretKeyId)
+	return secretKeyId
 }
 
 // Checks that configuration variables have sensible values (e.g., non-blannk, sane length)
