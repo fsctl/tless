@@ -244,13 +244,17 @@ func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock 
 
 	// Delete the snapshot we've been creating
 	vlog.Printf("CANCEL: Deleting partially created snapshot")
-	err := snapshots.DeleteSnapshot(ctx, key, filepath.Base(backupDirPath), snapshotName, objst, bucket, vlog)
+	ssDel := snapshots.SnapshotForDeletion{
+		BackupDirName: filepath.Base(backupDirPath),
+		SnapshotName:  snapshotName,
+	}
+	err := snapshots.DeleteSnapshots(ctx, key, []snapshots.SnapshotForDeletion{ssDel}, objst, bucket, vlog, nil, nil)
 	if err != nil {
 		// This is ok and just means snapshot index file wasn't writetn to cloud yet
 		log.Printf("warning: cancelBackup: could not delete partially created snapshot's index (probably doesn't exist yet): %v", err)
 
 		// Garbage collect any orphaned chunks that were written while creating unused snapshot index file
-		if err = snapshots.GCChunks(ctx, objst, bucket, key, vlog); err != nil {
+		if err = snapshots.GCChunks(ctx, objst, bucket, key, vlog, nil, nil); err != nil {
 			log.Println("error: handleReplay: could not garbage collect chunks: ", err)
 		}
 	}

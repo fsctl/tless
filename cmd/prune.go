@@ -96,7 +96,11 @@ func pruneMain(backupName string, isDryRun bool) {
 
 			if !keepCurr {
 				fmt.Printf("  Deleting snapshot '%s'\n", ss.RawSnapshotName)
-				if err = snapshots.DeleteSnapshot(ctx, encKey, backupName, ss.Name, objst, cfgBucket, vlog); err != nil {
+				ssDel := snapshots.SnapshotForDeletion{
+					BackupDirName: backupName,
+					SnapshotName:  ss.Name,
+				}
+				if err = snapshots.DeleteSnapshots(ctx, encKey, []snapshots.SnapshotForDeletion{ssDel}, objst, cfgBucket, vlog, nil, nil); err != nil {
 					fmt.Printf("error: could not delete '%s': %v\n", ss.RawSnapshotName, err)
 				}
 			} else {

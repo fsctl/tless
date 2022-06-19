@@ -12,28 +12,42 @@ import (
 	"github.com/fsctl/tless/pkg/util"
 )
 
-func DeleteSnapshot(ctx context.Context, key []byte, backupDirName string, snapshotTimestamp string, objst *objstore.ObjStore, bucket string, vlog *util.VLog) error {
-	// Get the encrypted representation of backupDirName and snapshotName
-	encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotTimestamp)
-	if err != nil {
-		return fmt.Errorf("error: DeleteSnapshot: could not encrypt snapshot name (%s): %v", snapshotTimestamp, err)
-	}
-	encryptedBackupDirName, err := cryptography.EncryptFilename(key, backupDirName)
-	if err != nil {
-		return fmt.Errorf("error: DeleteSnapshot: could not encrypt backup dir name (%s): %v", backupDirName, err)
-	}
+type SnapshotForDeletion struct {
+	BackupDirName string
+	SnapshotName  string
+}
 
-	// Delete index file for snapshot
-	indexObjName := encryptedBackupDirName + "/@" + encryptedSnapshotName
-	err = objst.DeleteObj(ctx, bucket, indexObjName)
-	if err != nil {
-		return fmt.Errorf("error: DeleteSnapshot: could not delete old snapshot's index file (%s): %v", indexObjName, err)
+func DeleteSnapshots(ctx context.Context, key []byte, deleteSnapshots []SnapshotForDeletion, objst *objstore.ObjStore, bucket string, vlog *util.VLog, setInitialGGSProgressFunc SetInitialGetGroupedSnapshotsProgress, updateGGSProgressFunc UpdateGetGroupedSnapshotsProgress) error {
+	for _, deleteSnapshot := range deleteSnapshots {
+		snapshotName := deleteSnapshot.SnapshotName
+		backupDirName := deleteSnapshot.BackupDirName
+
+		// Get the encrypted representation of backupDirName and snapshotName
+		encryptedSnapshotName, err := cryptography.EncryptFilename(key, snapshotName)
+		if err != nil {
+			return fmt.Errorf("error: DeleteSnapshot: could not encrypt snapshot name (%s): %v", snapshotName, err)
+		}
+		encryptedBackupDirName, err := cryptography.EncryptFilename(key, backupDirName)
+		if err != nil {
+			return fmt.Errorf("error: DeleteSnapshot: could not encrypt backup dir name (%s): %v", backupDirName, err)
+		}
+
+		// Delete index file for snapshot
+		vlog.Println("Deleting snapshot index file(s)")
+		indexObjName := encryptedBackupDirName + "/@" + encryptedSnapshotName
+		err = objst.DeleteObj(ctx, bucket, indexObjName)
+		if err != nil {
+			return fmt.Errorf("error: DeleteSnapshot: could not delete old snapshot's index file (%s): %v", indexObjName, err)
+		}
+		vlog.Println("Done deleting snapshot index file(s)")
 	}
 
 	// Garbage collect orphaned chunks
-	if err = GCChunks(ctx, objst, bucket, key, vlog); err != nil {
+	vlog.Println("Garbage collecting orphaned chunks")
+	if err := GCChunks(ctx, objst, bucket, key, vlog, setInitialGGSProgressFunc, updateGGSProgressFunc); err != nil {
 		return fmt.Errorf("error: DeleteSnapshot: could not garbage collect chunks: %v", err)
 	}
+	vlog.Println("Done garbage collecting orphaned chunks")
 
 	return nil
 }
@@ -111,15 +125,18 @@ func GetAllSnapshotInfos(ctx context.Context, key []byte, objst *objstore.ObjSto
 }
 
 // Garbage collects orphaned chunks
-func GCChunks(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, vlog *util.VLog) error {
+func GCChunks(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, vlog *util.VLog, setInitialGGSProgressFunc SetInitialGetGroupedSnapshotsProgress, updateGGSProgressFunc UpdateGetGroupedSnapshotsProgress) error {
 	// re-read every snapshot file
-	groupedObjects, err := GetGroupedSnapshots(ctx, objst, key, bucket, vlog)
+	vlog.Println("Getting all snapshots list")
+	groupedObjects, err := GetGroupedSnapshots(ctx, objst, key, bucket, vlog, setInitialGGSProgressFunc, updateGGSProgressFunc)
 	if err != nil {
 		log.Printf("error: GCChunks: could not get grouped snapshots: %v", err)
 		return err
 	}
+	vlog.Println("Done getting all snapshots list")
 
 	// assemble a chunk reference count
+	vlog.Println("Assembling chunk reference count")
 	chunkRefCount := make(map[string]int, 0)
 	for backupName := range groupedObjects {
 		for snapshotName := range groupedObjects[backupName].Snapshots {
@@ -135,6 +152,7 @@ func GCChunks(ctx context.Context, objst *objstore.ObjStore, bucket string, key 
 			}
 		}
 	}
+	vlog.Println("Done assembling chunk reference count")
 
 	// Now iterate over all chunks and see if any have no references (not in map). Delete those.
 	mCloudChunks, err := objst.GetObjList(ctx, bucket, "chunks/", false, vlog)

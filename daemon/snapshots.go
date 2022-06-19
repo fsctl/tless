@@ -51,7 +51,7 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
-	groupedObjects, err := snapshots.GetGroupedSnapshots(ctxBkg, objst, key, bucket, vlog)
+	groupedObjects, err := snapshots.GetGroupedSnapshots(ctxBkg, objst, key, bucket, vlog, nil, nil)
 	if err != nil {
 		log.Printf("Could not get grouped snapshots: %v", err)
 		resp := pb.ReadAllSnapshotsResponse{
@@ -167,28 +167,33 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 }
 
 // Callback for rpc.DaemonCtlServer.ReadAllSnapshots requests
-func (s *server) DeleteSnapshot(ctx context.Context, in *pb.DeleteSnapshotRequest) (*pb.DeleteSnapshotResponse, error) {
+func (s *server) DeleteSnapshots(in *pb.DeleteSnapshotsRequest, srv pb.DaemonCtl_DeleteSnapshotsServer) error {
 	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
-	log.Printf(">> GOT COMMAND: DeleteSnapshot (%s)", in.SnapshotRawName)
-	defer log.Println(">> COMPLETED COMMAND: DeleteSnapshot")
+	log.Printf(">> GOT COMMAND: DeleteSnapshots (%v)", in.SnapshotRawNames)
+	defer log.Println(">> COMPLETED COMMAND: DeleteSnapshots")
 
 	gGlobalsLock.Lock()
 	isBusy := (gStatus.state != Idle)
 	gGlobalsLock.Unlock()
 	if isBusy {
-		msg := fmt.Sprintf("Cannot delete snapshot '%s' right now because a backup or other operation is running", in.SnapshotRawName)
+		msg := "Cannot delete snapshots right now because a backup or other operation is running"
 		log.Println(msg)
-		return &pb.DeleteSnapshotResponse{
-			DidSucceed: false,
-			ErrMsg:     msg,
-		}, nil
+		resp := pb.DeleteSnapshotsResponse{
+			DidSucceed:  false,
+			ErrMsg:      msg,
+			PercentDone: 0.0,
+		}
+		if err := srv.Send(&resp); err != nil {
+			log.Println("error: server.Send failed: ", err)
+		}
+		return nil
 	}
 
 	// Set the status for duration of this deletion
 	gGlobalsLock.Lock()
 	gStatus.state = CleaningUp
-	gStatus.msg = "Deleting snapshot"
+	gStatus.msg = "Deleting snapshot(s)"
 	gStatus.percentage = -1.0
 	gGlobalsLock.Unlock()
 
@@ -215,49 +220,126 @@ func (s *server) DeleteSnapshot(ctx context.Context, in *pb.DeleteSnapshotReques
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
-	backupDirName, snapshotTimestamp, err := snapshots.SplitSnapshotName(in.SnapshotRawName)
-	if err != nil {
-		log.Printf("Cannot split '%s' into backupDirName/snapshotTimestamp", in.SnapshotRawName)
-		return &pb.DeleteSnapshotResponse{
-			DidSucceed: false,
-			ErrMsg:     "snapshot name invalid",
-		}, nil
-	}
-
-	groupedObjects, err := snapshots.GetGroupedSnapshots(ctx, objst, key, bucket, vlog)
-	if err != nil {
-		log.Printf("Could not get grouped snapshots: %v", err)
-		return &pb.DeleteSnapshotResponse{
-			DidSucceed: false,
-			ErrMsg:     "could not read objects from cloud",
-		}, nil
-	}
-
-	// If we're about to delete the most recent snapshot, make sure next backup of this backup dir is a FULL backup
-	isMostRecent := snapshots.IsMostRecentSnapshotForBackup(ctx, objst, bucket, groupedObjects, backupDirName, snapshotTimestamp)
-	if isMostRecent {
-		gGlobalsLock.Lock()
-		err = gDb.ResetLastBackedUpTimeForEntireBackup(backupDirName)
-		gGlobalsLock.Unlock()
+	snapshotRawNames := in.SnapshotRawNames
+	ssDelItems := make([]snapshots.SnapshotForDeletion, 0)
+	for _, ssRawName := range snapshotRawNames {
+		backupDirName, snapshotTimestamp, err := snapshots.SplitSnapshotName(ssRawName)
 		if err != nil {
-			log.Printf("Could not reset last backup times on backup '%s': %v", backupDirName, err)
-			return &pb.DeleteSnapshotResponse{
-				DidSucceed: false,
-				ErrMsg:     "could not reset last backup times. You should manually perform a full backup.",
-			}, nil
+			log.Printf("Cannot split '%s' into backupDirName/snapshotTimestamp", ssRawName)
+			resp := pb.DeleteSnapshotsResponse{
+				DidSucceed:  false,
+				ErrMsg:      "snapshot name invalid",
+				PercentDone: 0.0,
+			}
+			if err := srv.Send(&resp); err != nil {
+				log.Println("error: server.Send failed: ", err)
+			}
+			return nil
+		}
+		ssDelItems = append(ssDelItems, snapshots.SnapshotForDeletion{
+			BackupDirName: backupDirName,
+			SnapshotName:  snapshotTimestamp,
+		})
+	}
+
+	// progress closures for first slow operation
+	setInitialGGS1Progress := func(finished int64, total int64) {
+		resp := pb.DeleteSnapshotsResponse{
+			DidSucceed:  true,
+			ErrMsg:      "",
+			PercentDone: 0.0,
+		}
+		if err := srv.Send(&resp); err != nil {
+			log.Println("error: server.Send failed: ", err)
+		}
+	}
+	updateGGS1Progress := func(finished int64, total int64) {
+		// this is only the first 0-50%
+		percentDone := float64(50.0) * (float64(finished) / float64(total))
+		resp := pb.DeleteSnapshotsResponse{
+			DidSucceed:  true,
+			ErrMsg:      "",
+			PercentDone: percentDone,
+		}
+		if err := srv.Send(&resp); err != nil {
+			log.Println("error: server.Send failed: ", err)
 		}
 	}
 
-	err = snapshots.DeleteSnapshot(ctx, key, backupDirName, snapshotTimestamp, objst, bucket, vlog)
+	groupedObjects, err := snapshots.GetGroupedSnapshots(ctxBkg, objst, key, bucket, vlog, setInitialGGS1Progress, updateGGS1Progress)
 	if err != nil {
-		return &pb.DeleteSnapshotResponse{
-			DidSucceed: false,
-			ErrMsg:     err.Error(),
-		}, nil
+		log.Printf("Could not get grouped snapshots: %v", err)
+		resp := pb.DeleteSnapshotsResponse{
+			DidSucceed:  false,
+			ErrMsg:      "could not read objects from cloud",
+			PercentDone: 0.0,
+		}
+		if err := srv.Send(&resp); err != nil {
+			log.Println("error: server.Send failed: ", err)
+		}
+		return nil
 	}
 
-	return &pb.DeleteSnapshotResponse{
-		DidSucceed: true,
-		ErrMsg:     "",
-	}, nil
+	// If we're about to delete the most recent snapshot, make sure next backup of this backup dir is a FULL backup
+	for _, ssDelItem := range ssDelItems {
+		isMostRecent := snapshots.IsMostRecentSnapshotForBackup(ctxBkg, objst, bucket, groupedObjects, ssDelItem.BackupDirName, ssDelItem.SnapshotName)
+		if isMostRecent {
+			vlog.Println(">>> We are deleting the most recent snapshot; next backup will be a full backup")
+			gGlobalsLock.Lock()
+			err = gDb.ResetLastBackedUpTimeForEntireBackup(ssDelItem.BackupDirName)
+			gGlobalsLock.Unlock()
+			if err != nil {
+				log.Printf("Could not reset last backup times on backup '%s': %v", ssDelItem.BackupDirName, err)
+				resp := pb.DeleteSnapshotsResponse{
+					DidSucceed:  false,
+					ErrMsg:      "could not reset last backup times. You should manually perform a full backup.",
+					PercentDone: 0.0,
+				}
+				if err := srv.Send(&resp); err != nil {
+					log.Println("error: server.Send failed: ", err)
+				}
+				return nil
+			}
+		}
+	}
+
+	// progress closures for 2nd slow operation
+	setInitialGGS2Progress := func(finished int64, total int64) {
+		// starts at 50% since this is the second slow operation
+		resp := pb.DeleteSnapshotsResponse{
+			DidSucceed:  true,
+			ErrMsg:      "",
+			PercentDone: 50.0,
+		}
+		if err := srv.Send(&resp); err != nil {
+			log.Println("error: server.Send failed: ", err)
+		}
+	}
+	updateGGS2Progress := func(finished int64, total int64) {
+		// this is the 2nd part (50-100%)
+		percentDone := float64(50.0) + ((float64(100) * (float64(finished) / float64(total))) / 2)
+		resp := pb.DeleteSnapshotsResponse{
+			DidSucceed:  true,
+			ErrMsg:      "",
+			PercentDone: percentDone,
+		}
+		if err := srv.Send(&resp); err != nil {
+			log.Println("error: server.Send failed: ", err)
+		}
+	}
+
+	err = snapshots.DeleteSnapshots(ctxBkg, key, ssDelItems, objst, bucket, vlog, setInitialGGS2Progress, updateGGS2Progress)
+	if err != nil {
+		resp := pb.DeleteSnapshotsResponse{
+			DidSucceed:  false,
+			ErrMsg:      err.Error(),
+			PercentDone: 0.0,
+		}
+		if err := srv.Send(&resp); err != nil {
+			log.Println("error: server.Send failed: ", err)
+		}
+		return nil
+	}
+
+	return nil
 }

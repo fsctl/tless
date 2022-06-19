@@ -182,7 +182,7 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 	}
 
 	// Initialize a chunk cache
-	cc := backup.NewChunkCache(objst, encKey, vlog)
+	cc := backup.NewChunkCache(objst, encKey, vlog, uid, gid)
 
 	// For locality of reference reasons, we'll get the best cache hit rate if we restore in lexiconigraphical
 	// order of rel paths.

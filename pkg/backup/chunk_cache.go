@@ -38,16 +38,20 @@ type ChunkCache struct {
 	objst  *objstore.ObjStore
 	key    []byte
 	vlog   *util.VLog
+	uid    int
+	gid    int
 	chunks map[string]CachedChunk
 	stats  *CacheStatistics
 }
 
-func NewChunkCache(objst *objstore.ObjStore, key []byte, vlog *util.VLog) *ChunkCache {
+func NewChunkCache(objst *objstore.ObjStore, key []byte, vlog *util.VLog, uid int, gid int) *ChunkCache {
 	// Construct cache obj
 	cc := &ChunkCache{
 		objst:  objst,
 		key:    key,
 		vlog:   vlog,
+		uid:    uid,
+		gid:    gid,
 		chunks: make(map[string]CachedChunk, 0),
 		stats: &CacheStatistics{
 			hits:  0,
@@ -58,6 +62,10 @@ func NewChunkCache(objst *objstore.ObjStore, key []byte, vlog *util.VLog) *Chunk
 	// Make cache directory if it doesn't already exist
 	if err := os.MkdirAll(CacheDirectory, 0755); err != nil {
 		log.Printf("error: NewChunkCache: cannot create cache directory '%s': %v", CacheDirectory, err)
+		return cc
+	}
+	if err := os.Chown(CacheDirectory, uid, gid); err != nil {
+		log.Printf("error: could not chown chunk cache dir '%s' to '%d/%d': %v", CacheDirectory, uid, gid, err)
 		return cc
 	}
 
@@ -186,6 +194,16 @@ func (cc *ChunkCache) saveObjToCache(objName string, ciphertextBuf []byte) {
 		return
 	}
 	defer f.Close()
+
+	// Change ownership and mode on newly created file
+	if err := os.Chown(path, cc.uid, cc.gid); err != nil {
+		log.Printf("error: could not chown chunk file '%s' to '%d/%d': %v", path, cc.uid, cc.gid, err)
+		return
+	}
+	if err := os.Chmod(path, 0600); err != nil {
+		log.Printf("error: could not chmod chunk cile '%s' with mode %#o: %v\n", path, 0600, err)
+		return
+	}
 
 	n, err := f.Write(ciphertextBuf)
 	if err != nil {

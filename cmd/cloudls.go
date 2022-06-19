@@ -6,11 +6,14 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
 	"github.com/spf13/cobra"
+	"github.com/vbauerster/mpb/v7"
+	"github.com/vbauerster/mpb/v7/decor"
 )
 
 var (
@@ -37,9 +40,7 @@ The available snapshot times are displayed in 'tless cloudls' with no arguments.
 `,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			if cloudlsCfgGreppableSnapshots {
-				cloudlsMainGreppableSnapshots()
-			} else if cloudlsCfgSnapshot == "" {
+			if cloudlsCfgGreppableSnapshots || cloudlsCfgSnapshot == "" {
 				cloudlsMain()
 			} else {
 				cloudlsMainShowSnapshot()
@@ -61,10 +62,37 @@ func cloudlsMain() {
 	ctx := context.Background()
 	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 
-	groupedObjects, err := snapshots.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket, vlog)
+	// initialize progress bar container and its callbacks
+	progressBarContainer := mpb.New()
+	var progressBar *mpb.Bar = nil
+	setGGSInitialProgress := func(finished int64, total int64) {
+		if !cfgVerbose && !cloudlsCfgGreppableSnapshots {
+			name := "Reading snapshots"
+			progressBar = progressBarContainer.New(
+				total,
+				mpb.BarStyle().Lbound("[").Filler("=").Tip(">").Rbound("]"),
+				mpb.PrependDecorators(
+					decor.Name(name, decor.WC{W: len(name) + 1, C: decor.DidentRight}),
+					// replace ETA decorator with "done" message on OnComplete event
+					decor.OnComplete(
+						decor.AverageETA(decor.ET_STYLE_GO, decor.WC{W: 4}), "done",
+					),
+				),
+				mpb.AppendDecorators(decor.Percentage()),
+			)
+		}
+	}
+	updateGGSProgress := func(finished int64, total int64) {
+		if !cfgVerbose && !cloudlsCfgGreppableSnapshots {
+			progressBar.SetCurrent(finished)
+		}
+	}
+
+	groupedObjects, err := snapshots.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket, vlog, setGGSInitialProgress, updateGGSProgress)
 	if err != nil {
 		log.Fatalf("Could not get grouped snapshots: %v", err)
 	}
+	time.Sleep(time.Millisecond * 100) // let the bar finish drawing
 
 	// print out each backup name group
 	if len(groupedObjects) == 0 {
@@ -78,7 +106,9 @@ func cloudlsMain() {
 	sort.Strings(groupNameKeys)
 
 	for _, groupName := range groupNameKeys {
-		fmt.Printf("Backup '%s':\n", groupName)
+		if !cloudlsCfgGreppableSnapshots {
+			fmt.Printf("Backup '%s':\n", groupName)
+		}
 
 		snapshotKeys := make([]string, 0, len(groupedObjects[groupName].Snapshots))
 		for snapshotName := range groupedObjects[groupName].Snapshots {
@@ -87,61 +117,30 @@ func cloudlsMain() {
 		sort.Strings(snapshotKeys)
 
 		for _, snapshotName := range snapshotKeys {
-			fmt.Printf("  %s\n", snapshotName)
+			if cloudlsCfgGreppableSnapshots {
+				fmt.Printf("%s/%s\n", groupName, snapshotName)
+			} else {
+				fmt.Printf("  %s\n", snapshotName)
 
-			if cfgVerbose || cloudlsCfgShowChunks {
-				relPathKeys := make([]string, 0, len(groupedObjects[groupName].Snapshots[snapshotName].RelPaths))
-				for relPath := range groupedObjects[groupName].Snapshots[snapshotName].RelPaths {
-					relPathKeys = append(relPathKeys, relPath)
-				}
-				sort.Strings(relPathKeys)
+				if cfgVerbose || cloudlsCfgShowChunks {
+					relPathKeys := make([]string, 0, len(groupedObjects[groupName].Snapshots[snapshotName].RelPaths))
+					for relPath := range groupedObjects[groupName].Snapshots[snapshotName].RelPaths {
+						relPathKeys = append(relPathKeys, relPath)
+					}
+					sort.Strings(relPathKeys)
 
-				for _, relPath := range relPathKeys {
-					val := groupedObjects[groupName].Snapshots[snapshotName].RelPaths[relPath]
-					fmt.Printf("    %s\n", relPath)
+					for _, relPath := range relPathKeys {
+						val := groupedObjects[groupName].Snapshots[snapshotName].RelPaths[relPath]
+						fmt.Printf("    %s\n", relPath)
 
-					if cloudlsCfgShowChunks {
-						for _, chunkExtent := range val.ChunkExtents {
-							fmt.Printf("      Chunk: %s (offset: %d, len: %d)\n", chunkExtent.ChunkName, chunkExtent.Offset, chunkExtent.Len)
+						if cloudlsCfgShowChunks {
+							for _, chunkExtent := range val.ChunkExtents {
+								fmt.Printf("      Chunk: %s (offset: %d, len: %d)\n", chunkExtent.ChunkName, chunkExtent.Offset, chunkExtent.Len)
+							}
 						}
 					}
 				}
 			}
-		}
-	}
-}
-
-func cloudlsMainGreppableSnapshots() {
-	vlog := util.NewVLog(nil, func() bool { return cfgVerbose })
-
-	ctx := context.Background()
-	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
-
-	groupedObjects, err := snapshots.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket, vlog)
-	if err != nil {
-		log.Fatalf("Could not get grouped snapshots: %v", err)
-	}
-
-	// print out each backup name group
-	if len(groupedObjects) == 0 {
-		fmt.Println("No objects found in cloud")
-	}
-
-	groupNameKeys := make([]string, 0, len(groupedObjects))
-	for groupName := range groupedObjects {
-		groupNameKeys = append(groupNameKeys, groupName)
-	}
-	sort.Strings(groupNameKeys)
-
-	for _, groupName := range groupNameKeys {
-		snapshotKeys := make([]string, 0, len(groupedObjects[groupName].Snapshots))
-		for snapshotName := range groupedObjects[groupName].Snapshots {
-			snapshotKeys = append(snapshotKeys, snapshotName)
-		}
-		sort.Strings(snapshotKeys)
-
-		for _, snapshotName := range snapshotKeys {
-			fmt.Printf("%s/%s\n", groupName, snapshotName)
 		}
 	}
 }
@@ -161,7 +160,7 @@ func cloudlsMainShowSnapshot() {
 	snapshotName := snapshotFlagParts[1]
 	// TODO: check both parts for regex validity
 
-	groupedObjects, err := snapshots.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket, vlog)
+	groupedObjects, err := snapshots.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket, vlog, nil, nil)
 	if err != nil {
 		log.Fatalf("Could not get grouped snapshots: %v", err)
 	}

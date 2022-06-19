@@ -26,7 +26,7 @@ service DaemonCtl {
 
   // Commands for retrieving and pruning snapshots
   rpc ReadAllSnapshots (ReadAllSnapshotsRequest) returns (stream ReadAllSnapshotsResponse) {}
-  rpc DeleteSnapshot (DeleteSnapshotRequest) returns (DeleteSnapshotResponse) {}
+  rpc DeleteSnapshots (DeleteSnapshotsRequest) returns (stream DeleteSnapshotsResponse) {}
 
   // Restore command
   rpc Restore (stream RestoreRequest) returns (RestoreResponse) {}
@@ -154,13 +154,14 @@ message ReadAllSnapshotsResponse {
   double PercentDone = 4;
 }
 
-message DeleteSnapshotRequest {
-  string SnapshotRawName = 1;
+message DeleteSnapshotsRequest {
+  repeated string SnapshotRawNames = 1;
 }
 
-message DeleteSnapshotResponse {
+message DeleteSnapshotsResponse {
   bool DidSucceed = 1;
-  string ErrMsg = 2;  
+  string ErrMsg = 2;
+  double PercentDone = 3;
 }
 
 message RestoreRequest {

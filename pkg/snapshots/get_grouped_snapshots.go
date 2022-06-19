@@ -72,7 +72,10 @@ func (bd BackupDir) GetMostRecentSnapshot() *Snapshot {
 	}
 }
 
-func GetGroupedSnapshots(ctx context.Context, objst *objstore.ObjStore, key []byte, bucket string, vlog *util.VLog) (map[string]BackupDir, error) {
+type SetInitialGetGroupedSnapshotsProgress func(finished int64, total int64)
+type UpdateGetGroupedSnapshotsProgress func(finished int64, total int64)
+
+func GetGroupedSnapshots(ctx context.Context, objst *objstore.ObjStore, key []byte, bucket string, vlog *util.VLog, setInitialGGSProgressFunc SetInitialGetGroupedSnapshotsProgress, updateGGSProgressFunc UpdateGetGroupedSnapshotsProgress) (map[string]BackupDir, error) {
 	// setup return map
 	ret := make(map[string]BackupDir)
 
@@ -83,7 +86,28 @@ func GetGroupedSnapshots(ctx context.Context, objst *objstore.ObjStore, key []by
 		return nil, err
 	}
 
+	// Set initial progress if callback was supplied
+	var totalSnapshotIndices int64 = 0
+	var finishedSnapshotIndices int64 = 0
+	var mObjs map[string]int64 = nil
+	if setInitialGGSProgressFunc != nil {
+		for _, encBackupName := range topLevelObjs {
+			mObjs, err = objst.GetObjList(ctx, bucket, encBackupName+"/@", false, nil)
+			if err != nil {
+				log.Printf("error: GetGroupedSnapshots: could not get list of snapshot index files for '%s': %v\n", encBackupName, err)
+				return nil, err
+			}
+			for range mObjs {
+				totalSnapshotIndices += 1
+			}
+		}
+		setInitialGGSProgressFunc(finishedSnapshotIndices, totalSnapshotIndices)
+	}
+
+	// Loop over every backup
 	for _, encBackupName := range topLevelObjs {
+		//vlog.Printf("GetGroupedSnapshots: working on backup '%s'", encBackupName)
+
 		// get decrypted backup name
 		backupName, err := cryptography.DecryptFilename(key, encBackupName)
 		if err != nil {
@@ -98,21 +122,44 @@ func GetGroupedSnapshots(ctx context.Context, objst *objstore.ObjStore, key []by
 			Snapshots:     make(map[string]Snapshot),
 		}
 
-		// get all snapshot index files for this backup
-		indexFiles, err := getAllSnapshotIndexFiles(ctx, objst, key, encBackupName, bucket, vlog)
+		// loop over every snapshot index for curr backup
+		mObjs, err = objst.GetObjList(ctx, bucket, encBackupName+"/@", false, nil)
 		if err != nil {
-			log.Printf("error: GetGroupedSnapshots: could not get snapshot index files for '%s': %v\n", backupName, err)
+			log.Printf("error: GetGroupedSnapshots: could not get list of snapshot index files for '%s': %v\n", encBackupName, err)
 			return nil, err
 		}
+		for encObjName := range mObjs {
+			// strip off the prefix "encBackupName/@"
+			encSsName := strings.TrimPrefix(encObjName, encBackupName+"/@")
 
-		for ssName, indexFileJsonBuf := range indexFiles {
+			//vlog.Printf("GetGroupedSnapshots: working on snapshot '%s' / @'%s'", encBackupName, encSsName)
+
+			// decrypt snapshot name
+			ssName, err := cryptography.DecryptFilename(key, encSsName)
+			if err != nil {
+				log.Printf("error: GetGroupedSnapshots: could not decrypt snapshot name (%s) - skipping: %v\n", encSsName, err)
+				continue
+			}
+
+			plaintextIndexFileBuf, err := GetSnapshotIndexFile(ctx, objst, bucket, key, encObjName)
+			if err != nil {
+				log.Printf("error: GetGroupedSnapshots: could not retrieve snapshot index file (%s) - skipping: %v\n", ssName, err)
+				return nil, err
+			}
+
 			// reconstruct object hierarchy for this snapshot, placing into BackupDir objects in map
-			ssObj, err := UnmarshalSnapshotObj(indexFileJsonBuf)
+			ssObj, err := UnmarshalSnapshotObj(plaintextIndexFileBuf)
 			if err != nil {
 				log.Printf("error: GetGroupedSnapshots: could not get snapshot obj for '%s': %v\n", ssName, err)
 				return nil, err
 			}
 			ret[backupName].Snapshots[ssName] = *ssObj
+
+			// update progress if callback supplied
+			finishedSnapshotIndices += 1
+			if updateGGSProgressFunc != nil {
+				updateGGSProgressFunc(finishedSnapshotIndices, totalSnapshotIndices)
+			}
 		}
 	}
 
@@ -128,39 +175,6 @@ func UnmarshalSnapshotObj(indexFileJsonBuf []byte) (*Snapshot, error) {
 		return nil, err
 	}
 	return &ssObj, nil
-}
-
-// Returns a map of [decrypted snapshot index obj names] onto [slices of (encrypted, compressed) bytes] for that index file
-func getAllSnapshotIndexFiles(ctx context.Context, objst *objstore.ObjStore, key []byte, encBackupName string, bucket string, vlog *util.VLog) (map[string][]byte, error) {
-	ret := make(map[string][]byte)
-
-	mObjs, err := objst.GetObjList(ctx, bucket, encBackupName+"/@", false, nil)
-	if err != nil {
-		log.Printf("error: getAllSnapshotIndices: could not get list of snapshot index files for '%s': %v\n", encBackupName, err)
-		return nil, err
-	}
-
-	for encObjName := range mObjs {
-		// strip off the prefix "encBackupName/@"
-		encSsName := strings.TrimPrefix(encObjName, encBackupName+"/@")
-
-		// decrypt snapshot name
-		ssName, err := cryptography.DecryptFilename(key, encSsName)
-		if err != nil {
-			log.Printf("error: getAllSnapshotIndexFiles: could not decrypt snapshot name (%s): %v\n", encSsName, err)
-			return nil, err
-		}
-
-		plaintextIndexFileBuf, err := GetSnapshotIndexFile(ctx, objst, bucket, key, encObjName)
-		if err != nil {
-			log.Printf("error: getAllSnapshotIndexFiles: could not retrieve snapshot index file (%s): %v\n", ssName, err)
-			return nil, err
-		}
-
-		ret[ssName] = plaintextIndexFileBuf
-	}
-
-	return ret, nil
 }
 
 func GetSnapshotIndexFile(ctx context.Context, objst *objstore.ObjStore, bucket string, key []byte, encObjName string) ([]byte, error) {

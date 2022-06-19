@@ -70,7 +70,11 @@ func PruneSnapshots() error {
 
 			if !keepCurr {
 				log.Printf("AUTOPRUNE> Deleting snapshot '%s'\n", ss.RawSnapshotName)
-				if err = snapshots.DeleteSnapshot(ctx, encKey, backupName, ss.Name, objst, bucket, vlog); err != nil {
+				ssDel := snapshots.SnapshotForDeletion{
+					BackupDirName: backupName,
+					SnapshotName:  ss.Name,
+				}
+				if err = snapshots.DeleteSnapshots(ctx, encKey, []snapshots.SnapshotForDeletion{ssDel}, objst, bucket, vlog, nil, nil); err != nil {
 					log.Printf("AUTOPRUNE> error: could not delete snapshot '%s': %v\n", ss.RawSnapshotName, err)
 				}
 			} else {

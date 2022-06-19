@@ -2,17 +2,21 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"time"
 
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
 	"github.com/spf13/cobra"
+	"github.com/vbauerster/mpb/v7"
+	"github.com/vbauerster/mpb/v7/decor"
 )
 
 var (
 	// Flags
-	cloudrmCfgSnapshot string
+	cloudrmCfgSnapshot []string
 
 	// Command
 	cloudrmCmd = &cobra.Command{
@@ -30,7 +34,7 @@ The available snapshot times are displayed in 'tless cloudls' with no arguments.
 `,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			if cloudrmCfgSnapshot != "" {
+			if len(cloudrmCfgSnapshot) != 0 {
 				cloudrmMain()
 			} else {
 				log.Fatalln("error: --snapshot is required")
@@ -40,7 +44,7 @@ The available snapshot times are displayed in 'tless cloudls' with no arguments.
 )
 
 func init() {
-	cloudrmCmd.Flags().StringVarP(&cloudrmCfgSnapshot, "snapshot", "S", "", "snapshot to delete (eg, 'Documents/2020-01-01_01.02.03')")
+	cloudrmCmd.Flags().StringArrayVarP(&cloudrmCfgSnapshot, "snapshot", "S", []string{}, "snapshot to delete (eg, 'Documents/2020-01-01_01.02.03')")
 	rootCmd.AddCommand(cloudrmCmd)
 }
 
@@ -50,13 +54,52 @@ func cloudrmMain() {
 	ctx := context.Background()
 	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 
-	backupDirName, snapshotTimestamp, err := snapshots.SplitSnapshotName(cloudrmCfgSnapshot)
-	if err != nil {
-		log.Fatalf("Cannot split '%s' into backupDirName/snapshotTimestamp", cloudrmCfgSnapshot)
+	ssDeletes := make([]snapshots.SnapshotForDeletion, 0)
+	for _, snapshotRawName := range cloudrmCfgSnapshot {
+		backupDirName, snapshotTimestamp, err := snapshots.SplitSnapshotName(snapshotRawName)
+		if err != nil {
+			log.Fatalf("Cannot split '%s' into backupDirName/snapshotTimestamp", cloudrmCfgSnapshot)
+		}
+
+		ssDeletes = append(ssDeletes, snapshots.SnapshotForDeletion{
+			BackupDirName: backupDirName,
+			SnapshotName:  snapshotTimestamp,
+		})
 	}
 
-	err = snapshots.DeleteSnapshot(ctx, encKey, backupDirName, snapshotTimestamp, objst, cfgBucket, vlog)
+	// initialize progress bar container and its callbacks
+	progressBarContainer := mpb.New()
+	var progressBar *mpb.Bar = nil
+	setGGSInitialProgress := func(finished int64, total int64) {
+		if !cfgVerbose {
+			name := "Garbage collecting orphaned chunks"
+			progressBar = progressBarContainer.New(
+				total,
+				mpb.BarStyle().Lbound("[").Filler("=").Tip(">").Rbound("]"),
+				mpb.PrependDecorators(
+					decor.Name(name, decor.WC{W: len(name) + 1, C: decor.DidentRight}),
+					// replace ETA decorator with "done" message on OnComplete event
+					decor.OnComplete(
+						decor.AverageETA(decor.ET_STYLE_GO, decor.WC{W: 4}), "done",
+					),
+				),
+				mpb.AppendDecorators(decor.Percentage()),
+			)
+		}
+	}
+	updateGGSProgress := func(finished int64, total int64) {
+		if !cfgVerbose {
+			progressBar.SetCurrent(finished)
+		}
+	}
+
+	for _, ssDel := range ssDeletes {
+		fmt.Printf("Deleting %s/%s\n", ssDel.BackupDirName, ssDel.SnapshotName)
+	}
+	err := snapshots.DeleteSnapshots(ctx, encKey, ssDeletes, objst, cfgBucket, vlog, setGGSInitialProgress, updateGGSProgress)
 	if err != nil {
 		log.Fatalf("Failed to delete snapshot: %v", err)
 	}
+
+	time.Sleep(time.Millisecond * 100) // let the bar finish drawing
 }

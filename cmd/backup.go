@@ -176,13 +176,17 @@ func handleReplay(ctx context.Context, objst *objstore.ObjStore, db *database.DB
 			snapshotName := time.Unix(snapshotUnixTime, 0).UTC().Format("2006-01-02_15.04.05")
 
 			// Delete the snapshot if it exists
-			err = snapshots.DeleteSnapshot(ctx, encKey, filepath.Base(backupDirPath), snapshotName, objst, cfgBucket, vlog)
+			ssDel := snapshots.SnapshotForDeletion{
+				BackupDirName: filepath.Base(backupDirPath),
+				SnapshotName:  snapshotName,
+			}
+			err = snapshots.DeleteSnapshots(ctx, encKey, []snapshots.SnapshotForDeletion{ssDel}, objst, cfgBucket, vlog, nil, nil)
 			if err != nil {
 				// This is ok and just means snapshot index file wasn't writetn to cloud yet
 				vlog.Printf("warning: handleReplay: could not delete partially created snapshot index (probably does not exist yet): %v", err)
 
 				// Garbage collect any orphaned chunks that were written while creating unused snapshot index file
-				if err = snapshots.GCChunks(ctx, objst, cfgBucket, encKey, vlog); err != nil {
+				if err = snapshots.GCChunks(ctx, objst, cfgBucket, encKey, vlog, nil, nil); err != nil {
 					log.Println("error: handleReplay: could not garbage collect chunks: ", err)
 				}
 			}
