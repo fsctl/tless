@@ -100,9 +100,9 @@ func Backup(vlog *util.VLog, completion func()) {
 	}
 
 	// Get a copy of the encryption key
-	encKey := make([]byte, 32)
+	key := make([]byte, 32)
 	gGlobalsLock.Lock()
-	copy(encKey, gKey)
+	copy(key, gKey)
 	gGlobalsLock.Unlock()
 
 	gGlobalsLock.Lock()
@@ -121,7 +121,7 @@ func Backup(vlog *util.VLog, completion func()) {
 		gGlobalsLock.Unlock()
 
 		// Traverse the FS for changed files and do the journaled backup
-		breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludePaths, vlog, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress)
+		breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, key, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludePaths, vlog, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress)
 		if fatalError {
 			goto done
 		}
@@ -174,13 +174,13 @@ func replayBackupJournal() {
 	}
 
 	// Get a copy of the encryption key
-	encKey := make([]byte, 32)
+	key := make([]byte, 32)
 	gGlobalsLock.Lock()
-	copy(encKey, gKey)
+	copy(key, gKey)
 	gGlobalsLock.Unlock()
 
 	// Replay the journal
-	backup.ReplayBackupJournal(ctx, encKey, objst, bucket, db, &gGlobalsLock, vlog, setReplayInitialProgress, checkAndHandleCancelation, updateBackupProgress)
+	backup.ReplayBackupJournal(ctx, key, objst, bucket, db, &gGlobalsLock, vlog, setReplayInitialProgress, checkAndHandleCancelation, updateBackupProgress)
 
 	// Finally set the status back to Idle since we are done with backup
 	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)

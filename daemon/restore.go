@@ -107,14 +107,14 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 
 	// open connection to cloud server
 	ctx := context.Background()
-	encKey := make([]byte, 32)
+	key := make([]byte, 32)
 	gGlobalsLock.Lock()
 	endpoint := gCfg.Endpoint
 	accessKey := gCfg.AccessKeyId
 	secretKey := gCfg.SecretAccessKey
 	bucket := gCfg.Bucket
 	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
-	copy(encKey, gKey)
+	copy(key, gKey)
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 	if ok, err := objst.IsReachableWithRetries(ctx, 10, bucket, vlog); !ok {
@@ -138,13 +138,13 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 	snapshotName := parts[1]
 
 	// Encrypt the backup name and snapshot name so we can form the index file name
-	encBackupName, err := cryptography.EncryptFilename(encKey, backupName)
+	encBackupName, err := cryptography.EncryptFilename(key, backupName)
 	if err != nil {
 		log.Printf("error: cannot encrypt backup name '%s': %v", backupName, err)
 		done()
 		return
 	}
-	encSnapshotName, err := cryptography.EncryptFilename(encKey, snapshotName)
+	encSnapshotName, err := cryptography.EncryptFilename(key, snapshotName)
 	if err != nil {
 		log.Printf("error: cannot encrypt snapshot name '%s': %v", backupName, err)
 		done()
@@ -153,7 +153,7 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 
 	// Get the snapshot index
 	encSsIndexObjName := encBackupName + "/@" + encSnapshotName
-	ssIndexJson, err := snapshots.GetSnapshotIndexFile(ctx, objst, bucket, encKey, encSsIndexObjName)
+	ssIndexJson, err := snapshots.GetSnapshotIndexFile(ctx, objst, bucket, key, encSsIndexObjName)
 	if err != nil {
 		log.Printf("error: cannot get snapshot index file for '%s/%s': %v", backupName, snapshotName, err)
 		done()
@@ -182,7 +182,7 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 	}
 
 	// Initialize a chunk cache
-	cc := backup.NewChunkCache(objst, encKey, vlog, uid, gid)
+	cc := backup.NewChunkCache(objst, key, vlog, uid, gid)
 
 	// For locality of reference reasons, we'll get the best cache hit rate if we restore in lexiconigraphical
 	// order of rel paths.
@@ -210,7 +210,7 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 
 		vlog.Printf("RESTORING: '%s' from %s/%s", relPath, backupName, snapshotName)
 
-		err = backup.RestoreDirEntry(ctx, encKey, restorePath, mRelPathsObjsMap[relPath], backupName, snapshotName, relPath, objst, bucket, vlog, &dirChmodQueue, uid, gid, cc)
+		err = backup.RestoreDirEntry(ctx, key, restorePath, mRelPathsObjsMap[relPath], backupName, snapshotName, relPath, objst, bucket, vlog, &dirChmodQueue, uid, gid, cc)
 		if err != nil {
 			log.Printf("error: could not restore a dir entry '%s'", relPath)
 		}
