@@ -107,8 +107,9 @@ func (db *DB) createTables() error {
 		id integer primary key autoincrement,
 		backup_info_id integer NOT NULL, /* key into backups_info */
 		dirent_id integer,               /* key into dirents */
-		change_type integer,             /* 1=Updated (so back it up) */
-		                                 /* 2=Deleted (so mark it deleted) */
+		change_type integer,             /* 1=Updated */
+		                                 /* 2=Unchanged */
+										 /* 3=Deleted */
 		index_entry BLOB,                /* json bytes for entry in index file */
 		status integer                   /* 1=Unstarted */
 							             /* 2=InProgress */
