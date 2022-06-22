@@ -156,8 +156,8 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 		util.UnlockIf(globalsLock)
 		if err != nil {
 			if errors.Is(err, database.ErrJournalHasUnfinishedTasks) {
-				log.Println("error: PlayBackupJournal: onJournalExhausted: tried to complete journal while it still had unfinished tasks")
-				shouldContinue = true
+				log.Println("error: PlayBackupJournal: onJournalExhausted: tried to complete journal while it still had unfinished tasks (skipping)")
+				shouldReturn = true
 				return
 			} else {
 				log.Println("error: PlayBackupJournal: onJournalExhausted: db.CompleteBackupJournal failed: ", err)
@@ -173,7 +173,7 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 	cp := newChunkPacker(ctx, objst, bucket, db, globalsLock, key, vlog)
 	for {
 		// Sleep this go routine briefly on every iteration of the for loop
-		time.Sleep(time.Millisecond * 1)
+		time.Sleep(time.Millisecond * 50)
 
 		// Has cancelation been requested?
 		if checkAndHandleCancelationFunc != nil {
