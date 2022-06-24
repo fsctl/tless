@@ -93,18 +93,23 @@ func NewChunkCache(objst *objstore.ObjStore, key []byte, vlog *util.VLog, uid in
 			}
 			plaintextBuf, nonce, err := cryptography.DecryptBufferReturningNonce(key, ciphertextChunkBuf)
 			if err != nil {
-				log.Printf("error: NewChunkCache: WalkDirFunc: DecryptBufferReturningNonce failed: %v\n", err)
-				return err
+				vlog.Printf("NewChunkCache: WalkDirFunc: DecryptBufferReturningNonce failed on chunk '%s' (purging): %v\n", objName, err)
+				// remove this chunk
+				absPath := filepath.Join(CacheDirectory, objName)
+				if err = os.Remove(absPath); err != nil {
+					log.Printf("NewChunkCache: WalkDirFunc: failed to remove undecryptable chunk at '%s': %v\n", absPath, err)
+				}
+			} else {
+				// cache this chunk
+				cached := CachedChunk{
+					absPath:          filepath.Join(CacheDirectory, objName),
+					size:             size,
+					lastUsedUnixTime: time.Now().Unix(),
+					plaintext:        plaintextBuf,
+					nonce:            nonce,
+				}
+				cc.chunks[objName] = cached
 			}
-
-			cached := CachedChunk{
-				absPath:          filepath.Join(CacheDirectory, objName),
-				size:             size,
-				lastUsedUnixTime: time.Now().Unix(),
-				plaintext:        plaintextBuf,
-				nonce:            nonce,
-			}
-			cc.chunks[objName] = cached
 		}
 
 		return nil
