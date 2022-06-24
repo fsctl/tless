@@ -52,8 +52,7 @@ func DecryptFilename(key []byte, encryptedFilenameB64 string) (string, error) {
 
 	aessiv, err := siv.NewGCM(key)
 	if err != nil {
-		// TODO: don't Fatalf here, just return the error?
-		log.Fatalf("error: DecryptFilename on '%s' ('%x'): %v", encryptedFilenameB64, encryptedFilename, err)
+		log.Printf("error: DecryptFilename on '%s' ('%x'): %v", encryptedFilenameB64, encryptedFilename, err)
 		return "", err
 	}
 
@@ -62,8 +61,7 @@ func DecryptFilename(key []byte, encryptedFilenameB64 string) (string, error) {
 
 	decryptedFilename, err := aessiv.Open(nil, nonce, encryptedFilename, nil)
 	if err != nil {
-		// TODO: don't Fatalln here, just return the error
-		log.Fatalf("error: DecryptFilename on '%s' ('%x'): %v", encryptedFilenameB64, encryptedFilename, err)
+		log.Printf("error: DecryptFilename on '%s' ('%x'): %v", encryptedFilenameB64, encryptedFilename, err)
 		return "", err
 	}
 
