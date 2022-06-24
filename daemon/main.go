@@ -14,7 +14,6 @@ import (
 	"syscall"
 
 	"github.com/fsctl/tless/pkg/database"
-	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
 	"google.golang.org/grpc"
@@ -38,8 +37,6 @@ type server struct {
 
 // Callback for rpc.DaemonCtlServer.Hello requests
 func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloResponse, error) {
-	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
-
 	log.Printf("HELLO> Rcvd Hello from '%v' (with homedir '%v')", in.GetUsername(), in.GetUserHomeDir())
 
 	// Set up global state
@@ -47,31 +44,10 @@ func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRespo
 	gUsername = in.GetUsername()
 	gUserHomeDir = in.GetUserHomeDir()
 	gGlobalsLock.Unlock()
-	initConfig(&gGlobalsLock)
+	if err := initConfig(&gGlobalsLock); err != nil {
+		return &pb.HelloResponse{DidSucceed: false, ErrMsg: err.Error()}, nil
+	}
 	initDbConn(&gGlobalsLock)
-
-	// Do crypto config check and report any failures back to user rather than continuing
-	gGlobalsLock.Lock()
-	endpoint := gCfg.Endpoint
-	accessKey := gCfg.AccessKeyId
-	secretKey := gCfg.SecretAccessKey
-	bucket := gCfg.Bucket
-	salt := gCfg.Salt
-	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
-	key := gKey
-	gGlobalsLock.Unlock()
-	ctxBkg := context.Background()
-	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey, trustSelfSignedCerts)
-	if ok, err := objst.IsReachableWithRetries(ctxBkg, 2, bucket, vlog); !ok {
-		errMsg := fmt.Sprintf("server not reachable: %v", err)
-		vlog.Println(errMsg)
-		return &pb.HelloResponse{DidSucceed: false, ErrMsg: errMsg}, nil
-	}
-	if ok, err := objst.CheckCryptoConfigMatchesServerDaemon(ctx, key, bucket, salt, vlog); !ok {
-		errMsg := fmt.Sprintf("cannot continue due to cryptographic config error: %v", err)
-		log.Println(errMsg)
-		return &pb.HelloResponse{DidSucceed: false, ErrMsg: errMsg}, nil
-	}
 
 	// Replay dirty journals
 	go func() {

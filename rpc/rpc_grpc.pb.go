@@ -46,8 +46,7 @@ type DaemonCtlClient interface {
 	// Bucket operations
 	ListBuckets(ctx context.Context, in *ListBucketsRequest, opts ...grpc.CallOption) (*ListBucketsResponse, error)
 	MakeBucket(ctx context.Context, in *MakeBucketRequest, opts ...grpc.CallOption) (*MakeBucketResponse, error)
-	GetBucketSalt(ctx context.Context, in *GetBucketSaltRequest, opts ...grpc.CallOption) (*GetBucketSaltResponse, error)
-	CheckBucketSaltPassword(ctx context.Context, in *CheckBucketSaltPasswordRequest, opts ...grpc.CallOption) (*CheckBucketSaltPasswordResponse, error)
+	CheckBucketPassword(ctx context.Context, in *CheckBucketPasswordRequest, opts ...grpc.CallOption) (*CheckBucketPasswordResponse, error)
 }
 
 type daemonCtlClient struct {
@@ -255,18 +254,9 @@ func (c *daemonCtlClient) MakeBucket(ctx context.Context, in *MakeBucketRequest,
 	return out, nil
 }
 
-func (c *daemonCtlClient) GetBucketSalt(ctx context.Context, in *GetBucketSaltRequest, opts ...grpc.CallOption) (*GetBucketSaltResponse, error) {
-	out := new(GetBucketSaltResponse)
-	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/GetBucketSalt", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *daemonCtlClient) CheckBucketSaltPassword(ctx context.Context, in *CheckBucketSaltPasswordRequest, opts ...grpc.CallOption) (*CheckBucketSaltPasswordResponse, error) {
-	out := new(CheckBucketSaltPasswordResponse)
-	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/CheckBucketSaltPassword", in, out, opts...)
+func (c *daemonCtlClient) CheckBucketPassword(ctx context.Context, in *CheckBucketPasswordRequest, opts ...grpc.CallOption) (*CheckBucketPasswordResponse, error) {
+	out := new(CheckBucketPasswordResponse)
+	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/CheckBucketPassword", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -301,8 +291,7 @@ type DaemonCtlServer interface {
 	// Bucket operations
 	ListBuckets(context.Context, *ListBucketsRequest) (*ListBucketsResponse, error)
 	MakeBucket(context.Context, *MakeBucketRequest) (*MakeBucketResponse, error)
-	GetBucketSalt(context.Context, *GetBucketSaltRequest) (*GetBucketSaltResponse, error)
-	CheckBucketSaltPassword(context.Context, *CheckBucketSaltPasswordRequest) (*CheckBucketSaltPasswordResponse, error)
+	CheckBucketPassword(context.Context, *CheckBucketPasswordRequest) (*CheckBucketPasswordResponse, error)
 	mustEmbedUnimplementedDaemonCtlServer()
 }
 
@@ -352,11 +341,8 @@ func (UnimplementedDaemonCtlServer) ListBuckets(context.Context, *ListBucketsReq
 func (UnimplementedDaemonCtlServer) MakeBucket(context.Context, *MakeBucketRequest) (*MakeBucketResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MakeBucket not implemented")
 }
-func (UnimplementedDaemonCtlServer) GetBucketSalt(context.Context, *GetBucketSaltRequest) (*GetBucketSaltResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetBucketSalt not implemented")
-}
-func (UnimplementedDaemonCtlServer) CheckBucketSaltPassword(context.Context, *CheckBucketSaltPasswordRequest) (*CheckBucketSaltPasswordResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CheckBucketSaltPassword not implemented")
+func (UnimplementedDaemonCtlServer) CheckBucketPassword(context.Context, *CheckBucketPasswordRequest) (*CheckBucketPasswordResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CheckBucketPassword not implemented")
 }
 func (UnimplementedDaemonCtlServer) mustEmbedUnimplementedDaemonCtlServer() {}
 
@@ -637,38 +623,20 @@ func _DaemonCtl_MakeBucket_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DaemonCtl_GetBucketSalt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetBucketSaltRequest)
+func _DaemonCtl_CheckBucketPassword_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckBucketPasswordRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DaemonCtlServer).GetBucketSalt(ctx, in)
+		return srv.(DaemonCtlServer).CheckBucketPassword(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/rpc.DaemonCtl/GetBucketSalt",
+		FullMethod: "/rpc.DaemonCtl/CheckBucketPassword",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonCtlServer).GetBucketSalt(ctx, req.(*GetBucketSaltRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _DaemonCtl_CheckBucketSaltPassword_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CheckBucketSaltPasswordRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DaemonCtlServer).CheckBucketSaltPassword(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/rpc.DaemonCtl/CheckBucketSaltPassword",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonCtlServer).CheckBucketSaltPassword(ctx, req.(*CheckBucketSaltPasswordRequest))
+		return srv.(DaemonCtlServer).CheckBucketPassword(ctx, req.(*CheckBucketPasswordRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -725,12 +693,8 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _DaemonCtl_MakeBucket_Handler,
 		},
 		{
-			MethodName: "GetBucketSalt",
-			Handler:    _DaemonCtl_GetBucketSalt_Handler,
-		},
-		{
-			MethodName: "CheckBucketSaltPassword",
-			Handler:    _DaemonCtl_CheckBucketSaltPassword_Handler,
+			MethodName: "CheckBucketPassword",
+			Handler:    _DaemonCtl_CheckBucketPassword_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

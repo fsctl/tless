@@ -89,7 +89,7 @@ type SnapshotInfo struct {
 // Used by prune (cmd/prune.go) and autoprune (daemon/timer.go)
 func GetAllSnapshotInfos(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string) (map[string][]SnapshotInfo, error) {
 	// Get the backup:snapshots map with encrypted names
-	encryptedSnapshotsMap, err := objst.GetObjListTopTwoLevels(ctx, bucket, []string{"salt-", "metadata", "chunks"}, []string{"@"})
+	encryptedSnapshotsMap, err := objst.GetObjListTopTwoLevels(ctx, bucket, []string{"metadata", "chunks"}, []string{"@"})
 	if err != nil {
 		log.Println("error: GetAllSnapshotInfos: ", err)
 		return nil, err

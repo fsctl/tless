@@ -46,7 +46,7 @@ a password that never leaves the local machine.`,
 			if encKey == nil {
 				encKey, err = cryptography.DeriveKey(cfgSalt, cfgMasterPassword)
 				if err != nil {
-					log.Fatalf("Could not derive key: %v", err)
+					log.Fatalf("error: could not derive key (salt='%s'): %v", cfgSalt, err)
 				}
 			}
 		},
@@ -67,7 +67,6 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgSecretAccessKey, "access-secret", "s", "", "secret key for your cloud account")
 	rootCmd.PersistentFlags().StringVarP(&cfgBucket, "bucket", "b", "", "name of object store bucket to use")
 	rootCmd.PersistentFlags().StringVarP(&cfgMasterPassword, "master-password", "p", "", "master password known only on your local machine")
-	rootCmd.PersistentFlags().StringVarP(&cfgSalt, "salt", "l", "", "salt used for key derivation from master password")
 	rootCmd.PersistentFlags().BoolVarP(&cfgVerbose, "verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolVarP(&cfgForce, "force", "f", false, "override check that salt and master password match\nwhat was previously used on server")
 	rootCmd.PersistentFlags().BoolVarP(&cfgTrustSelfSignedCerts, "trust-certs", "C", false, "trust a self-signed cert from your cloud provider")
@@ -159,9 +158,6 @@ func configFallbackToTomlFileOrInteractivePrompt() {
 			cfgMasterPassword = promptForMasterPassword()
 		}
 	}
-	if cfgSalt == "" {
-		cfgSalt = viper.GetString("backups.salt")
-	}
 	if len(cfgDirs) == 0 {
 		cfgDirs = viper.GetStringSlice("backups.dirs")
 	}
@@ -199,27 +195,37 @@ func validateConfigVars() error {
 		return fmt.Errorf("master password invalid (value='%s')", cfgMasterPassword)
 	}
 
-	// Check crypto config in salt-xxxx file
-	if !cfgForce {
-		ctx := context.Background()
-		objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
-		if ok, err := objst.IsReachableWithRetries(context.Background(), 10, cfgBucket, nil); !ok {
-			log.Fatalln("error: exiting because server not reachable: ", err)
-		}
-
-		var err error
-		encKey, err = cryptography.DeriveKey(cfgSalt, cfgMasterPassword)
-		if err != nil {
-			log.Fatalf("Could not derive key: %v", err)
-		}
-		if !objst.CheckCryptoConfigMatchesServer(ctx, encKey, cfgBucket, cfgSalt, cfgVerbose) {
-			fmt.Println("Halting because of salt file problem; use --force to override this check")
-			log.Fatalf("halting due to salt file problem")
-		}
+	// Check that cloud is reachable
+	ctx := context.Background()
+	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
+	if ok, err := objst.IsReachableWithRetries(ctx, 4, cfgBucket, nil); !ok {
+		log.Fatalln("error: exiting because server not reachable: ", err)
 	}
+
+	// Download (or create) the salt
+	vlog := util.NewVLog(nil, func() bool { return cfgVerbose })
+	salt, _, err := objst.GetOrCreateBucketMetadata(ctx, cfgBucket, vlog)
+	if err != nil {
+		log.Fatalln("error: could not read or initialize bucket metadata: ", err)
+	}
+	cfgSalt = salt
 	if len(cfgSalt) == 0 {
 		return fmt.Errorf("invalid salt (value='%s')", cfgSalt)
 	}
+
+	// Derive the key
+	encKey, err := cryptography.DeriveKey(cfgSalt, cfgMasterPassword)
+	if err != nil {
+		log.Fatalf("Could not derive key: %v", err)
+	}
+
+	// Verify the key
+	if err = objst.VerifyKeyAndSalt(ctx, cfgBucket, encKey); err != nil {
+		log.Fatalln(err.Error())
+	}
+
+	// Everything is good with crypto parameters
+	vlog.Println("Everything looks good with bucket metadata")
 
 	return nil
 }

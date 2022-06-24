@@ -80,7 +80,7 @@ func GetGroupedSnapshots(ctx context.Context, objst *objstore.ObjStore, key []by
 	ret := make(map[string]BackupDir)
 
 	// get all backup names from cloud (top level paths)
-	topLevelObjs, err := objst.GetObjListTopLevel(ctx, bucket, []string{"salt-", "version", "chunks", "keys"})
+	topLevelObjs, err := objst.GetObjListTopLevel(ctx, bucket, []string{"metadata", "chunks"})
 	if err != nil {
 		log.Println("error: GetGroupedSnapshots: objst.GetObjListTopLevel: ", err)
 		return nil, err

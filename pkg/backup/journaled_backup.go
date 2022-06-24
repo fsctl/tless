@@ -173,7 +173,7 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 	cp := newChunkPacker(ctx, objst, bucket, db, globalsLock, key, vlog)
 	for {
 		// Sleep this go routine briefly on every iteration of the for loop
-		time.Sleep(time.Millisecond * 50)
+		time.Sleep(time.Millisecond * 1)
 
 		// Has cancelation been requested?
 		if checkAndHandleCancelationFunc != nil {

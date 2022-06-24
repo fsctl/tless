@@ -153,19 +153,6 @@ master_password = "`
 
 	template += `"
 
-# This salt has been randomly generated for you; there's no need to change it.
-# The salt does not need to be kept secret. In fact, a backup copy is stored 
-# on the object store server as 'salt-[salt_string]' in the bucket root.
-salt = "`
-
-	if configValues != nil && configValues.Salt != "" {
-		template += configValues.Salt
-	} else {
-		template += GenerateRandomSalt()
-	}
-
-	template += `"
-
 [daemon]
 # This section affects only the daemon.
 verbose = `

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/user"
@@ -10,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/fsctl/tless/pkg/cryptography"
+	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
 	"github.com/spf13/viper"
@@ -23,7 +25,7 @@ var (
 	gKey         []byte
 )
 
-func initConfig(globalsLock *sync.Mutex) {
+func initConfig(globalsLock *sync.Mutex) error {
 	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
 	globalsLock.Lock()
@@ -60,25 +62,67 @@ func initConfig(globalsLock *sync.Mutex) {
 		Bucket:               viper.GetString("objectstore.bucket"),
 		TrustSelfSignedCerts: viper.GetBool("objectstore.trust_self_signed_certs"),
 		MasterPassword:       viper.GetString("backups.master_password"),
-		Salt:                 viper.GetString("backups.salt"),
 		Dirs:                 viper.GetStringSlice("backups.dirs"),
 		ExcludePaths:         viper.GetStringSlice("backups.excludes"),
 		VerboseDaemon:        viper.GetBool("daemon.verbose"),
 	}
 	globalsLock.Unlock()
 
-	// Derive the key and store in gKey
+	// Check that cloud is reachable
 	globalsLock.Lock()
-	salt := gCfg.Salt
+	endpoint := gCfg.Endpoint
+	bucket := gCfg.Bucket
+	accessKeyId := gCfg.AccessKeyId
+	secretAccessKey := gCfg.SecretAccessKey
+	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
+	globalsLock.Unlock()
+	ctx := context.Background()
+	objst := objstore.NewObjStore(ctx, endpoint, accessKeyId, secretAccessKey, trustSelfSignedCerts)
+	if ok, err := objst.IsReachableWithRetries(ctx, 2, bucket, vlog); !ok {
+		msg := fmt.Sprintln("error: cloud server not reachable: ", err)
+		vlog.Println(msg)
+		return fmt.Errorf(msg)
+	}
+
+	// Download (or create) the salt
+	salt, _, err := objst.GetOrCreateBucketMetadata(ctx, bucket, vlog)
+	if err != nil {
+		e := fmt.Errorf("error: could not read or initialize bucket metadata: %v", err)
+		vlog.Println(e.Error())
+		return e
+	}
+	if len(salt) == 0 {
+		e := fmt.Errorf("error: invalid salt (value='%s')", salt)
+		vlog.Println(e.Error())
+		return e
+	}
+	globalsLock.Lock()
+	gCfg.Salt = salt
+	globalsLock.Unlock()
+
+	// Derive the key
+	globalsLock.Lock()
 	masterPassword := gCfg.MasterPassword
 	globalsLock.Unlock()
 	tempKey, err := cryptography.DeriveKey(salt, masterPassword)
 	if err != nil {
-		log.Fatalf("Could not derive key: %v", err)
+		e := fmt.Errorf("error: could not derive key: %v", err)
+		vlog.Println(e.Error())
+		return e
 	}
+
+	// Verify the key
+	if err = objst.VerifyKeyAndSalt(ctx, bucket, tempKey); err != nil {
+		vlog.Println(err.Error())
+		return err
+	}
+
+	// Store key in global
 	globalsLock.Lock()
 	gKey = tempKey
 	globalsLock.Unlock()
+
+	return nil
 }
 
 func makeTemplateConfigFile(username string, userHomeDir string, configValues *util.CfgSettings) {
@@ -173,35 +217,34 @@ func (s *server) WriteToDaemonConfig(ctx context.Context, in *pb.WriteConfigRequ
 			DidSucceed: false,
 			ErrMsg:     "Not ready yet",
 		}, nil
-	} else {
-		vlog.Println("Overwriting old config file settings")
-
-		configToWrite := &util.CfgSettings{
-			Endpoint:             in.GetEndpoint(),
-			AccessKeyId:          in.GetAccessKey(),
-			SecretAccessKey:      in.GetSecretKey(),
-			Bucket:               in.GetBucketName(),
-			TrustSelfSignedCerts: in.GetTrustSelfSignedCerts(),
-			MasterPassword:       in.GetMasterPassword(),
-			Salt:                 in.GetSalt(),
-			Dirs:                 in.GetDirs(),
-			ExcludePaths:         in.GetExcludes(),
-			VerboseDaemon:        in.GetVerbose(),
-		}
-
-		gGlobalsLock.Lock()
-		username := gUsername
-		userHomeDir := gUserHomeDir
-		gGlobalsLock.Unlock()
-
-		makeTemplateConfigFile(username, userHomeDir, configToWrite)
-
-		// read this new config back into daemon
-		initConfig(&gGlobalsLock)
-
-		return &pb.WriteConfigResponse{
-			DidSucceed: true,
-			ErrMsg:     "",
-		}, nil
 	}
+
+	vlog.Println("Overwriting old config file settings")
+
+	configToWrite := &util.CfgSettings{
+		Endpoint:             in.GetEndpoint(),
+		AccessKeyId:          in.GetAccessKey(),
+		SecretAccessKey:      in.GetSecretKey(),
+		Bucket:               in.GetBucketName(),
+		TrustSelfSignedCerts: in.GetTrustSelfSignedCerts(),
+		MasterPassword:       in.GetMasterPassword(),
+		Dirs:                 in.GetDirs(),
+		ExcludePaths:         in.GetExcludes(),
+		VerboseDaemon:        in.GetVerbose(),
+	}
+
+	gGlobalsLock.Lock()
+	username := gUsername
+	userHomeDir := gUserHomeDir
+	gGlobalsLock.Unlock()
+
+	makeTemplateConfigFile(username, userHomeDir, configToWrite)
+
+	// read this new config back into daemon
+	initConfig(&gGlobalsLock)
+
+	return &pb.WriteConfigResponse{
+		DidSucceed: true,
+		ErrMsg:     "",
+	}, nil
 }

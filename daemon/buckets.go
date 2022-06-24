@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"fmt"
 	"log"
 
 	"github.com/fsctl/tless/pkg/cryptography"
@@ -89,115 +88,21 @@ func (s *server) MakeBucket(ctx context.Context, in *pb.MakeBucketRequest) (*pb.
 	}, nil
 }
 
-// Callback for rpc.DaemonCtlServer.GetBucketSalt requests
-func (s *server) GetBucketSalt(ctx context.Context, in *pb.GetBucketSaltRequest) (*pb.GetBucketSaltResponse, error) {
+// Callback for rpc.DaemonCtlServer.CheckBucketPassword requests
+func (s *server) CheckBucketPassword(ctx context.Context, in *pb.CheckBucketPasswordRequest) (*pb.CheckBucketPasswordResponse, error) {
 	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
-	log.Printf(">> GOT COMMAND: GetBucketSalt (%s)", in.GetBucketName())
-	defer log.Println(">> COMPLETED COMMAND: GetBucketSalt")
+	log.Printf(">> GOT COMMAND: CheckBucketPassword (%s)", in.GetBucketName())
+	defer log.Println(">> COMPLETED COMMAND: CheckBucketPassword")
 
 	// Make sure the global config we need is initialized
 	gGlobalsLock.Lock()
 	isGlobalConfigReady := gCfg != nil
 	gGlobalsLock.Unlock()
 	if !isGlobalConfigReady {
-		log.Println("error: GetBucketSalt: global config not yet initialized")
-		return &pb.GetBucketSaltResponse{
-			Result: pb.GetBucketSaltResponse_ERR_OTHER,
-			ErrMsg: "global config not yet initialized",
-			Salt:   "",
-		}, nil
-	}
-
-	gGlobalsLock.Lock()
-	endpoint := gCfg.Endpoint
-	accessKey := gCfg.AccessKeyId
-	secretKey := gCfg.SecretAccessKey
-	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
-	gGlobalsLock.Unlock()
-	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
-
-	// Try to fetch all objects starting with "salt-"
-	m, err := objst.GetObjList(ctx, in.GetBucketName(), "salt-", false, vlog)
-	if err != nil {
-		log.Println("error: GetBucketSalt: GetObjList failed: ", err)
-		return &pb.GetBucketSaltResponse{
-			Result: pb.GetBucketSaltResponse_ERR_OTHER,
-			ErrMsg: err.Error(),
-			Salt:   "",
-		}, nil
-	}
-
-	// Check if there's >1 salt-xxxx file and warn user if so
-	var saltObjName string
-	if len(m) > 1 {
-		for k := range m {
-			msg := fmt.Sprintf("warning: found salt: '%s' in bucket\n", k)
-			if vlog != nil {
-				vlog.Println(msg)
-			} else {
-				log.Println(msg)
-			}
-		}
-		log.Println("warning: there are multiple salt-xxxx files in bucket '$s'; you need to manually delete the wrong one(s)", in.GetBucketName())
-		return &pb.GetBucketSaltResponse{
-			Result: pb.GetBucketSaltResponse_ERR_MULTIPLE_SALTS,
-			ErrMsg: "",
-			Salt:   "",
-		}, nil
-	} else if len(m) == 0 {
-		// There is no salt-xxxx file.
-		return &pb.GetBucketSaltResponse{
-			Result: pb.GetBucketSaltResponse_ERR_NO_SALT,
-			ErrMsg: "",
-			Salt:   "",
-		}, nil
-	} else {
-		// There is only one salt; get its value
-		for k := range m {
-			saltObjName = k
-			if len(saltObjName) < 6 {
-				msg := fmt.Sprintf("error: salt too short (object name '%s')", saltObjName)
-				log.Println(msg)
-				return &pb.GetBucketSaltResponse{
-					Result: pb.GetBucketSaltResponse_ERR_OTHER,
-					ErrMsg: msg,
-					Salt:   "",
-				}, nil
-			}
-			salt := saltObjName[5:]
-			msg := fmt.Sprintf("found salt '%s' in bucket '%s'", salt, in.GetBucketName())
-			vlog.Println(msg)
-			return &pb.GetBucketSaltResponse{
-				Result: pb.GetBucketSaltResponse_SUCCESS,
-				ErrMsg: "",
-				Salt:   salt,
-			}, nil
-		}
-	}
-
-	return &pb.GetBucketSaltResponse{
-		Result: pb.GetBucketSaltResponse_ERR_OTHER,
-		ErrMsg: fmt.Sprintf("unknown error trying to read salt from bucket '%s'", in.GetBucketName()),
-		Salt:   "",
-	}, nil
-}
-
-// Callback for rpc.DaemonCtlServer.CheckBucketSaltPassword requests
-func (s *server) CheckBucketSaltPassword(ctx context.Context, in *pb.CheckBucketSaltPasswordRequest) (*pb.CheckBucketSaltPasswordResponse, error) {
-	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
-
-	log.Printf(">> GOT COMMAND: CheckBucketSaltPassword (%s)", in.GetBucketName())
-	defer log.Println(">> COMPLETED COMMAND: CheckBucketSaltPassword")
-
-	// Make sure the global config we need is initialized
-	gGlobalsLock.Lock()
-	isGlobalConfigReady := gCfg != nil
-	gGlobalsLock.Unlock()
-	if !isGlobalConfigReady {
-		log.Println("error: CheckBucketSaltPassword: global config not yet initialized")
-		return &pb.CheckBucketSaltPasswordResponse{
-			Result: pb.CheckBucketSaltPasswordResponse_ERR_OTHER,
+		log.Println("error: CheckBucketPassword: global config not yet initialized")
+		return &pb.CheckBucketPasswordResponse{
+			Result: pb.CheckBucketPasswordResponse_ERR_OTHER,
 			ErrMsg: "global config not yet initialized",
 		}, nil
 	}
@@ -210,56 +115,38 @@ func (s *server) CheckBucketSaltPassword(ctx context.Context, in *pb.CheckBucket
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
-	// Check if a salt-xxxx file exists at all
-	m, err := objst.GetObjList(ctx, in.GetBucketName(), "salt-", false, vlog)
+	// Check if a metadata file with salt exists and retrieve it
+	salt, _, err := objst.GetOrCreateBucketMetadata(ctx, in.GetBucketName(), vlog)
 	if err != nil {
-		log.Println("error: GetBucketSalt: GetObjList failed: ", err)
-		return &pb.CheckBucketSaltPasswordResponse{
-			Result: pb.CheckBucketSaltPasswordResponse_ERR_OTHER,
-			ErrMsg: err.Error(),
-		}, nil
-	}
-	if len(m) != 1 {
-		return &pb.CheckBucketSaltPasswordResponse{
-			Result: pb.CheckBucketSaltPasswordResponse_ERR_NO_SALT,
-			ErrMsg: "",
-		}, nil
-	}
-
-	// Try to fetch "salt-" + input salt file
-	saltObjName := "salt-" + in.GetSalt()
-	saltFileContents, err := objst.DownloadObjToBuffer(ctx, in.GetBucketName(), saltObjName)
-	if err != nil {
-		log.Printf("error: CheckBucketSaltPassword: could not download '%s': %v", saltObjName, err)
-		return &pb.CheckBucketSaltPasswordResponse{
-			Result: pb.CheckBucketSaltPasswordResponse_ERR_SALT_WRONG,
+		log.Println("error: CheckBucketPassword: GetOrCreateBucketMetadata failed: ", err)
+		return &pb.CheckBucketPasswordResponse{
+			Result: pb.CheckBucketPasswordResponse_ERR_OTHER,
 			ErrMsg: err.Error(),
 		}, nil
 	}
 
 	// Derive the key
-	key, err := cryptography.DeriveKey(in.GetSalt(), in.GetPassword())
+	key, err := cryptography.DeriveKey(salt, in.GetPassword())
 	if err != nil {
-		log.Println("error: CheckBucketSaltPassword: DeriveKey failed: ", err)
-		return &pb.CheckBucketSaltPasswordResponse{
-			Result: pb.CheckBucketSaltPasswordResponse_ERR_OTHER,
+		log.Println("error: CheckBucketPassword: DeriveKey failed: ", err)
+		return &pb.CheckBucketPasswordResponse{
+			Result: pb.CheckBucketPasswordResponse_ERR_OTHER,
 			ErrMsg: err.Error(),
 		}, nil
 	}
 
-	// Try to decrypt the salt file just downloaded
-	_, err = cryptography.DecryptBuffer(key, saltFileContents)
-	if err != nil {
-		log.Println("error: CheckBucketSaltPassword: DecryptBuffer failed: ", err)
-		return &pb.CheckBucketSaltPasswordResponse{
-			Result: pb.CheckBucketSaltPasswordResponse_ERR_PASSWORD_WRONG,
+	// Verify the key by trying to decrypt some filename in bucket
+	if err = objst.VerifyKeyAndSalt(ctx, in.GetBucketName(), key); err != nil {
+		log.Println("error: CheckBucketPassword: VerifyKeyAndSalt failed: ", err)
+		return &pb.CheckBucketPasswordResponse{
+			Result: pb.CheckBucketPasswordResponse_ERR_PASSWORD_WRONG,
 			ErrMsg: err.Error(),
 		}, nil
 	}
 
-	// Otherwise, we have the right Bucket/Salt/Password combination
-	return &pb.CheckBucketSaltPasswordResponse{
-		Result: pb.CheckBucketSaltPasswordResponse_SUCCESS,
+	// Otherwise, we have the right Bucket/Password combination
+	return &pb.CheckBucketPasswordResponse{
+		Result: pb.CheckBucketPasswordResponse_SUCCESS,
 		ErrMsg: "",
 	}, nil
 }

@@ -38,8 +38,7 @@ service DaemonCtl {
   // Bucket operations
   rpc ListBuckets (ListBucketsRequest) returns (ListBucketsResponse) {}
   rpc MakeBucket (MakeBucketRequest) returns (MakeBucketResponse) {}
-  rpc GetBucketSalt (GetBucketSaltRequest) returns (GetBucketSaltResponse) {}
-  rpc CheckBucketSaltPassword (CheckBucketSaltPasswordRequest) returns (CheckBucketSaltPasswordResponse) {}
+  rpc CheckBucketPassword (CheckBucketPasswordRequest) returns (CheckBucketPasswordResponse) {}
 }
 
 message HelloRequest {
@@ -110,10 +109,9 @@ message WriteConfigRequest {
   string BucketName = 4;
   bool TrustSelfSignedCerts = 5;
   string MasterPassword = 6;
-  string Salt = 7;
-  repeated string Dirs = 8;
-  repeated string Excludes = 9;
-  bool Verbose = 10;
+  repeated string Dirs = 7;
+  repeated string Excludes = 8;
+  bool Verbose = 9;
 }
 
 message WriteConfigResponse {
@@ -199,36 +197,17 @@ message MakeBucketResponse {
   string ErrMsg = 2;
 }
 
-message GetBucketSaltRequest {
+message CheckBucketPasswordRequest {
   string BucketName = 1;
+  string Password = 2;
 }
 
-message GetBucketSaltResponse {
-  enum GetBucketSaltResult {
+message CheckBucketPasswordResponse {
+  enum CheckBucketPasswordResult {
     SUCCESS = 0;
-    ERR_NO_SALT = 1;
-    ERR_MULTIPLE_SALTS = 2;
-    ERR_OTHER = 3;
+    ERR_PASSWORD_WRONG = 1;
+    ERR_OTHER = 2;
   }
-  GetBucketSaltResult Result = 1;
-  string ErrMsg = 2;
-  string Salt = 3;
-}
-
-message CheckBucketSaltPasswordRequest {
-  string BucketName = 1;
-  string Salt = 2;
-  string Password = 3;
-}
-
-message CheckBucketSaltPasswordResponse {
-  enum CheckBucketSaltPasswordResult {
-    SUCCESS = 0;
-    ERR_NO_SALT = 1;
-    ERR_SALT_WRONG = 2;
-    ERR_PASSWORD_WRONG = 3;
-    ERR_OTHER = 4;
-  }
-  CheckBucketSaltPasswordResult Result = 1;
+  CheckBucketPasswordResult Result = 1;
   string ErrMsg = 2;
 }
