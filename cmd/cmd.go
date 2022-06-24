@@ -46,7 +46,10 @@ a password that never leaves the local machine.`,
 			if encKey == nil {
 				encKey, err = cryptography.DeriveKey(cfgSalt, cfgMasterPassword)
 				if err != nil {
-					log.Fatalf("error: could not derive key (salt='%s'): %v", cfgSalt, err)
+					msg := fmt.Sprintf("error: could not derive key (salt='%s'): %v", cfgSalt, err)
+					if !cfgForce {
+						log.Fatalf(msg)
+					}
 				}
 			}
 		},
@@ -102,7 +105,10 @@ func initConfig() {
 	// Read viper for any cfg variables not already overridden by CLI args
 	configFallbackToTomlFileOrInteractivePrompt()
 	if err := validateConfigVars(); err != nil {
-		log.Fatalf("Error validating config: %v", err)
+		log.Printf("Error validating config: %v", err)
+		if !cfgForce {
+			log.Fatalln("Giving up; use --force to try to proceed anyway")
+		}
 	}
 }
 
@@ -206,7 +212,7 @@ func validateConfigVars() error {
 	// Download (or create) the salt
 	salt, _, err := objst.GetOrCreateBucketMetadata(ctx, cfgBucket, vlog)
 	if err != nil {
-		log.Fatalln("error: could not read or initialize bucket metadata: ", err)
+		log.Println("error: could not read or initialize bucket metadata: ", err)
 	}
 	cfgSalt = salt
 	if len(cfgSalt) == 0 {
