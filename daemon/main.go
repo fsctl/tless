@@ -132,7 +132,7 @@ func DaemonMain() {
 		if err != nil {
 			log.Fatalf("failed to listen: %v", err)
 		}
-		err = os.Chmod(unixSocketPath, 0777)
+		err = os.Chmod(unixSocketPath, 0600)
 		if err != nil {
 			log.Fatalf("failed to chmod the socket: %v", err)
 		}
