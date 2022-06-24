@@ -23,7 +23,7 @@ func main() {
 	} else if len(os.Args) == 2 && (os.Args[1] == "daemon" || os.Args[1] == "-d") {
 		// We also trap 'daemon'/'-d' out here because daemon mode bypasses all the viper/cobra
 		// and toml config stuff because in this mode we receive all our input on a grpc unix socket.
-		daemon.DaemonMain()
+		daemon.DaemonMain(Version, CommitHash)
 	} else {
 		cmd.Execute()
 	}

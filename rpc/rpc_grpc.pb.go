@@ -25,6 +25,8 @@ type DaemonCtlClient interface {
 	// Sends the console user's username+homedir to establish connectivity
 	// and initialize the daemon with correct config.toml path
 	Hello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResponse, error)
+	// Provides daemon version
+	Version(ctx context.Context, in *VersionRequest, opts ...grpc.CallOption) (*VersionResponse, error)
 	// Gets the status of the daemon
 	Status(ctx context.Context, in *DaemonStatusRequest, opts ...grpc.CallOption) (*DaemonStatusResponse, error)
 	// Commands daemon to check connection to object store and report back
@@ -60,6 +62,15 @@ func NewDaemonCtlClient(cc grpc.ClientConnInterface) DaemonCtlClient {
 func (c *daemonCtlClient) Hello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResponse, error) {
 	out := new(HelloResponse)
 	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/Hello", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonCtlClient) Version(ctx context.Context, in *VersionRequest, opts ...grpc.CallOption) (*VersionResponse, error) {
+	out := new(VersionResponse)
+	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/Version", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -270,6 +281,8 @@ type DaemonCtlServer interface {
 	// Sends the console user's username+homedir to establish connectivity
 	// and initialize the daemon with correct config.toml path
 	Hello(context.Context, *HelloRequest) (*HelloResponse, error)
+	// Provides daemon version
+	Version(context.Context, *VersionRequest) (*VersionResponse, error)
 	// Gets the status of the daemon
 	Status(context.Context, *DaemonStatusRequest) (*DaemonStatusResponse, error)
 	// Commands daemon to check connection to object store and report back
@@ -301,6 +314,9 @@ type UnimplementedDaemonCtlServer struct {
 
 func (UnimplementedDaemonCtlServer) Hello(context.Context, *HelloRequest) (*HelloResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Hello not implemented")
+}
+func (UnimplementedDaemonCtlServer) Version(context.Context, *VersionRequest) (*VersionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
 }
 func (UnimplementedDaemonCtlServer) Status(context.Context, *DaemonStatusRequest) (*DaemonStatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Status not implemented")
@@ -371,6 +387,24 @@ func _DaemonCtl_Hello_Handler(srv interface{}, ctx context.Context, dec func(int
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaemonCtlServer).Hello(ctx, req.(*HelloRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonCtl_Version_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(VersionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonCtlServer).Version(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/rpc.DaemonCtl/Version",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonCtlServer).Version(ctx, req.(*VersionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -651,6 +685,10 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Hello",
 			Handler:    _DaemonCtl_Hello_Handler,
+		},
+		{
+			MethodName: "Version",
+			Handler:    _DaemonCtl_Version_Handler,
 		},
 		{
 			MethodName: "Status",

@@ -25,6 +25,8 @@ const (
 )
 
 var (
+	gConstVersion    string // not protected by lock
+	gConstCommitHash string // not protected by lock
 	gGlobalsLock     sync.Mutex
 	gDb              *database.DB
 	gCancelRequested bool
@@ -115,7 +117,11 @@ func initDbConn(globalsLock *sync.Mutex) {
 	globalsLock.Unlock()
 }
 
-func DaemonMain() {
+func DaemonMain(version string, commitHash string) {
+	// Save the program version in global "constants"
+	gConstVersion = version
+	gConstCommitHash = commitHash
+
 	// clean up old socket file from any preceding unclean shutdown
 	err := os.Remove(unixSocketPath)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {

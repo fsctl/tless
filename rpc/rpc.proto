@@ -10,6 +10,9 @@ service DaemonCtl {
   // and initialize the daemon with correct config.toml path
   rpc Hello (HelloRequest) returns (HelloResponse) {}
 
+  // Provides daemon version
+  rpc Version (VersionRequest) returns (VersionResponse) {}
+
   // Gets the status of the daemon
   rpc Status (DaemonStatusRequest) returns (DaemonStatusResponse) {}
 
@@ -49,6 +52,13 @@ message HelloRequest {
 message HelloResponse {
   bool DidSucceed = 1;
   string ErrMsg = 2;
+}
+
+message VersionRequest {}
+
+message VersionResponse {
+  string Version = 1;
+  string CommitHash = 2;
 }
 
 message DaemonStatusRequest {}
