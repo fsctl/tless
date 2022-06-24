@@ -115,7 +115,7 @@ func init() {
 
 func checkConnMain() {
 	objst := objstore.NewObjStore(context.Background(), cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
-	if ok, err := objst.IsReachableWithRetries(context.Background(), 10, cfgBucket, nil); !ok {
+	if ok, err := objst.IsReachable(context.Background(), cfgBucket, nil); !ok {
 		fmt.Println("connectivity check failed: are your settings correct in config.toml? error: ", err)
 	} else {
 		fmt.Println("connectivity check successful")

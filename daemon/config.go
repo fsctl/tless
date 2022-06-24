@@ -78,9 +78,8 @@ func initConfig(globalsLock *sync.Mutex) error {
 	globalsLock.Unlock()
 	ctx := context.Background()
 	objst := objstore.NewObjStore(ctx, endpoint, accessKeyId, secretAccessKey, trustSelfSignedCerts)
-	if ok, err := objst.IsReachableWithRetries(ctx, 2, bucket, vlog); !ok {
+	if ok, err := objst.IsReachable(ctx, bucket, vlog); !ok {
 		msg := fmt.Sprintln("error: cloud server not reachable: ", err)
-		vlog.Println(msg)
 		return fmt.Errorf(msg)
 	}
 

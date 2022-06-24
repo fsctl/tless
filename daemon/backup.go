@@ -89,8 +89,8 @@ func Backup(vlog *util.VLog, completion func()) {
 	bucket := gCfg.Bucket
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
-	if ok, err := objst.IsReachableWithRetries(ctx, 10, bucket, vlog); !ok {
-		log.Println("error: exiting because server not reachable: ", err)
+	if ok, err := objst.IsReachable(ctx, bucket, vlog); !ok {
+		log.Println("error: cloud server not reachable: ", err)
 		gGlobalsLock.Lock()
 		gStatus.state = Idle
 		gStatus.percentage = -1.0
@@ -163,8 +163,8 @@ func replayBackupJournal() {
 	db := gDb
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
-	if ok, err := objst.IsReachableWithRetries(ctx, 10, bucket, vlog); !ok {
-		log.Println("error: exiting because server not reachable: ", err)
+	if ok, err := objst.IsReachable(ctx, bucket, vlog); !ok {
+		log.Println("error: cloud server not reachable: ", err)
 		gGlobalsLock.Lock()
 		gStatus.state = Idle
 		gStatus.percentage = -1.0

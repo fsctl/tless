@@ -11,6 +11,8 @@ import (
 
 // Callback for rpc.DaemonCtlServer.CheckConn requests
 func (s *server) CheckConn(ctx context.Context, in *pb.CheckConnRequest) (*pb.CheckConnResponse, error) {
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
+
 	log.Println(">> GOT COMMAND: CheckConn")
 	defer log.Println(">> COMPLETED COMMAND: CheckConn")
 
@@ -44,7 +46,7 @@ func (s *server) CheckConn(ctx context.Context, in *pb.CheckConnRequest) (*pb.Ch
 		_, err = objst.ListBuckets(context.Background())
 		isSuccessful = err == nil
 	} else {
-		isSuccessful, err = objst.IsReachableWithRetries(context.Background(), 3, in.GetBucketName(), nil)
+		isSuccessful, _ = objst.IsReachable(context.Background(), in.GetBucketName(), vlog)
 	}
 
 	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
@@ -63,7 +65,7 @@ func (s *server) CheckConn(ctx context.Context, in *pb.CheckConnRequest) (*pb.Ch
 		log.Println("CheckConn failed")
 		return &pb.CheckConnResponse{
 			Result:   pb.CheckConnResponse_ERROR,
-			ErrorMsg: err.Error(),
+			ErrorMsg: "cloud server is not reachable",
 		}, nil
 	}
 }

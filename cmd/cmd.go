@@ -196,14 +196,14 @@ func validateConfigVars() error {
 	}
 
 	// Check that cloud is reachable
+	vlog := util.NewVLog(nil, func() bool { return cfgVerbose })
 	ctx := context.Background()
 	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
-	if ok, err := objst.IsReachableWithRetries(ctx, 4, cfgBucket, nil); !ok {
+	if ok, err := objst.IsReachable(ctx, cfgBucket, vlog); !ok {
 		log.Fatalln("error: exiting because server not reachable: ", err)
 	}
 
 	// Download (or create) the salt
-	vlog := util.NewVLog(nil, func() bool { return cfgVerbose })
 	salt, _, err := objst.GetOrCreateBucketMetadata(ctx, cfgBucket, vlog)
 	if err != nil {
 		log.Fatalln("error: could not read or initialize bucket metadata: ", err)

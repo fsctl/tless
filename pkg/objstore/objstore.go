@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/fsctl/tless/pkg/util"
 	"github.com/minio/minio-go/v7"
@@ -51,25 +50,14 @@ func NewObjStore(ctx context.Context, endpoint string, accessKeyId string, secre
 	}
 }
 
-func (os *ObjStore) IsReachableWithRetries(ctx context.Context, maxWaitSeconds int, bucket string, vlog *util.VLog) (bool, error) {
-	waitSeconds := 1
+func (os *ObjStore) IsReachable(ctx context.Context, bucket string, vlog *util.VLog) (bool, error) {
 	var err error
-	for waitSeconds < maxWaitSeconds {
-		if _, err = os.GetObjList(ctx, bucket, "doesnotexist", false, vlog); err != nil {
-			if vlog == nil {
-				log.Printf("warning: server unreachable: %v\n", err)
-				log.Printf("trying again in %d seconds...\n", waitSeconds)
-			} else {
-				vlog.Printf("warning: server unreachable: %v\n", err)
-				vlog.Printf("trying again in %d seconds...\n", waitSeconds)
-			}
-			time.Sleep(time.Duration(waitSeconds * 1e9))
-			waitSeconds *= 2
-		} else {
-			return true, nil
-		}
+	_, err = os.GetObjList(ctx, bucket, "doesnotexist", false, vlog)
+	if err != nil {
+		return false, nil
+	} else {
+		return true, nil
 	}
-	return false, err
 }
 
 func (os *ObjStore) UploadObjFromBuffer(ctx context.Context, bucket string, objectName string, buffer []byte, expectedETag string) error {
