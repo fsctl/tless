@@ -101,7 +101,7 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 
 	// Filter the rel paths we want to restore
 	selectedRelPaths := []string{cfgPartialRestore}
-	mRelPathsObjsMap := backup.FilterRelPaths(snapshotObj, selectedRelPaths)
+	mRelPathsObjsMap := backup.FilterRelPaths(snapshotObj, nil, selectedRelPaths)
 
 	// create the progress bar
 	var progressBarTotalItems int

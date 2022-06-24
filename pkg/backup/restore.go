@@ -206,14 +206,26 @@ func isNonceOneMoreThanPrev(nonce []byte, prevNonce []byte) bool {
 	return z.Cmp(y) == 0
 }
 
-// Filters the relpaths in snapshotObj by checking whether they match any prefix in selectedRelPathPrefixes.
-// If selectedRelPathPrefixes is nil or an empty slice, we just accept everything.
-func FilterRelPaths(snapshotObj *snapshots.Snapshot, selectedRelPathPrefixes []string) map[string]snapshots.CloudRelPath {
+// Filters the relpaths in snapshotObj returning every matching rel path.
+// If specificRelPaths is non-nil, only returns rel paths that match exactly an element in the
+// specificRelPaths slice.
+// If specificRelPaths is nil, but selectedRelPathPrefixes is non-nil, returns every rel path that
+// matches any prefix in selectedRelPathPrefixes.
+// If both are nil or empty slices, we just return everything.
+func FilterRelPaths(snapshotObj *snapshots.Snapshot, specificRelPaths []string, selectedRelPathPrefixes []string) map[string]snapshots.CloudRelPath {
 	ret := make(map[string]snapshots.CloudRelPath)
 	for relPath := range snapshotObj.RelPaths {
-		if len(selectedRelPathPrefixes) == 0 {
+		if len(specificRelPaths) == 0 && len(selectedRelPathPrefixes) == 0 {
+			// accept everything
 			ret[relPath] = snapshotObj.RelPaths[relPath]
-		} else {
+		} else if len(specificRelPaths) > 0 {
+			for _, srp := range specificRelPaths {
+				if relPath == srp {
+					// accept it because it matched exactly an element in specific rel paths
+					ret[relPath] = snapshotObj.RelPaths[relPath]
+				}
+			}
+		} else if len(selectedRelPathPrefixes) > 0 {
 			for _, prefix := range selectedRelPathPrefixes {
 				if strings.HasPrefix(relPath, prefix) {
 					ret[relPath] = snapshotObj.RelPaths[relPath]

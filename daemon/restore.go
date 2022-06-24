@@ -167,7 +167,7 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 	}
 
 	// Filter the rel paths we want to restore
-	mRelPathsObjsMap := backup.FilterRelPaths(snapshotObj, selectedRelPaths)
+	mRelPathsObjsMap := backup.FilterRelPaths(snapshotObj, selectedRelPaths, nil)
 	totalItems := len(mRelPathsObjsMap)
 	doneItems := 0
 	vlog.Printf("RESTORE: have %d items to restore", totalItems)
