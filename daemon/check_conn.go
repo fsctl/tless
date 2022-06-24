@@ -41,12 +41,19 @@ func (s *server) CheckConn(ctx context.Context, in *pb.CheckConnRequest) (*pb.Ch
 	log.Printf("    TrustSelfSignedCerts: '%v'\n", in.GetTrustSelfSignedCerts())
 	objst := objstore.NewObjStore(ctx, in.GetEndpoint(), in.GetAccessKey(), in.GetSecretKey(), in.GetTrustSelfSignedCerts())
 	var isSuccessful bool
+	var errMsg string = ""
 	var err error
 	if in.GetBucketName() == "" {
 		_, err = objst.ListBuckets(context.Background())
 		isSuccessful = err == nil
+		if err != nil {
+			errMsg = err.Error()
+		}
 	} else {
-		isSuccessful, _ = objst.IsReachable(context.Background(), in.GetBucketName(), vlog)
+		isSuccessful, err = objst.IsReachable(context.Background(), in.GetBucketName(), vlog)
+		if err != nil {
+			errMsg = err.Error()
+		}
 	}
 
 	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
@@ -65,7 +72,7 @@ func (s *server) CheckConn(ctx context.Context, in *pb.CheckConnRequest) (*pb.Ch
 		log.Println("CheckConn failed")
 		return &pb.CheckConnResponse{
 			Result:   pb.CheckConnResponse_ERROR,
-			ErrorMsg: "cloud server is not reachable",
+			ErrorMsg: errMsg,
 		}, nil
 	}
 }

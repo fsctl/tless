@@ -191,30 +191,13 @@ func (db *DB) CompleteBackupJournalTask(backupJournalTask *BackupJournalTask, in
 	}
 }
 
-// Double-checks that all journal items are complete and if so then deletes all journal rows.
+// Deletes all journal rows
 func (db *DB) CompleteBackupJournal() error {
-	// Get count of finished and total. Make sure all tasks are finished.
-	totalCount, err := db.getCountTotalBackupJournal()
-	if err != nil {
+	if err := db.deleteAllRowsBackupJournal(); err != nil {
+		log.Printf("error: CompleteBackupJournal: db.deleteAllRowsBackupJournal: %v", err)
 		return err
-	}
-	finishedCount, err := db.getCountFinishedBackupJournal()
-	if err != nil {
-		return err
-	}
-
-	// delete all rows or return ErrJournalHasUnfinishedTasks if a mistake was made in calling
-	// this function
-	if finishedCount >= totalCount {
-		if err = db.deleteAllRowsBackupJournal(); err != nil {
-			log.Printf("error: CompleteBackupJournal: %v", err)
-			return err
-		} else {
-			return nil
-		}
 	} else {
-		log.Printf("error: CompleteBackupJournal: cannot complete the journal because it still has unfinished tasks")
-		return ErrJournalHasUnfinishedTasks
+		return nil
 	}
 }
 

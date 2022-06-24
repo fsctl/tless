@@ -54,7 +54,7 @@ func (os *ObjStore) IsReachable(ctx context.Context, bucket string, vlog *util.V
 	var err error
 	_, err = os.GetObjList(ctx, bucket, "doesnotexist", false, vlog)
 	if err != nil {
-		return false, nil
+		return false, err
 	} else {
 		return true, nil
 	}
