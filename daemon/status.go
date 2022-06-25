@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fsctl/tless/pkg/fstraverse"
 	pb "github.com/fsctl/tless/rpc"
 )
 
@@ -20,16 +21,18 @@ const (
 )
 
 type Status struct {
-	state      state
-	msg        string
-	percentage float32
+	state          state
+	msg            string
+	percentage     float32
+	reportedErrors []fstraverse.SeriousError
 }
 
 var (
 	gStatus = &Status{
-		state:      Idle,
-		msg:        "",
-		percentage: -1.0,
+		state:          Idle,
+		msg:            "",
+		percentage:     -1.0,
+		reportedErrors: make([]fstraverse.SeriousError, 0),
 	}
 )
 
@@ -44,45 +47,67 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 	if isNeedingHello {
 		log.Println(">> Status: we responded that we need a Hello")
 		return &pb.DaemonStatusResponse{
-			Status:     pb.DaemonStatusResponse_NEED_HELLO,
-			Msg:        "",
-			Percentage: 0}, nil
+			Status:         pb.DaemonStatusResponse_NEED_HELLO,
+			Msg:            "",
+			Percentage:     0,
+			ReportedErrors: nil}, nil
 	}
 
 	// Normal status responses
 	gGlobalsLock.Lock()
 	defer gGlobalsLock.Unlock()
+
+	// move the reported errors over to the return pb struct and clear them here
+	pbReportedErrors := make([]*pb.ReportedError, 0)
+	for _, e := range gStatus.reportedErrors {
+		switch e.Kind {
+		case fstraverse.OP_NOT_PERMITTED:
+			pbReportedErrors = append(pbReportedErrors, &pb.ReportedError{
+				Kind:  pb.ReportedError_OperationNotPermitted,
+				Path:  e.Path,
+				IsDir: e.IsDir,
+			})
+		}
+	}
+	gStatus.reportedErrors = make([]fstraverse.SeriousError, 0)
+
 	if gStatus.state == Idle {
 		return &pb.DaemonStatusResponse{
-			Status:     pb.DaemonStatusResponse_IDLE,
-			Msg:        gStatus.msg,
-			Percentage: gStatus.percentage}, nil
+			Status:         pb.DaemonStatusResponse_IDLE,
+			Msg:            gStatus.msg,
+			Percentage:     gStatus.percentage,
+			ReportedErrors: pbReportedErrors}, nil
 	} else if gStatus.state == CheckingConn {
 		return &pb.DaemonStatusResponse{
-			Status:     pb.DaemonStatusResponse_CHECKING_CONN,
-			Msg:        gStatus.msg,
-			Percentage: gStatus.percentage}, nil
+			Status:         pb.DaemonStatusResponse_CHECKING_CONN,
+			Msg:            gStatus.msg,
+			Percentage:     gStatus.percentage,
+			ReportedErrors: pbReportedErrors}, nil
 	} else if gStatus.state == BackingUp {
 		return &pb.DaemonStatusResponse{
-			Status:     pb.DaemonStatusResponse_BACKING_UP,
-			Msg:        gStatus.msg,
-			Percentage: gStatus.percentage}, nil
+			Status:         pb.DaemonStatusResponse_BACKING_UP,
+			Msg:            gStatus.msg,
+			Percentage:     gStatus.percentage,
+			ReportedErrors: pbReportedErrors}, nil
 	} else if gStatus.state == Restoring {
 		return &pb.DaemonStatusResponse{
-			Status:     pb.DaemonStatusResponse_RESTORING,
-			Msg:        gStatus.msg,
-			Percentage: gStatus.percentage}, nil
+			Status:         pb.DaemonStatusResponse_RESTORING,
+			Msg:            gStatus.msg,
+			Percentage:     gStatus.percentage,
+			ReportedErrors: pbReportedErrors}, nil
 	} else if gStatus.state == CleaningUp {
 		return &pb.DaemonStatusResponse{
-			Status:     pb.DaemonStatusResponse_CLEANING_UP,
-			Msg:        gStatus.msg,
-			Percentage: gStatus.percentage}, nil
+			Status:         pb.DaemonStatusResponse_CLEANING_UP,
+			Msg:            gStatus.msg,
+			Percentage:     gStatus.percentage,
+			ReportedErrors: pbReportedErrors}, nil
 	} else {
 		// We need a default return
 		return &pb.DaemonStatusResponse{
-			Status:     pb.DaemonStatusResponse_IDLE,
-			Msg:        gStatus.msg,
-			Percentage: gStatus.percentage}, nil
+			Status:         pb.DaemonStatusResponse_IDLE,
+			Msg:            gStatus.msg,
+			Percentage:     gStatus.percentage,
+			ReportedErrors: pbReportedErrors}, nil
 	}
 }
 

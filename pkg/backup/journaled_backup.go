@@ -23,7 +23,7 @@ type UpdateProgressFuncType func(finished int64, total int64, globalsLock *sync.
 type SetReplayInitialProgressFuncType func(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog)
 type SetBackupInitialProgressFuncType func(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog)
 
-func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, excludePaths []string, vlog *util.VLog, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, setBackupInitialProgressFunc SetBackupInitialProgressFuncType, updateBackupProgressFunc UpdateProgressFuncType) (breakFromLoop bool, continueLoop bool, fatalError bool) {
+func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, excludePaths []string, vlog *util.VLog, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, setBackupInitialProgressFunc SetBackupInitialProgressFuncType, updateBackupProgressFunc UpdateProgressFuncType) (seriousTraversalErrors []fstraverse.SeriousError, breakFromLoop bool, continueLoop bool, fatalError bool) {
 	// Return values
 	breakFromLoop = false
 	continueLoop = false
@@ -40,7 +40,7 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 		return
 	}
 	var backupIdsQueue fstraverse.BackupIdsQueue
-	fstraverse.Traverse(backupDirPath, prevPaths, db, globalsLock, &backupIdsQueue, excludePaths)
+	seriousTraversalErrors, _ = fstraverse.Traverse(backupDirPath, prevPaths, db, globalsLock, &backupIdsQueue, excludePaths)
 
 	// Iterate over the queue of dirent id's inserting them into journal
 	util.LockIf(globalsLock)

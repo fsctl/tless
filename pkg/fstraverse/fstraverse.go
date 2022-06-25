@@ -46,11 +46,25 @@ type dirEntryInsert struct {
 	lastBackupUnixtime int64
 }
 
-func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLock *sync.Mutex, backupIdsQueue *BackupIdsQueue, excludePathPrefixes []string) error {
+type SeriousErrorKind int64
+
+const (
+	OP_NOT_PERMITTED SeriousErrorKind = 1
+)
+
+type SeriousError struct {
+	Kind  SeriousErrorKind
+	Path  string
+	IsDir bool
+}
+
+func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLock *sync.Mutex, backupIdsQueue *BackupIdsQueue, excludePathPrefixes []string) ([]SeriousError, error) {
 	rootPath = util.StripTrailingSlashes(rootPath)
 	rootDirName := filepath.Base(rootPath)
 
 	pendingDirEntryInserts := make([]dirEntryInsert, 0, 10000)
+
+	seriousErrors := make([]SeriousError, 0)
 
 	// For sizes histogram, count, mean and median
 	fileSizesMb := make([]float64, 0)
@@ -59,7 +73,22 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 
 	err := filepath.WalkDir(rootPath, func(path string, dirent fs.DirEntry, err error) error {
 		if err != nil {
-			log.Printf("error: WalkDirFunc: %v", err)
+			log.Println("error: WalkDirFunc: ", err)
+
+			// We can get here in two ways:
+			// 1. This is a dir and readdirnames failed on it, in which case dirent is set to describe this dir (at path).
+			// 2. This is any directory entry and os.Lstat failed on it, in which case err is set to Lstat's error.
+			// We're mainly concerned with whole directories we can't traverse, so we'll look for signs of that and if so
+			// queue it as a serious error to report to the user at the end.
+
+			if dirent.IsDir() && strings.Contains(err.Error(), "operation not permitted") {
+				seriousErrors = append(seriousErrors, SeriousError{
+					Kind:  OP_NOT_PERMITTED,
+					Path:  path,
+					IsDir: true,
+				})
+			}
+
 			return fs.SkipDir
 		}
 		if isInExcludePathPrefixes(path, excludePathPrefixes) {
@@ -140,7 +169,7 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 		return nil
 	})
 	if err != nil {
-		log.Fatalf("Error in Traverse: %v\n", err)
+		log.Printf("error: during traverse: %v\n", err)
 	}
 
 	// Do all the dir entry inserts, get the ids and enqueue them for backup
@@ -180,7 +209,7 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 	//log.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 	// end - summary statistics
 
-	return nil
+	return seriousErrors, nil
 }
 
 func isInExcludePathPrefixes(path string, excludePathPrefixes []string) bool {

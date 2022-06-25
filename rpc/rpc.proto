@@ -63,6 +63,15 @@ message VersionResponse {
 
 message DaemonStatusRequest {}
 
+message ReportedError {
+  enum ReportedErrorKind {
+    OperationNotPermitted = 0;
+  }
+  ReportedErrorKind Kind = 1;
+  string Path = 2;
+  bool IsDir = 3;
+}
+
 message DaemonStatusResponse {
   enum State {
     IDLE = 0;
@@ -72,9 +81,11 @@ message DaemonStatusResponse {
     NEED_HELLO = 4;
     CLEANING_UP = 5;
   }
+
   State status = 1;
   string msg = 2;
   float percentage = 3;
+  repeated ReportedError reportedErrors = 4;
 }
 
 message CheckConnRequest {
