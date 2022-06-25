@@ -46,10 +46,10 @@ func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRespo
 	gUsername = in.GetUsername()
 	gUserHomeDir = in.GetUserHomeDir()
 	gGlobalsLock.Unlock()
+	initDbConn(&gGlobalsLock)
 	if err := initConfig(&gGlobalsLock); err != nil {
 		return &pb.HelloResponse{DidSucceed: false, ErrMsg: err.Error()}, nil
 	}
-	initDbConn(&gGlobalsLock)
 
 	// Replay dirty journals
 	go func() {
