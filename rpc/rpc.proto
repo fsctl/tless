@@ -70,6 +70,7 @@ message ReportedError {
   ReportedErrorKind Kind = 1;
   string Path = 2;
   bool IsDir = 3;
+  int64 Datetime = 4;
 }
 
 message DaemonStatusResponse {

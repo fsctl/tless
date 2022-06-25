@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aybabtme/uniplot/histogram"
 	"golang.org/x/text/language"
@@ -53,9 +54,10 @@ const (
 )
 
 type SeriousError struct {
-	Kind  SeriousErrorKind
-	Path  string
-	IsDir bool
+	Kind     SeriousErrorKind
+	Path     string
+	IsDir    bool
+	Datetime int64
 }
 
 func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLock *sync.Mutex, backupIdsQueue *BackupIdsQueue, excludePathPrefixes []string) ([]SeriousError, error) {
@@ -83,9 +85,10 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 
 			if dirent.IsDir() && strings.Contains(err.Error(), "operation not permitted") {
 				seriousErrors = append(seriousErrors, SeriousError{
-					Kind:  OP_NOT_PERMITTED,
-					Path:  path,
-					IsDir: true,
+					Kind:     OP_NOT_PERMITTED,
+					Path:     path,
+					IsDir:    true,
+					Datetime: time.Now().Unix(),
 				})
 			}
 

@@ -63,9 +63,10 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 		switch e.Kind {
 		case fstraverse.OP_NOT_PERMITTED:
 			pbReportedErrors = append(pbReportedErrors, &pb.ReportedError{
-				Kind:  pb.ReportedError_OperationNotPermitted,
-				Path:  e.Path,
-				IsDir: e.IsDir,
+				Kind:     pb.ReportedError_OperationNotPermitted,
+				Path:     e.Path,
+				IsDir:    e.IsDir,
+				Datetime: e.Datetime,
 			})
 		}
 	}
