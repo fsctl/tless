@@ -34,6 +34,7 @@ var (
 		percentage:     -1.0,
 		reportedErrors: make([]fstraverse.SeriousError, 0),
 	}
+	//gTempCntr = 0
 )
 
 // Callback for rpc.DaemonCtlServer.Status requests
@@ -57,8 +58,19 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 	gGlobalsLock.Lock()
 	defer gGlobalsLock.Unlock()
 
-	if gStatus.state == Idle {
+	// TEMP CODE FOR TESTING ONLY
+	// if gTempCntr == 0 {
+	// 	gTempCntr += 1
+	//
+	// 	gStatus.reportedErrors = append(gStatus.reportedErrors, fstraverse.SeriousError{
+	// 		Kind:     fstraverse.OP_NOT_PERMITTED,
+	// 		Path:     "/test/path",
+	// 		IsDir:    true,
+	// 		Datetime: time.Now().Unix(),
+	// 	})
+	// }
 
+	if gStatus.state == Idle {
 		// move the reported errors over to the return pb struct and clear them here
 		pbReportedErrors := make([]*pb.ReportedError, 0)
 		for _, e := range gStatus.reportedErrors {
