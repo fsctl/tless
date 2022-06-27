@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	SendPartialResponseEveryNRelPaths int = 5 //_000
+	SendPartialResponseEveryNRelPaths int = 5_000
 )
 
 // Callback for rpc.DaemonCtlServer.ReadAllSnapshots requests
