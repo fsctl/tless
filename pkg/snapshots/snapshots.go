@@ -86,10 +86,10 @@ type SnapshotInfo struct {
 }
 
 // Returns a map of backup:[]SnapshotInfo, where the snapshot info structs are sorted by timestamp ascending
-// Used by prune (cmd/prune.go) and autoprune (daemon/timer.go)
+// Used by prune (cmd/prune.go) and autoprune (daemon/timer.go) and daemon's ReadAllSnapshotsMetadata RPC
 func GetAllSnapshotInfos(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string) (map[string][]SnapshotInfo, error) {
 	// Get the backup:snapshots map with encrypted names
-	encryptedSnapshotsMap, err := objst.GetObjListTopTwoLevels(ctx, bucket, []string{"metadata", "chunks"}, []string{"@"})
+	encryptedSnapshotsMap, err := objst.GetObjListTopTwoLevels(ctx, bucket, []string{"metadata", "chunks"}, []string{})
 	if err != nil {
 		log.Println("error: GetAllSnapshotInfos: ", err)
 		return nil, err
@@ -106,6 +106,7 @@ func GetAllSnapshotInfos(ctx context.Context, key []byte, objst *objstore.ObjSto
 		mRet[backupName] = make([]SnapshotInfo, 0)
 
 		for _, encSnapshotName := range encryptedSnapshotsMap[encBackupName] {
+			encSnapshotName = strings.TrimPrefix(encSnapshotName, "@")
 			snapshotName, err := cryptography.DecryptFilename(key, encSnapshotName)
 			if err != nil {
 				log.Println("error: GetAllSnapshotInfos: DecryptFilename: ", err)

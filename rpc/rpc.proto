@@ -29,6 +29,8 @@ service DaemonCtl {
 
   // Commands for retrieving and pruning snapshots
   rpc ReadAllSnapshots (ReadAllSnapshotsRequest) returns (stream ReadAllSnapshotsResponse) {}
+  rpc ReadAllSnapshotsMetadata (ReadAllSnapshotsMetadataRequest) returns (ReadAllSnapshotsMetadataResponse) {}  // <-- being replaced by following two
+  rpc ReadSnapshotPaths (ReadSnapshotPathsRequest) returns (stream ReadSnapshotPathsResponse) {}
   rpc DeleteSnapshots (DeleteSnapshotsRequest) returns (stream DeleteSnapshotsResponse) {}
 
   // Restore command
@@ -157,6 +159,8 @@ message CancelResponse {
   string ErrMsg = 2;
 }
 
+/// ---------- Replacing this one ---------- ///
+
 message ReadAllSnapshotsRequest { }
 
 message PartialSnapshot {
@@ -173,6 +177,42 @@ message ReadAllSnapshotsResponse {
   PartialSnapshot PartialSnapshot = 3;
   double PercentDone = 4;
 }
+
+/// ---------- with the following two ---------- ///
+
+message ReadAllSnapshotsMetadataRequest {}
+
+message SnapshotMetadata {
+  string BackupName = 1;
+  string SnapshotName = 2;
+  int64 SnapshotTimestamp = 3;
+  string SnapshotRawName = 4;
+}
+
+message ReadAllSnapshotsMetadataResponse {
+  bool DidSucceed = 1;
+  string ErrMsg = 2;
+  repeated SnapshotMetadata SnapshotMetadata = 3;
+}
+
+message ReadSnapshotPathsRequest {
+  string BackupName = 1;
+  string SnapshotName = 2;
+}
+
+// message PartialPathsList {
+//   repeated string RawRelPaths = 1;
+// }
+
+message ReadSnapshotPathsResponse {
+  bool DidSucceed = 1;
+  string ErrMsg = 2;
+  //PartialPathsList PartialPathsList = 3;
+  repeated string RelPaths = 3;
+  double PercentDone = 4;
+}
+
+/// ---------- end - replacement rpcs ---------- ///
 
 message DeleteSnapshotsRequest {
   repeated string SnapshotRawNames = 1;

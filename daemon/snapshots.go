@@ -6,6 +6,7 @@ import (
 	"log"
 	"sort"
 
+	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
@@ -13,7 +14,7 @@ import (
 )
 
 const (
-	SendPartialResponseEveryNRelPaths int = 5_000
+	SendPartialResponseEveryNRelPaths int = 5 //_000
 )
 
 // Callback for rpc.DaemonCtlServer.ReadAllSnapshots requests
@@ -163,6 +164,210 @@ func (s *server) ReadAllSnapshots(in *pb.ReadAllSnapshotsRequest, srv pb.DaemonC
 		}
 	}
 
+	return nil
+}
+
+// Callback for rpc.DaemonCtlServer.ReadAllSnapshotsMetadata requests
+func (s *server) ReadAllSnapshotsMetadata(context.Context, *pb.ReadAllSnapshotsMetadataRequest) (*pb.ReadAllSnapshotsMetadataResponse, error) {
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
+
+	log.Println(">> GOT COMMAND: ReadAllSnapshotsMetadata")
+	defer log.Println(">> COMPLETED COMMAND: ReadAllSnapshotsMetadata")
+
+	// Make sure the global config we need is initialized
+	gGlobalsLock.Lock()
+	isGlobalConfigReady := gCfg != nil && gKey != nil
+	gGlobalsLock.Unlock()
+	if !isGlobalConfigReady {
+		log.Println("ReadAllSnapshotsMetadata: global config not yet initialized")
+		return &pb.ReadAllSnapshotsMetadataResponse{
+			DidSucceed:       false,
+			ErrMsg:           "global config not yet initialized",
+			SnapshotMetadata: nil,
+		}, nil
+	}
+
+	ctxBkg := context.Background()
+	gGlobalsLock.Lock()
+	endpoint := gCfg.Endpoint
+	accessKey := gCfg.AccessKeyId
+	secretKey := gCfg.SecretAccessKey
+	bucket := gCfg.Bucket
+	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
+	key := gKey
+	gGlobalsLock.Unlock()
+	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey, trustSelfSignedCerts)
+
+	mSnapshots, err := snapshots.GetAllSnapshotInfos(ctxBkg, key, objst, bucket)
+	if err != nil {
+		msg := fmt.Sprintf("error: ReadAllSnapshotsMetadata: %v", err)
+		log.Println(msg)
+		return &pb.ReadAllSnapshotsMetadataResponse{
+			DidSucceed:       false,
+			ErrMsg:           msg,
+			SnapshotMetadata: nil,
+		}, nil
+	}
+
+	pbSnapshotMetadatas := make([]*pb.SnapshotMetadata, 0)
+	for backupName, ssInfos := range mSnapshots {
+		vlog.Printf("SNAPSHOT_METADATA> '%s'", backupName)
+		for _, ssInfo := range ssInfos {
+			vlog.Printf("SNAPSHOT_METADATA>     '%s' (%d, %s)", ssInfo.Name, ssInfo.TimestampUnix, ssInfo.RawSnapshotName)
+			pbSnapshotMetadatas = append(pbSnapshotMetadatas, &pb.SnapshotMetadata{
+				BackupName:        backupName,
+				SnapshotName:      ssInfo.Name,
+				SnapshotTimestamp: ssInfo.TimestampUnix,
+				SnapshotRawName:   ssInfo.RawSnapshotName,
+			})
+		}
+	}
+
+	return &pb.ReadAllSnapshotsMetadataResponse{
+		DidSucceed:       true,
+		ErrMsg:           "",
+		SnapshotMetadata: pbSnapshotMetadatas,
+	}, nil
+}
+
+// Callback for rpc.DaemonCtlServer.ReadSnapshotPaths requests
+func (s *server) ReadSnapshotPaths(in *pb.ReadSnapshotPathsRequest, srv pb.DaemonCtl_ReadSnapshotPathsServer) error {
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
+
+	log.Printf(">> GOT COMMAND: ReadSnapshotPaths (for '%s')", in.BackupName+"/"+in.SnapshotName)
+	defer log.Println(">> COMPLETED COMMAND: ReadSnapshotPaths")
+
+	// Make sure the global config we need is initialized
+	gGlobalsLock.Lock()
+	isGlobalConfigReady := gCfg != nil && gKey != nil
+	gGlobalsLock.Unlock()
+	if !isGlobalConfigReady {
+		log.Println("ReadSnapshotPaths: global config not yet initialized")
+		resp := pb.ReadSnapshotPathsResponse{
+			DidSucceed: false,
+			ErrMsg:     "global config not yet initialized",
+			RelPaths:   nil,
+		}
+		if err := srv.Send(&resp); err != nil {
+			log.Println("error: server.Send failed: ", err)
+		}
+		return nil
+	}
+
+	ctxBkg := context.Background()
+	gGlobalsLock.Lock()
+	endpoint := gCfg.Endpoint
+	accessKey := gCfg.AccessKeyId
+	secretKey := gCfg.SecretAccessKey
+	bucket := gCfg.Bucket
+	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
+	key := gKey
+	gGlobalsLock.Unlock()
+	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey, trustSelfSignedCerts)
+
+	// Encrypt the backup name and snapshot name to form enc obj name for snapshot index obj
+	encBackupName, err := cryptography.EncryptFilename(key, in.BackupName)
+	if err != nil {
+		msg := fmt.Sprintf("error: ReadSnapshotPaths: could not encrypt backup name (%s): %v\n", in.BackupName, err)
+		log.Println(msg)
+		resp := pb.ReadSnapshotPathsResponse{
+			DidSucceed: false,
+			ErrMsg:     msg,
+			RelPaths:   nil,
+		}
+		if err := srv.Send(&resp); err != nil {
+			log.Println("error: server.Send failed: ", err)
+		}
+		return nil
+	}
+	encSsName, err := cryptography.EncryptFilename(key, in.SnapshotName)
+	if err != nil {
+		msg := fmt.Sprintf("error: ReadSnapshotPaths: could not encrypt snapshot name (%s): %v\n", in.SnapshotName, err)
+		log.Println(msg)
+		resp := pb.ReadSnapshotPathsResponse{
+			DidSucceed: false,
+			ErrMsg:     msg,
+			RelPaths:   nil,
+		}
+		if err := srv.Send(&resp); err != nil {
+			log.Println("error: server.Send failed: ", err)
+		}
+		return nil
+	}
+	encObjName := encBackupName + "/@" + encSsName
+	//vlog.Printf("SNAPSHOT_PATHS> encObjName = '%s'", encObjName)
+
+	// Download the snapshot file and unmarshall it
+	plaintextIndexFileBuf, err := snapshots.GetSnapshotIndexFile(ctxBkg, objst, bucket, key, encObjName)
+	if err != nil {
+		msg := fmt.Sprintf("error: ReadSnapshotPaths: could not retrieve snapshot index file (%s): %v\n", in.SnapshotName, err)
+		log.Println(msg)
+		resp := pb.ReadSnapshotPathsResponse{
+			DidSucceed: false,
+			ErrMsg:     msg,
+			RelPaths:   nil,
+		}
+		if err := srv.Send(&resp); err != nil {
+			log.Println("error: server.Send failed: ", err)
+		}
+		return nil
+	}
+	ssObj, err := snapshots.UnmarshalSnapshotObj(plaintextIndexFileBuf)
+	if err != nil {
+		msg := fmt.Sprintf("error: ReadSnapshotPaths: could not unmarshall to snapshot obj for '%s': %v\n", in.SnapshotName, err)
+		log.Println(msg)
+		resp := pb.ReadSnapshotPathsResponse{
+			DidSucceed: false,
+			ErrMsg:     msg,
+			RelPaths:   nil,
+		}
+		if err := srv.Send(&resp); err != nil {
+			log.Println("error: server.Send failed: ", err)
+		}
+		return nil
+	}
+
+	// Sort the rel paths
+	vlog.Printf("SNAPSHOT_PATHS> Found %d rel paths", len(ssObj.RelPaths))
+	sortedRelPaths := make([]string, 0, len(ssObj.RelPaths))
+	for rp := range ssObj.RelPaths {
+		sortedRelPaths = append(sortedRelPaths, rp)
+	}
+	sort.Strings(sortedRelPaths)
+
+	// Send relPaths back one chunk at a time
+	pbPartialResponse := &pb.ReadSnapshotPathsResponse{
+		DidSucceed:  true,
+		ErrMsg:      "",
+		RelPaths:    make([]string, 0),
+		PercentDone: float64(0),
+	}
+	cntSent := float64(0)
+	for _, rp := range sortedRelPaths {
+		pbPartialResponse.RelPaths = append(pbPartialResponse.RelPaths, rp)
+
+		if len(pbPartialResponse.RelPaths) >= SendPartialResponseEveryNRelPaths {
+			cntSent += float64(len(pbPartialResponse.RelPaths))
+			percentDone := float64(100) * (cntSent / float64(len(sortedRelPaths)))
+			pbPartialResponse.PercentDone = percentDone
+			if err := srv.Send(pbPartialResponse); err != nil {
+				log.Println("error: server.Send failed: ", err)
+			}
+			vlog.Printf("SNAPSHOT_PATHS> Sent %d rel paths (%d / %d); %02f%% done", len(pbPartialResponse.RelPaths), int64(cntSent), len(sortedRelPaths), percentDone)
+			pbPartialResponse.RelPaths = make([]string, 0)
+		}
+	}
+
+	// Send the final incomplete chhunk
+	if len(pbPartialResponse.RelPaths) > 0 {
+		cntSent += float64(len(pbPartialResponse.RelPaths))
+		pbPartialResponse.PercentDone = float64(100)
+		if err := srv.Send(pbPartialResponse); err != nil {
+			log.Println("error: server.Send failed: ", err)
+		}
+		vlog.Printf("SNAPSHOT_PATHS> Sent %d rel paths (%d / %d); %02f%% done (FINAL)", len(pbPartialResponse.RelPaths), int64(cntSent), len(sortedRelPaths), float64(100))
+	}
+	vlog.Println("SNAPSHOT_PATHS> Done")
 	return nil
 }
 
