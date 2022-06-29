@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"path/filepath"
 	"sync"
@@ -28,7 +29,7 @@ func (s *server) Backup(ctx context.Context, in *pb.BackupRequest) (*pb.BackupRe
 
 	if state != Idle {
 		if state == BackingUp {
-			log.Println("Cannot start backup right b/c we are already doing a backup")
+			log.Println("Cannot start backup right because we are already doing a backup")
 			log.Println(">> COMPLETED COMMAND: Backup")
 			return &pb.BackupResponse{
 				IsStarting: false,
@@ -105,6 +106,24 @@ func Backup(vlog *util.VLog, completion func()) {
 	copy(key, gKey)
 	gGlobalsLock.Unlock()
 
+	// Make sure we have the latest bucket metadata in case user just wiped the bucket
+	salt, _, err := objst.GetOrCreateBucketMetadata(ctx, bucket, vlog)
+	if err != nil || len(salt) == 0 {
+		msg := fmt.Sprintf("error: could not read or initialize bucket metadata: %v", err)
+		log.Println(msg)
+
+		gGlobalsLock.Lock()
+		gStatus.state = Idle
+		gStatus.percentage = -1.0
+		gStatus.msg = "Cannot init cloud bucket"
+		gGlobalsLock.Unlock()
+		return
+	}
+	gGlobalsLock.Lock()
+	gCfg.Salt = salt
+	gGlobalsLock.Unlock()
+
+	// Now start backing up
 	gGlobalsLock.Lock()
 	dirs := gCfg.Dirs
 	excludePaths := gCfg.ExcludePaths
