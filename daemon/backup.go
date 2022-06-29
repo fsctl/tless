@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fsctl/tless/pkg/backup"
+	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/snapshots"
@@ -100,13 +101,7 @@ func Backup(vlog *util.VLog, completion func()) {
 		return
 	}
 
-	// Get a copy of the encryption key
-	key := make([]byte, 32)
-	gGlobalsLock.Lock()
-	copy(key, gKey)
-	gGlobalsLock.Unlock()
-
-	// Make sure we have the latest bucket metadata in case user just wiped the bucket
+	// Make sure we have the latest bucket metadata in case user just wiped the bucket.
 	salt, _, err := objst.GetOrCreateBucketMetadata(ctx, bucket, vlog)
 	if err != nil || len(salt) == 0 {
 		msg := fmt.Sprintf("error: could not read or initialize bucket metadata: %v", err)
@@ -121,6 +116,31 @@ func Backup(vlog *util.VLog, completion func()) {
 	}
 	gGlobalsLock.Lock()
 	gCfg.Salt = salt
+	gGlobalsLock.Unlock()
+	// And re-derive the key in case salt changed.
+	gGlobalsLock.Lock()
+	masterPassword := gCfg.MasterPassword
+	gGlobalsLock.Unlock()
+	tempKey, err := cryptography.DeriveKey(salt, masterPassword)
+	if err != nil {
+		msg := fmt.Sprintf("error: could not derive key: %v", err)
+		vlog.Println(msg)
+
+		gGlobalsLock.Lock()
+		gStatus.state = Idle
+		gStatus.percentage = -1.0
+		gStatus.msg = "Cannot derive key"
+		gGlobalsLock.Unlock()
+		return
+	}
+	gGlobalsLock.Lock()
+	gKey = tempKey
+	gGlobalsLock.Unlock()
+
+	// Get a copy of the encryption key
+	key := make([]byte, 32)
+	gGlobalsLock.Lock()
+	copy(key, gKey)
 	gGlobalsLock.Unlock()
 
 	// Now start backing up
