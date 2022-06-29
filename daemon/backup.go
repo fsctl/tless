@@ -156,10 +156,10 @@ func Backup(vlog *util.VLog, completion func()) {
 		}
 
 		// Traverse the FS for changed files and do the journaled backup
-		seriousTraversalErrors, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, key, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludePaths, vlog, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress)
-		for _, e := range seriousTraversalErrors {
+		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, key, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludePaths, vlog, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress)
+		for _, e := range backupReportedEvents {
 			gGlobalsLock.Lock()
-			gStatus.reportedErrors = append(gStatus.reportedErrors, e)
+			gStatus.reportedEvents = append(gStatus.reportedEvents, e)
 			gGlobalsLock.Unlock()
 		}
 		if fatalError {
@@ -178,6 +178,15 @@ func Backup(vlog *util.VLog, completion func()) {
 		gGlobalsLock.Unlock()
 		time.Sleep(time.Second * 2)
 	}
+
+	gGlobalsLock.Lock()
+	gStatus.reportedEvents = append(gStatus.reportedEvents, util.ReportedEvent{
+		Kind:     util.INFO_BACKUP_COMPLETED,
+		Path:     "",
+		IsDir:    false,
+		Datetime: time.Now().Unix(),
+	})
+	gGlobalsLock.Unlock()
 
 done:
 	// On finished, set the status back to Idle

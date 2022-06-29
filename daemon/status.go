@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fsctl/tless/pkg/fstraverse"
+	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
 )
 
@@ -24,7 +24,7 @@ type Status struct {
 	state          state
 	msg            string
 	percentage     float32
-	reportedErrors []fstraverse.SeriousError
+	reportedEvents []util.ReportedEvent
 }
 
 var (
@@ -32,7 +32,7 @@ var (
 		state:          Idle,
 		msg:            "",
 		percentage:     -1.0,
-		reportedErrors: make([]fstraverse.SeriousError, 0),
+		reportedEvents: make([]util.ReportedEvent, 0),
 	}
 )
 
@@ -50,7 +50,7 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 			Status:         pb.DaemonStatusResponse_NEED_HELLO,
 			Msg:            "",
 			Percentage:     0,
-			ReportedErrors: nil}, nil
+			ReportedEvents: nil}, nil
 	}
 
 	// Normal status responses
@@ -58,57 +58,64 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 	defer gGlobalsLock.Unlock()
 
 	if gStatus.state == Idle {
-		// move the reported errors over to the return pb struct and clear them here
-		pbReportedErrors := make([]*pb.ReportedError, 0)
-		for _, e := range gStatus.reportedErrors {
+		// move the reported events over to the return pb struct and clear them here
+		pbReportedEvents := make([]*pb.ReportedEvent, 0)
+		for _, e := range gStatus.reportedEvents {
 			switch e.Kind {
-			case fstraverse.OP_NOT_PERMITTED:
-				pbReportedErrors = append(pbReportedErrors, &pb.ReportedError{
-					Kind:     pb.ReportedError_OperationNotPermitted,
+			case util.ERR_OP_NOT_PERMITTED:
+				pbReportedEvents = append(pbReportedEvents, &pb.ReportedEvent{
+					Kind:     pb.ReportedEvent_OperationNotPermitted,
+					Path:     e.Path,
+					IsDir:    e.IsDir,
+					Datetime: e.Datetime,
+				})
+			case util.INFO_BACKUP_COMPLETED:
+				pbReportedEvents = append(pbReportedEvents, &pb.ReportedEvent{
+					Kind:     pb.ReportedEvent_BackupCompleted,
 					Path:     e.Path,
 					IsDir:    e.IsDir,
 					Datetime: e.Datetime,
 				})
 			}
 		}
-		gStatus.reportedErrors = make([]fstraverse.SeriousError, 0)
+		gStatus.reportedEvents = make([]util.ReportedEvent, 0)
 
 		return &pb.DaemonStatusResponse{
 			Status:         pb.DaemonStatusResponse_IDLE,
 			Msg:            gStatus.msg,
 			Percentage:     gStatus.percentage,
-			ReportedErrors: pbReportedErrors}, nil
+			ReportedEvents: pbReportedEvents}, nil
 	} else if gStatus.state == CheckingConn {
 		return &pb.DaemonStatusResponse{
 			Status:         pb.DaemonStatusResponse_CHECKING_CONN,
 			Msg:            gStatus.msg,
 			Percentage:     gStatus.percentage,
-			ReportedErrors: nil}, nil
+			ReportedEvents: nil}, nil
 	} else if gStatus.state == BackingUp {
 		return &pb.DaemonStatusResponse{
 			Status:         pb.DaemonStatusResponse_BACKING_UP,
 			Msg:            gStatus.msg,
 			Percentage:     gStatus.percentage,
-			ReportedErrors: nil}, nil
+			ReportedEvents: nil}, nil
 	} else if gStatus.state == Restoring {
 		return &pb.DaemonStatusResponse{
 			Status:         pb.DaemonStatusResponse_RESTORING,
 			Msg:            gStatus.msg,
 			Percentage:     gStatus.percentage,
-			ReportedErrors: nil}, nil
+			ReportedEvents: nil}, nil
 	} else if gStatus.state == CleaningUp {
 		return &pb.DaemonStatusResponse{
 			Status:         pb.DaemonStatusResponse_CLEANING_UP,
 			Msg:            gStatus.msg,
 			Percentage:     gStatus.percentage,
-			ReportedErrors: nil}, nil
+			ReportedEvents: nil}, nil
 	} else {
 		// We need a default return
 		return &pb.DaemonStatusResponse{
 			Status:         pb.DaemonStatusResponse_IDLE,
 			Msg:            gStatus.msg,
 			Percentage:     gStatus.percentage,
-			ReportedErrors: nil}, nil
+			ReportedEvents: nil}, nil
 	}
 }
 

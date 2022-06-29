@@ -47,26 +47,13 @@ type dirEntryInsert struct {
 	lastBackupUnixtime int64
 }
 
-type SeriousErrorKind int64
-
-const (
-	OP_NOT_PERMITTED SeriousErrorKind = 1
-)
-
-type SeriousError struct {
-	Kind     SeriousErrorKind
-	Path     string
-	IsDir    bool
-	Datetime int64
-}
-
-func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLock *sync.Mutex, backupIdsQueue *BackupIdsQueue, excludePathPrefixes []string) ([]SeriousError, error) {
+func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLock *sync.Mutex, backupIdsQueue *BackupIdsQueue, excludePathPrefixes []string) ([]util.ReportedEvent, error) {
 	rootPath = util.StripTrailingSlashes(rootPath)
 	rootDirName := filepath.Base(rootPath)
 
 	pendingDirEntryInserts := make([]dirEntryInsert, 0, 10000)
 
-	seriousErrors := make([]SeriousError, 0)
+	reportedEvents := make([]util.ReportedEvent, 0)
 
 	// For sizes histogram, count, mean and median
 	fileSizesMb := make([]float64, 0)
@@ -84,8 +71,8 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 			// queue it as a serious error to report to the user at the end.
 
 			if dirent.IsDir() && strings.Contains(err.Error(), "operation not permitted") {
-				seriousErrors = append(seriousErrors, SeriousError{
-					Kind:     OP_NOT_PERMITTED,
+				reportedEvents = append(reportedEvents, util.ReportedEvent{
+					Kind:     util.ERR_OP_NOT_PERMITTED,
 					Path:     path,
 					IsDir:    true,
 					Datetime: time.Now().Unix(),
@@ -212,7 +199,7 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 	//log.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 	// end - summary statistics
 
-	return seriousErrors, nil
+	return reportedEvents, nil
 }
 
 func isInExcludePathPrefixes(path string, excludePathPrefixes []string) bool {

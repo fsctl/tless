@@ -64,11 +64,12 @@ message VersionResponse {
 
 message DaemonStatusRequest {}
 
-message ReportedError {
-  enum ReportedErrorKind {
+message ReportedEvent {
+  enum ReportedEventKind {
     OperationNotPermitted = 0;
+    BackupCompleted = 1;
   }
-  ReportedErrorKind Kind = 1;
+  ReportedEventKind Kind = 1;
   string Path = 2;
   bool IsDir = 3;
   int64 Datetime = 4;
@@ -87,7 +88,7 @@ message DaemonStatusResponse {
   State status = 1;
   string msg = 2;
   float percentage = 3;
-  repeated ReportedError reportedErrors = 4;
+  repeated ReportedEvent reportedEvents = 4;
 }
 
 message CheckConnRequest {

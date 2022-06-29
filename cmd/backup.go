@@ -13,7 +13,6 @@ import (
 
 	"github.com/fsctl/tless/pkg/backup"
 	"github.com/fsctl/tless/pkg/database"
-	"github.com/fsctl/tless/pkg/fstraverse"
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
@@ -133,9 +132,9 @@ func backupMain() {
 		progressBar = nil
 
 		// Traverse the FS for changed files and do the journaled backup
-		seriousTraversalErrors, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, cfgBucket, db, nil, backupDirPath, cfgExcludePaths, vlog, nil, setBackupInitialProgress, updateBackupProgress)
-		for _, e := range seriousTraversalErrors {
-			if e.Kind == fstraverse.OP_NOT_PERMITTED {
+		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, cfgBucket, db, nil, backupDirPath, cfgExcludePaths, vlog, nil, setBackupInitialProgress, updateBackupProgress)
+		for _, e := range backupReportedEvents {
+			if e.Kind == util.ERR_OP_NOT_PERMITTED {
 				log.Printf("warning:  insufficient permissions to process path '%s'", e.Path)
 			}
 		}
