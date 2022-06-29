@@ -38,7 +38,6 @@ type DaemonCtlClient interface {
 	Backup(ctx context.Context, in *BackupRequest, opts ...grpc.CallOption) (*BackupResponse, error)
 	CancelBackup(ctx context.Context, in *CancelRequest, opts ...grpc.CallOption) (*CancelResponse, error)
 	// Commands for retrieving and pruning snapshots
-	ReadAllSnapshots(ctx context.Context, in *ReadAllSnapshotsRequest, opts ...grpc.CallOption) (DaemonCtl_ReadAllSnapshotsClient, error)
 	ReadAllSnapshotsMetadata(ctx context.Context, in *ReadAllSnapshotsMetadataRequest, opts ...grpc.CallOption) (*ReadAllSnapshotsMetadataResponse, error)
 	ReadSnapshotPaths(ctx context.Context, in *ReadSnapshotPathsRequest, opts ...grpc.CallOption) (DaemonCtl_ReadSnapshotPathsClient, error)
 	DeleteSnapshots(ctx context.Context, in *DeleteSnapshotsRequest, opts ...grpc.CallOption) (DaemonCtl_DeleteSnapshotsClient, error)
@@ -133,38 +132,6 @@ func (c *daemonCtlClient) CancelBackup(ctx context.Context, in *CancelRequest, o
 	return out, nil
 }
 
-func (c *daemonCtlClient) ReadAllSnapshots(ctx context.Context, in *ReadAllSnapshotsRequest, opts ...grpc.CallOption) (DaemonCtl_ReadAllSnapshotsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &DaemonCtl_ServiceDesc.Streams[0], "/rpc.DaemonCtl/ReadAllSnapshots", opts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &daemonCtlReadAllSnapshotsClient{stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-type DaemonCtl_ReadAllSnapshotsClient interface {
-	Recv() (*ReadAllSnapshotsResponse, error)
-	grpc.ClientStream
-}
-
-type daemonCtlReadAllSnapshotsClient struct {
-	grpc.ClientStream
-}
-
-func (x *daemonCtlReadAllSnapshotsClient) Recv() (*ReadAllSnapshotsResponse, error) {
-	m := new(ReadAllSnapshotsResponse)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
 func (c *daemonCtlClient) ReadAllSnapshotsMetadata(ctx context.Context, in *ReadAllSnapshotsMetadataRequest, opts ...grpc.CallOption) (*ReadAllSnapshotsMetadataResponse, error) {
 	out := new(ReadAllSnapshotsMetadataResponse)
 	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/ReadAllSnapshotsMetadata", in, out, opts...)
@@ -175,7 +142,7 @@ func (c *daemonCtlClient) ReadAllSnapshotsMetadata(ctx context.Context, in *Read
 }
 
 func (c *daemonCtlClient) ReadSnapshotPaths(ctx context.Context, in *ReadSnapshotPathsRequest, opts ...grpc.CallOption) (DaemonCtl_ReadSnapshotPathsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &DaemonCtl_ServiceDesc.Streams[1], "/rpc.DaemonCtl/ReadSnapshotPaths", opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonCtl_ServiceDesc.Streams[0], "/rpc.DaemonCtl/ReadSnapshotPaths", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +174,7 @@ func (x *daemonCtlReadSnapshotPathsClient) Recv() (*ReadSnapshotPathsResponse, e
 }
 
 func (c *daemonCtlClient) DeleteSnapshots(ctx context.Context, in *DeleteSnapshotsRequest, opts ...grpc.CallOption) (DaemonCtl_DeleteSnapshotsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &DaemonCtl_ServiceDesc.Streams[2], "/rpc.DaemonCtl/DeleteSnapshots", opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonCtl_ServiceDesc.Streams[1], "/rpc.DaemonCtl/DeleteSnapshots", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +206,7 @@ func (x *daemonCtlDeleteSnapshotsClient) Recv() (*DeleteSnapshotsResponse, error
 }
 
 func (c *daemonCtlClient) Restore(ctx context.Context, opts ...grpc.CallOption) (DaemonCtl_RestoreClient, error) {
-	stream, err := c.cc.NewStream(ctx, &DaemonCtl_ServiceDesc.Streams[3], "/rpc.DaemonCtl/Restore", opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonCtl_ServiceDesc.Streams[2], "/rpc.DaemonCtl/Restore", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -337,7 +304,6 @@ type DaemonCtlServer interface {
 	Backup(context.Context, *BackupRequest) (*BackupResponse, error)
 	CancelBackup(context.Context, *CancelRequest) (*CancelResponse, error)
 	// Commands for retrieving and pruning snapshots
-	ReadAllSnapshots(*ReadAllSnapshotsRequest, DaemonCtl_ReadAllSnapshotsServer) error
 	ReadAllSnapshotsMetadata(context.Context, *ReadAllSnapshotsMetadataRequest) (*ReadAllSnapshotsMetadataResponse, error)
 	ReadSnapshotPaths(*ReadSnapshotPathsRequest, DaemonCtl_ReadSnapshotPathsServer) error
 	DeleteSnapshots(*DeleteSnapshotsRequest, DaemonCtl_DeleteSnapshotsServer) error
@@ -380,9 +346,6 @@ func (UnimplementedDaemonCtlServer) Backup(context.Context, *BackupRequest) (*Ba
 }
 func (UnimplementedDaemonCtlServer) CancelBackup(context.Context, *CancelRequest) (*CancelResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelBackup not implemented")
-}
-func (UnimplementedDaemonCtlServer) ReadAllSnapshots(*ReadAllSnapshotsRequest, DaemonCtl_ReadAllSnapshotsServer) error {
-	return status.Errorf(codes.Unimplemented, "method ReadAllSnapshots not implemented")
 }
 func (UnimplementedDaemonCtlServer) ReadAllSnapshotsMetadata(context.Context, *ReadAllSnapshotsMetadataRequest) (*ReadAllSnapshotsMetadataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReadAllSnapshotsMetadata not implemented")
@@ -566,27 +529,6 @@ func _DaemonCtl_CancelBackup_Handler(srv interface{}, ctx context.Context, dec f
 		return srv.(DaemonCtlServer).CancelBackup(ctx, req.(*CancelRequest))
 	}
 	return interceptor(ctx, in, info, handler)
-}
-
-func _DaemonCtl_ReadAllSnapshots_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(ReadAllSnapshotsRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(DaemonCtlServer).ReadAllSnapshots(m, &daemonCtlReadAllSnapshotsServer{stream})
-}
-
-type DaemonCtl_ReadAllSnapshotsServer interface {
-	Send(*ReadAllSnapshotsResponse) error
-	grpc.ServerStream
-}
-
-type daemonCtlReadAllSnapshotsServer struct {
-	grpc.ServerStream
-}
-
-func (x *daemonCtlReadAllSnapshotsServer) Send(m *ReadAllSnapshotsResponse) error {
-	return x.ServerStream.SendMsg(m)
 }
 
 func _DaemonCtl_ReadAllSnapshotsMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -830,11 +772,6 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams: []grpc.StreamDesc{
-		{
-			StreamName:    "ReadAllSnapshots",
-			Handler:       _DaemonCtl_ReadAllSnapshots_Handler,
-			ServerStreams: true,
-		},
 		{
 			StreamName:    "ReadSnapshotPaths",
 			Handler:       _DaemonCtl_ReadSnapshotPaths_Handler,

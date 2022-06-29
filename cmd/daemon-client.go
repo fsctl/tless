@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"log"
 	"os/user"
 	"time"
@@ -102,22 +100,4 @@ func daemonClientMain() {
 
 	// Wait 2 seconds (idle check is still running)
 	time.Sleep(time.Second * 2)
-
-	// Now try a streaming RPC
-	stream, err := client.ReadAllSnapshots(ctx, &pb.ReadAllSnapshotsRequest{})
-	if err != nil {
-		log.Fatalf("error: cannot open stream %v", err)
-	}
-	allRelPaths := make([]string, 0)
-	for {
-		partialResp, err := stream.Recv()
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			log.Fatalf("error: stream.Recv() failed: %v", err)
-		}
-		log.Printf("Partial response rcvd: for %s with %d rel paths\n", partialResp.PartialSnapshot.SnapshotRawName, len(partialResp.PartialSnapshot.RawRelPaths))
-		allRelPaths = append(allRelPaths, partialResp.PartialSnapshot.RawRelPaths...)
-	}
-	fmt.Printf("Got streaming response with %d total rel paths\n", len(allRelPaths))
 }
