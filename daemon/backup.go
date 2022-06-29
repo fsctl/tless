@@ -139,6 +139,22 @@ func Backup(vlog *util.VLog, completion func()) {
 		gStatus.msg = backupDirName
 		gGlobalsLock.Unlock()
 
+		// Setup update progress callback
+		updateBackupProgress := func(finished int64, total int64, globalsLock *sync.Mutex, vlog *util.VLog) {
+			percentDone := (float32(finished) / float32(total)) * float32(100)
+			util.LockIf(globalsLock)
+			gStatus.percentage = percentDone
+			util.UnlockIf(globalsLock)
+
+			if total > 500 {
+				if finished%500 == 0 {
+					vlog.Printf("%.2f%% written to cloud", percentDone)
+				}
+			} else {
+				vlog.Printf("%.2f%% written to cloud", percentDone)
+			}
+		}
+
 		// Traverse the FS for changed files and do the journaled backup
 		seriousTraversalErrors, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, key, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludePaths, vlog, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress)
 		for _, e := range seriousTraversalErrors {
@@ -203,6 +219,22 @@ func replayBackupJournal() {
 	copy(key, gKey)
 	gGlobalsLock.Unlock()
 
+	// Setup update progress callback
+	updateBackupProgress := func(finished int64, total int64, globalsLock *sync.Mutex, vlog *util.VLog) {
+		percentDone := (float32(finished) / float32(total)) * float32(100)
+		util.LockIf(globalsLock)
+		gStatus.percentage = percentDone
+		util.UnlockIf(globalsLock)
+
+		if total > 500 {
+			if finished%500 == 0 {
+				vlog.Printf("%.2f%% written to cloud (replay)", percentDone)
+			}
+		} else {
+			vlog.Printf("%.2f%% written to cloud (replay)", percentDone)
+		}
+	}
+
 	// Replay the journal
 	backup.ReplayBackupJournal(ctx, key, objst, bucket, db, &gGlobalsLock, vlog, setReplayInitialProgress, checkAndHandleCancelation, updateBackupProgress)
 
@@ -227,14 +259,6 @@ func checkAndHandleCancelation(ctx context.Context, key []byte, objst *objstore.
 		return true
 	}
 	return false
-}
-
-func updateBackupProgress(finished int64, total int64, globalsLock *sync.Mutex, vlog *util.VLog) {
-	percentDone := (float32(finished) / float32(total)) * float32(100)
-	util.LockIf(globalsLock)
-	gStatus.percentage = percentDone
-	util.UnlockIf(globalsLock)
-	vlog.Printf("%.2f%% written to cloud", percentDone)
 }
 
 func setBackupInitialProgress(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog) {
