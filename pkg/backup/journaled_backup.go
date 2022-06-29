@@ -216,12 +216,14 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 			chunkExtents, pendingInChunkPacker, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, vlog, cp, bjt)
 			if err != nil {
 				log.Printf("error: PlayBackupJournal (Updated): backup.Backup: %v", err)
-				continue
-			}
-			if pendingInChunkPacker {
+				completeTask(db, globalsLock, bjt, nil)
 				finishTaskImmediately = false
 			} else {
-				crp.ChunkExtents = chunkExtents
+				if pendingInChunkPacker {
+					finishTaskImmediately = false
+				} else {
+					crp.ChunkExtents = chunkExtents
+				}
 			}
 		} else if bjt.ChangeType == database.Unchanged {
 			if prevSnapshot != nil {
@@ -233,12 +235,14 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 				chunkExtents, pendingInChunkPacker, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, vlog, cp, bjt)
 				if err != nil {
 					log.Printf("error: PlayBackupJournal (Unchanged): backup.Backup: %v", err)
-					continue
-				}
-				if pendingInChunkPacker {
+					completeTask(db, globalsLock, bjt, nil)
 					finishTaskImmediately = false
 				} else {
-					crp.ChunkExtents = chunkExtents
+					if pendingInChunkPacker {
+						finishTaskImmediately = false
+					} else {
+						crp.ChunkExtents = chunkExtents
+					}
 				}
 			}
 		} else if bjt.ChangeType == database.Deleted {
