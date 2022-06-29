@@ -55,12 +55,13 @@ func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRespo
 	go func() {
 		for {
 			gGlobalsLock.Lock()
+			isIdle := gStatus.state == Idle
 			hasDirtyBackupJournal, err := gDb.HasDirtyBackupJournal()
 			gGlobalsLock.Unlock()
 			if err != nil {
 				log.Println("error: gDb.HasDirtyBackupJournal: ", err)
 			}
-			if hasDirtyBackupJournal {
+			if isIdle && hasDirtyBackupJournal {
 				replayBackupJournal()
 			} else {
 				return

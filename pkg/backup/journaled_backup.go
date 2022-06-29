@@ -139,35 +139,28 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 	prevSnapshot := groupedObjects[filepath.Base(backupDirPath)].GetMostRecentSnapshot()
 
 	// closure used inside loop to eliminate duplicated code
-	onJournalExhausted := func() (shouldContinue bool, shouldReturn bool) {
-		shouldContinue = false
-		shouldReturn = false
-
+	writeIndexFileAndWipeJournal := func() {
 		vlog.Printf("Finished the journal (re-)play")
 		progressUpdateClosure()
 
 		err = snapshots.WriteIndexFile(ctx, globalsLock, db, objst, bucket, key, filepath.Base(backupDirPath), snapshotName)
 		if err != nil {
-			log.Println("error: PlayBackupJournal: onJournalExhausted: couldn't write index file: ", err)
+			log.Println("error: PlayBackupJournal: writeIndexFileAndWipeJournal: couldn't write index file: ", err)
 		}
 		vlog.Printf("Deleting all journal rows")
 		util.LockIf(globalsLock)
-		err = db.CompleteBackupJournal()
+		err = db.WipeBackupJournal()
 		util.UnlockIf(globalsLock)
 		if err != nil {
 			if errors.Is(err, database.ErrJournalHasUnfinishedTasks) {
-				log.Println("error: PlayBackupJournal: onJournalExhausted: tried to complete journal while it still had unfinished tasks (skipping)")
-				shouldReturn = true
+				log.Println("error: PlayBackupJournal: writeIndexFileAndWipeJournal: tried to complete journal while it still had unfinished tasks (skipping)")
 				return
 			} else {
-				log.Println("error: PlayBackupJournal: onJournalExhausted: db.CompleteBackupJournal failed: ", err)
-				shouldContinue = true
+				log.Println("error: PlayBackupJournal: writeIndexFileAndWipeJournal: db.CompleteBackupJournal failed: ", err)
 				return
 			}
 		}
 		vlog.Printf("Done with journal")
-		shouldReturn = true
-		return
 	}
 
 	cp := newChunkPacker(ctx, objst, bucket, db, globalsLock, key, vlog)
@@ -196,16 +189,9 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 					log.Println("error: PlayBackupJournal: something's wrong, journal should be complete at this point")
 				}
 
-				// Journal is exhausted; complete it and return
-				shouldContinue, shouldReturn := onJournalExhausted()
-				if shouldContinue {
-					continue
-				} else if shouldReturn {
-					return
-				} else {
-					log.Println("error: PlayBackupJournal: this point should never be reached")
-					return
-				}
+				// Journal is completed: write index file, wipe journal and return
+				writeIndexFileAndWipeJournal()
+				return
 			} else {
 				log.Println("error: PlayBackupJournal: db.ClaimNextBackupJournalTask: ", err)
 				return
@@ -229,7 +215,7 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 			//vlog.Printf("Backing up '%s/%s'", rootDirName, relPath)
 			chunkExtents, pendingInChunkPacker, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, vlog, cp, bjt)
 			if err != nil {
-				log.Printf("error: PlayBackupJournal: backup.Backup: %v", err)
+				log.Printf("error: PlayBackupJournal (Updated): backup.Backup: %v", err)
 				continue
 			}
 			if pendingInChunkPacker {
@@ -246,7 +232,7 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 				log.Printf("warning: found an unchanged file but have no previous snapshot; treating it as updated: '%s/%s'", rootDirName, relPath)
 				chunkExtents, pendingInChunkPacker, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, vlog, cp, bjt)
 				if err != nil {
-					log.Printf("error: PlayBackupJournal: backup.Backup: %v", err)
+					log.Printf("error: PlayBackupJournal (Unchanged): backup.Backup: %v", err)
 					continue
 				}
 				if pendingInChunkPacker {
@@ -258,7 +244,7 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 		} else if bjt.ChangeType == database.Deleted {
 			// Remove from dirents table
 			if err = purgeFromDb(db, globalsLock, filepath.Base(backupDirPath), relPath); err != nil {
-				log.Printf("error: PlayBackupJournal: failed to purge from dirents '%s': %v", relPath, err)
+				log.Printf("error: PlayBackupJournal (Deleted): failed to purge from dirents '%s': %v", relPath, err)
 			}
 			crp = nil
 		} else {
@@ -269,12 +255,8 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 			updateLastBackupTime(db, globalsLock, bjt.DirEntId)
 			isJournalComplete := completeTask(db, globalsLock, bjt, crp)
 			if isJournalComplete {
-				shouldContinue, shouldReturn := onJournalExhausted()
-				if shouldContinue {
-					continue
-				} else if shouldReturn {
-					return
-				}
+				writeIndexFileAndWipeJournal()
+				return
 			}
 		}
 

@@ -192,7 +192,7 @@ func (db *DB) CompleteBackupJournalTask(backupJournalTask *BackupJournalTask, in
 }
 
 // Deletes all journal rows
-func (db *DB) CompleteBackupJournal() error {
+func (db *DB) WipeBackupJournal() error {
 	if err := db.deleteAllRowsBackupJournal(); err != nil {
 		log.Printf("error: CompleteBackupJournal: db.deleteAllRowsBackupJournal: %v", err)
 		return err
