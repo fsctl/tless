@@ -186,7 +186,7 @@ func GetSnapshotIndexFile(ctx context.Context, objst *objstore.ObjStore, bucket 
 	}
 
 	// decrypt and uncompress snapshot file
-	plaintextIndexFileBuf, err := decryptAndUncompressIndexFile(key, buf)
+	plaintextIndexFileBuf, err := decryptIndexFile(key, buf)
 	if err != nil {
 		log.Printf("error: getAllSnapshotIndices: could not decrypt+uncompress snapshot index file '%s': %v\n", encObjName, err)
 		return nil, err
@@ -195,7 +195,7 @@ func GetSnapshotIndexFile(ctx context.Context, objst *objstore.ObjStore, bucket 
 	return plaintextIndexFileBuf, nil
 }
 
-func decryptAndUncompressIndexFile(key []byte, encBuf []byte) ([]byte, error) {
+func decryptIndexFile(key []byte, encBuf []byte) ([]byte, error) {
 	// Decrypt
 	decBuf, err := cryptography.DecryptBuffer(key, encBuf)
 	if err != nil {
@@ -203,12 +203,5 @@ func decryptAndUncompressIndexFile(key []byte, encBuf []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	// Uncompress
-	uncompressedBuf, err := util.XZUncompress(decBuf)
-	if err != nil {
-		log.Println("error: decryptAndUncompressIndexFile: could not decompress snapshot index file: ", err)
-		return nil, err
-	}
-
-	return uncompressedBuf, nil
+	return decBuf, nil
 }

@@ -77,15 +77,8 @@ func SerializeAndWriteSnapshotObj(snapshotObj *Snapshot, key []byte, encryptedBa
 		return err
 	}
 
-	// lzma compress the json
-	compressedBuf, err := util.XZCompress(buf)
-	if err != nil {
-		log.Println("error: SerializeAndSaveSnapshotObj: xzCompress failed")
-		return err
-	}
-
-	// encrypt the compressed json
-	encCompressedBuf, err := cryptography.EncryptBuffer(key, compressedBuf)
+	// encrypt the json
+	encBuf, err := cryptography.EncryptBuffer(key, buf)
 	if err != nil {
 		log.Println("error: SerializeAndSaveSnapshotObj: EncryptBuffer: ", err)
 		return err
@@ -95,7 +88,7 @@ func SerializeAndWriteSnapshotObj(snapshotObj *Snapshot, key []byte, encryptedBa
 	objName := encryptedBackupDirName + "/" + "@" + encryptedSnapshotName
 
 	// put the index object to server
-	err = objst.UploadObjFromBuffer(ctx, bucket, objName, encCompressedBuf, objstore.ComputeETag(encCompressedBuf))
+	err = objst.UploadObjFromBuffer(ctx, bucket, objName, encBuf, objstore.ComputeETag(encBuf))
 	if err != nil {
 		log.Println("error: SerializeAndSaveSnapshotObj: UploadObjFromBuffer: ", err)
 		return err
