@@ -42,7 +42,7 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 
 	// If daemon has restarted we need to tell the client we need a new Hello to boot us up
 	gGlobalsLock.Lock()
-	isNeedingHello := gUsername == "" || gUserHomeDir == "" || gCfg == nil || gDb == nil || gKey == nil
+	isNeedingHello := gUsername == "" || gUserHomeDir == "" || gCfg == nil || gDb == nil || gEncKey == nil
 	gGlobalsLock.Unlock()
 	if isNeedingHello {
 		log.Println(">> Status: we responded that we need a Hello")

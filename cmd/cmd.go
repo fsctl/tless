@@ -10,14 +10,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/util"
 )
 
 var (
 	// Module level variables
-	encKey []byte
+	encKey  []byte
+	hmacKey []byte
 
 	// Flags
 	cfgEndpoint             string
@@ -38,21 +38,6 @@ var (
 tless is a tool for cloud backups for people who don't want to place
 any trust in cloud providers. It encrypts files and filenames locally, with 
 a password that never leaves the local machine.`,
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			var err error
-
-			// Deriving the encryption key is slow, so only do it if DeriveKey was not already
-			// called as part of objstore.CheckCryptoConfigMatchesServer during package init
-			if encKey == nil {
-				encKey, err = cryptography.DeriveKey(cfgSalt, cfgMasterPassword)
-				if err != nil {
-					msg := fmt.Sprintf("error: could not derive key (salt='%s'): %v", cfgSalt, err)
-					if !cfgForce {
-						log.Fatalf(msg)
-					}
-				}
-			}
-		},
 	}
 )
 
@@ -210,7 +195,7 @@ func validateConfigVars() error {
 	}
 
 	// Download (or create) the salt
-	salt, _, err := objst.GetOrCreateBucketMetadata(ctx, cfgBucket, vlog)
+	salt, _, encKey, hmacKey, err := objst.GetOrCreateBucketMetadata(ctx, cfgBucket, cfgMasterPassword, vlog)
 	if err != nil {
 		log.Println("error: could not read or initialize bucket metadata: ", err)
 	}
@@ -219,14 +204,8 @@ func validateConfigVars() error {
 		return fmt.Errorf("invalid salt (value='%s')", cfgSalt)
 	}
 
-	// Derive the key
-	encKey, err := cryptography.DeriveKey(cfgSalt, cfgMasterPassword)
-	if err != nil {
-		log.Fatalf("Could not derive key: %v", err)
-	}
-
-	// Verify the key
-	if err = objst.VerifyKeyAndSalt(ctx, cfgBucket, encKey); err != nil {
+	// Verify the keys
+	if err = objst.VerifyKeys(ctx, cfgBucket, cfgMasterPassword, encKey, hmacKey, vlog); err != nil {
 		log.Fatalln(err.Error())
 	}
 

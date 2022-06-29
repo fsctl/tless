@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/fsctl/tless/pkg/backup"
-	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/snapshots"
@@ -102,7 +101,10 @@ func Backup(vlog *util.VLog, completion func()) {
 	}
 
 	// Make sure we have the latest bucket metadata in case user just wiped the bucket.
-	salt, _, err := objst.GetOrCreateBucketMetadata(ctx, bucket, vlog)
+	gGlobalsLock.Lock()
+	masterPassword := gCfg.MasterPassword
+	gGlobalsLock.Unlock()
+	salt, _, encKey, hmacKey, err := objst.GetOrCreateBucketMetadata(ctx, bucket, masterPassword, vlog)
 	if err != nil || len(salt) == 0 {
 		msg := fmt.Sprintf("error: could not read or initialize bucket metadata: %v", err)
 		log.Println(msg)
@@ -116,31 +118,14 @@ func Backup(vlog *util.VLog, completion func()) {
 	}
 	gGlobalsLock.Lock()
 	gCfg.Salt = salt
-	gGlobalsLock.Unlock()
-	// And re-derive the key in case salt changed.
-	gGlobalsLock.Lock()
-	masterPassword := gCfg.MasterPassword
-	gGlobalsLock.Unlock()
-	tempKey, err := cryptography.DeriveKey(salt, masterPassword)
-	if err != nil {
-		msg := fmt.Sprintf("error: could not derive key: %v", err)
-		vlog.Println(msg)
-
-		gGlobalsLock.Lock()
-		gStatus.state = Idle
-		gStatus.percentage = -1.0
-		gStatus.msg = "Cannot derive key"
-		gGlobalsLock.Unlock()
-		return
-	}
-	gGlobalsLock.Lock()
-	gKey = tempKey
+	gEncKey = encKey
+	gHmacKey = hmacKey
 	gGlobalsLock.Unlock()
 
 	// Get a copy of the encryption key
-	key := make([]byte, 32)
+	encKey = make([]byte, 32)
 	gGlobalsLock.Lock()
-	copy(key, gKey)
+	copy(encKey, gEncKey)
 	gGlobalsLock.Unlock()
 
 	// Now start backing up
@@ -176,7 +161,7 @@ func Backup(vlog *util.VLog, completion func()) {
 		}
 
 		// Traverse the FS for changed files and do the journaled backup
-		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, key, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludePaths, vlog, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress)
+		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludePaths, vlog, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress)
 		for _, e := range backupReportedEvents {
 			gGlobalsLock.Lock()
 			gStatus.reportedEvents = append(gStatus.reportedEvents, e)
@@ -242,10 +227,10 @@ func replayBackupJournal() {
 		return
 	}
 
-	// Get a copy of the encryption key
-	key := make([]byte, 32)
+	// Get a copy of the encryption encKey
+	encKey := make([]byte, 32)
 	gGlobalsLock.Lock()
-	copy(key, gKey)
+	copy(encKey, gEncKey)
 	gGlobalsLock.Unlock()
 
 	// Setup update progress callback
@@ -265,7 +250,7 @@ func replayBackupJournal() {
 	}
 
 	// Replay the journal
-	backup.ReplayBackupJournal(ctx, key, objst, bucket, db, &gGlobalsLock, vlog, setReplayInitialProgress, checkAndHandleCancelation, updateBackupProgress)
+	backup.ReplayBackupJournal(ctx, encKey, objst, bucket, db, &gGlobalsLock, vlog, setReplayInitialProgress, checkAndHandleCancelation, updateBackupProgress)
 
 	// Finally set the status back to Idle since we are done with backup
 	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)

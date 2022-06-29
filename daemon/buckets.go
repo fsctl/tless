@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 
-	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
@@ -112,11 +111,12 @@ func (s *server) CheckBucketPassword(ctx context.Context, in *pb.CheckBucketPass
 	accessKey := gCfg.AccessKeyId
 	secretKey := gCfg.SecretAccessKey
 	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
+	masterPassword := gCfg.MasterPassword
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
-	// Check if a metadata file with salt exists and retrieve it
-	salt, _, err := objst.GetOrCreateBucketMetadata(ctx, in.GetBucketName(), vlog)
+	// Check if a metadata file with salt and encrypted keys exists and retrieve it
+	_, _, encKey, hmacKey, err := objst.GetOrCreateBucketMetadata(ctx, in.GetBucketName(), masterPassword, vlog)
 	if err != nil {
 		log.Println("error: CheckBucketPassword: GetOrCreateBucketMetadata failed: ", err)
 		return &pb.CheckBucketPasswordResponse{
@@ -125,18 +125,8 @@ func (s *server) CheckBucketPassword(ctx context.Context, in *pb.CheckBucketPass
 		}, nil
 	}
 
-	// Derive the key
-	key, err := cryptography.DeriveKey(salt, in.GetPassword())
-	if err != nil {
-		log.Println("error: CheckBucketPassword: DeriveKey failed: ", err)
-		return &pb.CheckBucketPasswordResponse{
-			Result: pb.CheckBucketPasswordResponse_ERR_OTHER,
-			ErrMsg: err.Error(),
-		}, nil
-	}
-
-	// Verify the key by trying to decrypt some filename in bucket
-	if err = objst.VerifyKeyAndSalt(ctx, in.GetBucketName(), key); err != nil {
+	// Verify the encKey by trying to decrypt some filenames in bucket
+	if err = objst.VerifyKeys(ctx, in.GetBucketName(), masterPassword, encKey, hmacKey, vlog); err != nil {
 		log.Println("error: CheckBucketPassword: VerifyKeyAndSalt failed: ", err)
 		return &pb.CheckBucketPasswordResponse{
 			Result: pb.CheckBucketPasswordResponse_ERR_PASSWORD_WRONG,

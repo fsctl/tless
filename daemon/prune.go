@@ -38,18 +38,18 @@ func PruneSnapshots() error {
 	defer done()
 
 	ctx := context.Background()
-	key := make([]byte, 32)
+	encKey := make([]byte, 32)
 	gGlobalsLock.Lock()
 	endpoint := gCfg.Endpoint
 	accessKey := gCfg.AccessKeyId
 	secretKey := gCfg.SecretAccessKey
 	bucket := gCfg.Bucket
 	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
-	copy(key, gKey)
+	copy(encKey, gEncKey)
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
-	mSnapshots, err := snapshots.GetAllSnapshotInfos(ctx, key, objst, bucket)
+	mSnapshots, err := snapshots.GetAllSnapshotInfos(ctx, encKey, objst, bucket)
 	if err != nil {
 		fmt.Println("AUTOPRUNE> error: prune: ", err)
 		return err
@@ -74,7 +74,7 @@ func PruneSnapshots() error {
 					BackupDirName: backupName,
 					SnapshotName:  ss.Name,
 				}
-				if err = snapshots.DeleteSnapshots(ctx, key, []snapshots.SnapshotForDeletion{ssDel}, objst, bucket, vlog, nil, nil); err != nil {
+				if err = snapshots.DeleteSnapshots(ctx, encKey, []snapshots.SnapshotForDeletion{ssDel}, objst, bucket, vlog, nil, nil); err != nil {
 					log.Printf("AUTOPRUNE> error: could not delete snapshot '%s': %v\n", ss.RawSnapshotName, err)
 				}
 			} else {

@@ -26,7 +26,7 @@ func (s *server) ReadAllSnapshotsMetadata(context.Context, *pb.ReadAllSnapshotsM
 
 	// Make sure the global config we need is initialized
 	gGlobalsLock.Lock()
-	isGlobalConfigReady := gCfg != nil && gKey != nil
+	isGlobalConfigReady := gCfg != nil && gEncKey != nil
 	gGlobalsLock.Unlock()
 	if !isGlobalConfigReady {
 		log.Println("ReadAllSnapshotsMetadata: global config not yet initialized")
@@ -44,11 +44,11 @@ func (s *server) ReadAllSnapshotsMetadata(context.Context, *pb.ReadAllSnapshotsM
 	secretKey := gCfg.SecretAccessKey
 	bucket := gCfg.Bucket
 	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
-	key := gKey
+	encKey := gEncKey
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
-	mSnapshots, err := snapshots.GetAllSnapshotInfos(ctxBkg, key, objst, bucket)
+	mSnapshots, err := snapshots.GetAllSnapshotInfos(ctxBkg, encKey, objst, bucket)
 	if err != nil {
 		msg := fmt.Sprintf("error: ReadAllSnapshotsMetadata: %v", err)
 		log.Println(msg)
@@ -89,7 +89,7 @@ func (s *server) ReadSnapshotPaths(in *pb.ReadSnapshotPathsRequest, srv pb.Daemo
 
 	// Make sure the global config we need is initialized
 	gGlobalsLock.Lock()
-	isGlobalConfigReady := gCfg != nil && gKey != nil
+	isGlobalConfigReady := gCfg != nil && gEncKey != nil
 	gGlobalsLock.Unlock()
 	if !isGlobalConfigReady {
 		log.Println("ReadSnapshotPaths: global config not yet initialized")
@@ -111,12 +111,12 @@ func (s *server) ReadSnapshotPaths(in *pb.ReadSnapshotPathsRequest, srv pb.Daemo
 	secretKey := gCfg.SecretAccessKey
 	bucket := gCfg.Bucket
 	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
-	key := gKey
+	encKey := gEncKey
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
 	// Encrypt the backup name and snapshot name to form enc obj name for snapshot index obj
-	encBackupName, err := cryptography.EncryptFilename(key, in.BackupName)
+	encBackupName, err := cryptography.EncryptFilename(encKey, in.BackupName)
 	if err != nil {
 		msg := fmt.Sprintf("error: ReadSnapshotPaths: could not encrypt backup name (%s): %v\n", in.BackupName, err)
 		log.Println(msg)
@@ -130,7 +130,7 @@ func (s *server) ReadSnapshotPaths(in *pb.ReadSnapshotPathsRequest, srv pb.Daemo
 		}
 		return nil
 	}
-	encSsName, err := cryptography.EncryptFilename(key, in.SnapshotName)
+	encSsName, err := cryptography.EncryptFilename(encKey, in.SnapshotName)
 	if err != nil {
 		msg := fmt.Sprintf("error: ReadSnapshotPaths: could not encrypt snapshot name (%s): %v\n", in.SnapshotName, err)
 		log.Println(msg)
@@ -148,7 +148,7 @@ func (s *server) ReadSnapshotPaths(in *pb.ReadSnapshotPathsRequest, srv pb.Daemo
 	//vlog.Printf("SNAPSHOT_PATHS> encObjName = '%s'", encObjName)
 
 	// Download the snapshot file and unmarshall it
-	plaintextIndexFileBuf, err := snapshots.GetSnapshotIndexFile(ctxBkg, objst, bucket, key, encObjName)
+	plaintextIndexFileBuf, err := snapshots.GetSnapshotIndexFile(ctxBkg, objst, bucket, encKey, encObjName)
 	if err != nil {
 		msg := fmt.Sprintf("error: ReadSnapshotPaths: could not retrieve snapshot index file (%s): %v\n", in.SnapshotName, err)
 		log.Println(msg)
@@ -271,7 +271,7 @@ func (s *server) DeleteSnapshots(in *pb.DeleteSnapshotsRequest, srv pb.DaemonCtl
 	secretKey := gCfg.SecretAccessKey
 	bucket := gCfg.Bucket
 	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
-	key := gKey
+	encKey := gEncKey
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctxBkg, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
@@ -321,7 +321,7 @@ func (s *server) DeleteSnapshots(in *pb.DeleteSnapshotsRequest, srv pb.DaemonCtl
 		}
 	}
 
-	groupedObjects, err := snapshots.GetGroupedSnapshots(ctxBkg, objst, key, bucket, vlog, setInitialGGS1Progress, updateGGS1Progress)
+	groupedObjects, err := snapshots.GetGroupedSnapshots(ctxBkg, objst, encKey, bucket, vlog, setInitialGGS1Progress, updateGGS1Progress)
 	if err != nil {
 		log.Printf("Could not get grouped snapshots: %v", err)
 		resp := pb.DeleteSnapshotsResponse{
@@ -383,7 +383,7 @@ func (s *server) DeleteSnapshots(in *pb.DeleteSnapshotsRequest, srv pb.DaemonCtl
 		}
 	}
 
-	err = snapshots.DeleteSnapshots(ctxBkg, key, ssDelItems, objst, bucket, vlog, setInitialGGS2Progress, updateGGS2Progress)
+	err = snapshots.DeleteSnapshots(ctxBkg, encKey, ssDelItems, objst, bucket, vlog, setInitialGGS2Progress, updateGGS2Progress)
 	if err != nil {
 		resp := pb.DeleteSnapshotsResponse{
 			DidSucceed:  false,

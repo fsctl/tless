@@ -49,7 +49,7 @@ func timerLoop(signals chan os.Signal, server *server) {
 
 		// Has gCfg, gUsername, etc been set yet?  Cannot do anything until that is done
 		gGlobalsLock.Lock()
-		isReadyForPeriodics := gCfg != nil && gUsername != "" && gUserHomeDir != "" && gDb != nil && gKey != nil
+		isReadyForPeriodics := gCfg != nil && gUsername != "" && gUserHomeDir != "" && gDb != nil && gEncKey != nil
 		gGlobalsLock.Unlock()
 		if !isReadyForPeriodics {
 			continue

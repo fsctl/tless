@@ -19,6 +19,10 @@ import (
 	"github.com/sethvargo/go-diceware/diceware"
 )
 
+const (
+	SaltLen int = 32
+)
+
 // Returns s without any trailing slashes if it has any; otherwise return s unchanged.
 func StripTrailingSlashes(s string) string {
 	if s == "/" {
@@ -179,7 +183,7 @@ func GenerateRandomSalt() string {
 
 	salt := ""
 
-	for i := 0; i < 32; i++ {
+	for i := 0; i < SaltLen; i++ {
 		n, err := rand.Int(rand.Reader, lettersLen)
 		if err != nil {
 			log.Fatalf("error: generateRandomSalt: %v", err)

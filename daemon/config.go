@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/fsctl/tless/pkg/cryptography"
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
@@ -22,10 +21,14 @@ var (
 	gCfg         *util.CfgSettings
 	gUsername    string
 	gUserHomeDir string
-	gKey         []byte
+	gEncKey      []byte
+	gHmacKey     []byte
 )
 
 func initConfig(globalsLock *sync.Mutex) error {
+	// hmacKey is presently unused but may be in the future
+	_ = gHmacKey
+
 	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
 	globalsLock.Lock()
@@ -83,8 +86,13 @@ func initConfig(globalsLock *sync.Mutex) error {
 		return fmt.Errorf(msg)
 	}
 
-	// Download (or create) the salt
-	salt, _, err := objst.GetOrCreateBucketMetadata(ctx, bucket, vlog)
+	// Grab the master password
+	globalsLock.Lock()
+	masterPassword := gCfg.MasterPassword
+	globalsLock.Unlock()
+
+	// Download (or create) the metadata
+	salt, _, encKey, hmacKey, err := objst.GetOrCreateBucketMetadata(ctx, bucket, masterPassword, vlog)
 	if err != nil {
 		e := fmt.Errorf("error: could not read or initialize bucket metadata: %v", err)
 		vlog.Println(e.Error())
@@ -95,30 +103,18 @@ func initConfig(globalsLock *sync.Mutex) error {
 		vlog.Println(e.Error())
 		return e
 	}
-	globalsLock.Lock()
-	gCfg.Salt = salt
-	globalsLock.Unlock()
 
-	// Derive the key
-	globalsLock.Lock()
-	masterPassword := gCfg.MasterPassword
-	globalsLock.Unlock()
-	tempKey, err := cryptography.DeriveKey(salt, masterPassword)
-	if err != nil {
-		e := fmt.Errorf("error: could not derive key: %v", err)
-		vlog.Println(e.Error())
-		return e
-	}
-
-	// Verify the key
-	if err = objst.VerifyKeyAndSalt(ctx, bucket, tempKey); err != nil {
+	// Verify the keys
+	if err = objst.VerifyKeys(ctx, bucket, masterPassword, encKey, hmacKey, vlog); err != nil {
 		vlog.Println(err.Error())
 		return err
 	}
 
-	// Store key in global
+	// Store keys in global
 	globalsLock.Lock()
-	gKey = tempKey
+	gCfg.Salt = salt
+	gEncKey = encKey
+	gHmacKey = hmacKey
 	globalsLock.Unlock()
 
 	return nil
