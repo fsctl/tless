@@ -4,7 +4,6 @@ option go_package = "github.com/fsctl/tless/rpc";
 
 package rpc;
 
-// The greeting service definition.
 service DaemonCtl {
   // Sends the console user's username+homedir to establish connectivity
   // and initialize the daemon with correct config.toml path
@@ -43,6 +42,9 @@ service DaemonCtl {
   rpc ListBuckets (ListBucketsRequest) returns (ListBucketsResponse) {}
   rpc MakeBucket (MakeBucketRequest) returns (MakeBucketResponse) {}
   rpc CheckBucketPassword (CheckBucketPasswordRequest) returns (CheckBucketPasswordResponse) {}
+
+  // Misc RPCs
+  rpc LogStream (LogStreamRequest) returns (stream LogStreamResponse) {}
 }
 
 message HelloRequest {
@@ -244,4 +246,17 @@ message CheckBucketPasswordResponse {
   }
   CheckBucketPasswordResult Result = 1;
   string ErrMsg = 2;
+}
+
+message LogStreamRequest {
+  string LogPath = 1;
+  int64 StartingOffset = 2;
+}
+
+message LogStreamResponse {
+  bool DidSucceed = 1;
+  string ErrMsg = 2;
+  repeated string LogLines = 3;
+  int64 NextOffset = 4;
+  double PercentDone = 5;
 }

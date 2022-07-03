@@ -50,6 +50,8 @@ type DaemonCtlClient interface {
 	ListBuckets(ctx context.Context, in *ListBucketsRequest, opts ...grpc.CallOption) (*ListBucketsResponse, error)
 	MakeBucket(ctx context.Context, in *MakeBucketRequest, opts ...grpc.CallOption) (*MakeBucketResponse, error)
 	CheckBucketPassword(ctx context.Context, in *CheckBucketPasswordRequest, opts ...grpc.CallOption) (*CheckBucketPasswordResponse, error)
+	// Misc RPCs
+	LogStream(ctx context.Context, in *LogStreamRequest, opts ...grpc.CallOption) (DaemonCtl_LogStreamClient, error)
 }
 
 type daemonCtlClient struct {
@@ -284,6 +286,38 @@ func (c *daemonCtlClient) CheckBucketPassword(ctx context.Context, in *CheckBuck
 	return out, nil
 }
 
+func (c *daemonCtlClient) LogStream(ctx context.Context, in *LogStreamRequest, opts ...grpc.CallOption) (DaemonCtl_LogStreamClient, error) {
+	stream, err := c.cc.NewStream(ctx, &DaemonCtl_ServiceDesc.Streams[3], "/rpc.DaemonCtl/LogStream", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &daemonCtlLogStreamClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type DaemonCtl_LogStreamClient interface {
+	Recv() (*LogStreamResponse, error)
+	grpc.ClientStream
+}
+
+type daemonCtlLogStreamClient struct {
+	grpc.ClientStream
+}
+
+func (x *daemonCtlLogStreamClient) Recv() (*LogStreamResponse, error) {
+	m := new(LogStreamResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // DaemonCtlServer is the server API for DaemonCtl service.
 // All implementations must embed UnimplementedDaemonCtlServer
 // for forward compatibility
@@ -316,6 +350,8 @@ type DaemonCtlServer interface {
 	ListBuckets(context.Context, *ListBucketsRequest) (*ListBucketsResponse, error)
 	MakeBucket(context.Context, *MakeBucketRequest) (*MakeBucketResponse, error)
 	CheckBucketPassword(context.Context, *CheckBucketPasswordRequest) (*CheckBucketPasswordResponse, error)
+	// Misc RPCs
+	LogStream(*LogStreamRequest, DaemonCtl_LogStreamServer) error
 	mustEmbedUnimplementedDaemonCtlServer()
 }
 
@@ -373,6 +409,9 @@ func (UnimplementedDaemonCtlServer) MakeBucket(context.Context, *MakeBucketReque
 }
 func (UnimplementedDaemonCtlServer) CheckBucketPassword(context.Context, *CheckBucketPasswordRequest) (*CheckBucketPasswordResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckBucketPassword not implemented")
+}
+func (UnimplementedDaemonCtlServer) LogStream(*LogStreamRequest, DaemonCtl_LogStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method LogStream not implemented")
 }
 func (UnimplementedDaemonCtlServer) mustEmbedUnimplementedDaemonCtlServer() {}
 
@@ -707,6 +746,27 @@ func _DaemonCtl_CheckBucketPassword_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonCtl_LogStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(LogStreamRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaemonCtlServer).LogStream(m, &daemonCtlLogStreamServer{stream})
+}
+
+type DaemonCtl_LogStreamServer interface {
+	Send(*LogStreamResponse) error
+	grpc.ServerStream
+}
+
+type daemonCtlLogStreamServer struct {
+	grpc.ServerStream
+}
+
+func (x *daemonCtlLogStreamServer) Send(m *LogStreamResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // DaemonCtl_ServiceDesc is the grpc.ServiceDesc for DaemonCtl service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -786,6 +846,11 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "Restore",
 			Handler:       _DaemonCtl_Restore_Handler,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "LogStream",
+			Handler:       _DaemonCtl_LogStream_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "rpc/rpc.proto",
