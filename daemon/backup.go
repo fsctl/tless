@@ -173,6 +173,7 @@ func Backup(vlog *util.VLog, completion func()) {
 	dirs := gCfg.Dirs
 	excludePaths := gCfg.ExcludePaths
 	gGlobalsLock.Unlock()
+	endedInErrorOrCancelation := false
 	for _, backupDirPath := range dirs {
 		backupDirName := filepath.Base(backupDirPath)
 
@@ -203,17 +204,22 @@ func Backup(vlog *util.VLog, completion func()) {
 		// Traverse the FS for changed files and do the journaled backup
 		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludePaths, vlog, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress)
 		for _, e := range backupReportedEvents {
+			if e.Kind == util.ERR_OP_NOT_PERMITTED || e.Kind == util.ERR_INCOMPATIBLE_BUCKET_VERSION {
+				endedInErrorOrCancelation = true
+			}
 			gGlobalsLock.Lock()
 			gStatus.reportedEvents = append(gStatus.reportedEvents, e)
 			gGlobalsLock.Unlock()
 		}
 		if fatalError {
+			endedInErrorOrCancelation = true
 			goto done
 		}
 		if continueLoop {
 			continue
 		}
 		if breakFromLoop {
+			endedInErrorOrCancelation = true
 			break
 		}
 
@@ -224,14 +230,18 @@ func Backup(vlog *util.VLog, completion func()) {
 		time.Sleep(time.Second * 2)
 	}
 
-	gGlobalsLock.Lock()
-	gStatus.reportedEvents = append(gStatus.reportedEvents, util.ReportedEvent{
-		Kind:     util.INFO_BACKUP_COMPLETED,
-		Path:     "",
-		IsDir:    false,
-		Datetime: time.Now().Unix(),
-	})
-	gGlobalsLock.Unlock()
+	// Add a backup completed event only if none of the reported events were error type,
+	// and backup was not canceled
+	if !endedInErrorOrCancelation {
+		gGlobalsLock.Lock()
+		gStatus.reportedEvents = append(gStatus.reportedEvents, util.ReportedEvent{
+			Kind:     util.INFO_BACKUP_COMPLETED,
+			Path:     "",
+			IsDir:    false,
+			Datetime: time.Now().Unix(),
+		})
+		gGlobalsLock.Unlock()
+	}
 
 done:
 	// On finished, set the status back to Idle
