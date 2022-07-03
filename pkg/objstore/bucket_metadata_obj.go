@@ -21,6 +21,8 @@ const (
 )
 
 var (
+	SupportedBucketVersions = []int{1}
+
 	ErrCantConnect           = errors.New("cannot connect to cloud provider")
 	ErrNoMetadataButNotEmpty = errors.New("the bucket does not contain a metadata file but is also not empty")
 )

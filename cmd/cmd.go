@@ -195,13 +195,16 @@ func validateConfigVars() error {
 	}
 
 	// Download (or create) the salt
-	salt, _, encKey, hmacKey, err := objst.GetOrCreateBucketMetadata(ctx, cfgBucket, cfgMasterPassword, vlog)
+	salt, bucketVersion, encKey, hmacKey, err := objst.GetOrCreateBucketMetadata(ctx, cfgBucket, cfgMasterPassword, vlog)
 	if err != nil {
 		log.Println("error: could not read or initialize bucket metadata: ", err)
 	}
 	cfgSalt = salt
 	if len(cfgSalt) == 0 {
 		return fmt.Errorf("invalid salt (value='%s')", cfgSalt)
+	}
+	if !util.IntSliceContains(objstore.SupportedBucketVersions, bucketVersion) {
+		return fmt.Errorf("error: bucket version %d is not supported by this version of the program", bucketVersion)
 	}
 
 	// Verify the keys

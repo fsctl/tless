@@ -92,7 +92,7 @@ func initConfig(globalsLock *sync.Mutex) error {
 	globalsLock.Unlock()
 
 	// Download (or create) the metadata
-	salt, _, encKey, hmacKey, err := objst.GetOrCreateBucketMetadata(ctx, bucket, masterPassword, vlog)
+	salt, bucketVersion, encKey, hmacKey, err := objst.GetOrCreateBucketMetadata(ctx, bucket, masterPassword, vlog)
 	if err != nil {
 		e := fmt.Errorf("error: could not read or initialize bucket metadata: %v", err)
 		vlog.Println(e.Error())
@@ -100,6 +100,11 @@ func initConfig(globalsLock *sync.Mutex) error {
 	}
 	if len(salt) == 0 {
 		e := fmt.Errorf("error: invalid salt (value='%s')", salt)
+		vlog.Println(e.Error())
+		return e
+	}
+	if !util.IntSliceContains(objstore.SupportedBucketVersions, bucketVersion) {
+		e := fmt.Errorf("error: bucket version %d is not supported by this version of the program", bucketVersion)
 		vlog.Println(e.Error())
 		return e
 	}

@@ -64,14 +64,21 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 			switch e.Kind {
 			case util.ERR_OP_NOT_PERMITTED:
 				pbReportedEvents = append(pbReportedEvents, &pb.ReportedEvent{
-					Kind:     pb.ReportedEvent_OperationNotPermitted,
+					Kind:     pb.ReportedEvent_ErrOperationNotPermitted,
 					Path:     e.Path,
 					IsDir:    e.IsDir,
 					Datetime: e.Datetime,
 				})
 			case util.INFO_BACKUP_COMPLETED:
 				pbReportedEvents = append(pbReportedEvents, &pb.ReportedEvent{
-					Kind:     pb.ReportedEvent_BackupCompleted,
+					Kind:     pb.ReportedEvent_InfoBackupCompleted,
+					Path:     e.Path,
+					IsDir:    e.IsDir,
+					Datetime: e.Datetime,
+				})
+			case util.ERR_INCOMPATIBLE_BUCKET_VERSION:
+				pbReportedEvents = append(pbReportedEvents, &pb.ReportedEvent{
+					Kind:     pb.ReportedEvent_ErrIncompatibleBucketVersion,
 					Path:     e.Path,
 					IsDir:    e.IsDir,
 					Datetime: e.Datetime,

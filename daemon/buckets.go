@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/fsctl/tless/pkg/objstore"
@@ -116,12 +117,20 @@ func (s *server) CheckBucketPassword(ctx context.Context, in *pb.CheckBucketPass
 	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
 	// Check if a metadata file with salt and encrypted keys exists and retrieve it
-	_, _, encKey, hmacKey, err := objst.GetOrCreateBucketMetadata(ctx, in.GetBucketName(), masterPassword, vlog)
+	_, bucketVersion, encKey, hmacKey, err := objst.GetOrCreateBucketMetadata(ctx, in.GetBucketName(), masterPassword, vlog)
 	if err != nil {
 		log.Println("error: CheckBucketPassword: GetOrCreateBucketMetadata failed: ", err)
 		return &pb.CheckBucketPasswordResponse{
 			Result: pb.CheckBucketPasswordResponse_ERR_OTHER,
 			ErrMsg: err.Error(),
+		}, nil
+	}
+	if !util.IntSliceContains(objstore.SupportedBucketVersions, bucketVersion) {
+		msg := fmt.Sprintf("error: bucket version %d is not supported by this version of the program", bucketVersion)
+		log.Println(msg)
+		return &pb.CheckBucketPasswordResponse{
+			Result: pb.CheckBucketPasswordResponse_ERR_INCOMPATIBLE_BUCKET_VERSION,
+			ErrMsg: msg,
 		}, nil
 	}
 

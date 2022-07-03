@@ -314,3 +314,13 @@ func FormatBytesAsString(bcount int) string {
 		return fmt.Sprintf("%d bytes", bcount)
 	}
 }
+
+// Returns true if int slice `sl` contains int `i`, else false.
+func IntSliceContains(sl []int, i int) bool {
+	for _, val := range sl {
+		if i == val {
+			return true
+		}
+	}
+	return false
+}

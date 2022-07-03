@@ -68,8 +68,9 @@ message DaemonStatusRequest {}
 
 message ReportedEvent {
   enum ReportedEventKind {
-    OperationNotPermitted = 0;
-    BackupCompleted = 1;
+    ErrOperationNotPermitted = 0;
+    InfoBackupCompleted = 1;
+    ErrIncompatibleBucketVersion = 2;
   }
   ReportedEventKind Kind = 1;
   string Path = 2;
@@ -243,6 +244,7 @@ message CheckBucketPasswordResponse {
     SUCCESS = 0;
     ERR_PASSWORD_WRONG = 1;
     ERR_OTHER = 2;
+    ERR_INCOMPATIBLE_BUCKET_VERSION = 3;
   }
   CheckBucketPasswordResult Result = 1;
   string ErrMsg = 2;
