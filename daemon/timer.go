@@ -70,6 +70,7 @@ func timerLoop(server *server) {
 			// Attempt to start a backup, update lastAutomaticBackupStarted if successful
 			gGlobalsLock.Lock()
 			isIdle := gStatus.state == Idle
+			isBackingUp := gStatus.state == BackingUp
 			gGlobalsLock.Unlock()
 
 			if isIdle {
@@ -84,6 +85,9 @@ func timerLoop(server *server) {
 					log.Println("PERIODIC> periodic backup started")
 					lastAutomaticBackupStarted = secondsCnt
 				}
+			} else if isBackingUp {
+				// We're already backing up, so mark backup as having started
+				lastAutomaticBackupStarted = secondsCnt
 			} else {
 				vlog.Println("PERIODIC> cannot start backup b/c we're not in Idle state")
 			}
