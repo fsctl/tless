@@ -97,33 +97,6 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 				return nil, false, err
 			}
 		}
-
-		/*
-			// Encrypt buffer
-			ciphertextBuf, err := cryptography.EncryptBuffer(key, buf)
-			if err != nil {
-				log.Printf("error: Backup: EncryptBuffer failed: %v\n", err)
-				return nil, false, err
-			}
-
-			// Generate chunk name
-			chunkName := generateRandomChunkName()
-
-			// Save the single chunk name to return
-			chunkExtents = append(chunkExtents, snapshots.ChunkExtent{
-				ChunkName: chunkName,
-				Offset:    0,
-				Len:       int64(len(buf)),
-			})
-
-			// try to put the chunk to obj store
-			objName := "chunks/" + chunkName
-			err = objst.UploadObjFromBuffer(ctx, bucket, objName, ciphertextBuf, objstore.ComputeETag(ciphertextBuf))
-			if err != nil {
-				log.Printf("error: Backup(): backing up file: %v\n", err)
-				return nil, false, err
-			}
-		*/
 		didSucceed := cp.AddDirEntry(relPath, buf, bjt)
 		if !didSucceed {
 			cp.Complete()

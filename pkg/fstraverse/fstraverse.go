@@ -61,6 +61,9 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 	var dirsCnt int64 = 0
 
 	err := filepath.WalkDir(rootPath, func(path string, dirent fs.DirEntry, err error) error {
+		if isInExcludePathPrefixes(path, excludePathPrefixes) {
+			return nil
+		}
 		if err != nil {
 			log.Println("error: WalkDirFunc: ", err)
 
@@ -81,9 +84,7 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 
 			return fs.SkipDir
 		}
-		if isInExcludePathPrefixes(path, excludePathPrefixes) {
-			return nil
-		}
+
 		relPath := relativizePath(path, rootPath)
 		if relPath == rootPath {
 			return nil
