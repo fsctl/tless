@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/fsctl/tless/pkg/util"
@@ -19,8 +21,12 @@ const (
 	dbgDisableAutoprune bool = false
 )
 
-func timerLoop(signals chan os.Signal, server *server) {
+func timerLoop(server *server) {
 	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
+
+	// Monitor for SIGINT and SIGTERM and exit routine if caught
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 
 	// Start the first automatic backup 15 minutes after this loop starts running
 	var (
@@ -32,20 +38,22 @@ func timerLoop(signals chan os.Signal, server *server) {
 	for {
 		// Loop wakes up periodically to do automatic tasks
 		//vlog.Println("PERIODIC> going to sleep")
-		time.Sleep(time.Second * time.Duration(wakeEveryNSeconds))
+		for i := 0; i < wakeEveryNSeconds; i++ {
+			time.Sleep(time.Second)
+
+			// Check the signals channel to see if we should exit routine
+			select {
+			case sig := <-signals:
+				log.Printf("PERIODIC> exiting (rcvd signal %v)", sig)
+				return
+			default:
+			}
+		}
 
 		// Wake up
 		secondsCnt += wakeEveryNSeconds
 
 		//vlog.Println("PERIODIC> woke up")
-
-		// Check the signals channel to see if we should exit routine
-		select {
-		case sig := <-signals:
-			log.Printf("PERIODIC> exiting (rcvd signal %v)", sig)
-			return
-		default:
-		}
 
 		// Has gCfg, gUsername, etc been set yet?  Cannot do anything until that is done
 		gGlobalsLock.Lock()

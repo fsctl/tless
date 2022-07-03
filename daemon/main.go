@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/util"
@@ -29,6 +30,7 @@ var (
 	gConstCommitHash string // not protected by lock
 	gGlobalsLock     sync.Mutex
 	gDb              *database.DB
+	gDbMem           *database.DB
 	gCancelRequested bool
 )
 
@@ -61,8 +63,12 @@ func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRespo
 			if err != nil {
 				log.Println("error: gDb.HasDirtyBackupJournal: ", err)
 			}
-			if isIdle && hasDirtyBackupJournal {
-				replayBackupJournal()
+			if hasDirtyBackupJournal {
+				if isIdle {
+					replayBackupJournal()
+				} else {
+					time.Sleep(time.Second * 30)
+				}
 			} else {
 				return
 			}
@@ -86,6 +92,9 @@ func initDbConn(globalsLock *sync.Mutex) {
 	}
 	globalsLock.Lock()
 	sqliteFilePath := filepath.Join(sqliteDir, "state.db")
+	if gDb != nil {
+		gDb.Close()
+	}
 	gDb, err = database.NewDB(sqliteFilePath)
 	globalsLock.Unlock()
 	if err != nil {
@@ -155,7 +164,7 @@ func DaemonMain(version string, commitHash string) {
 		}()
 
 		// go routine that wakes up periodically and checks if its time for a backup
-		go timerLoop(signals, &server{})
+		go timerLoop(&server{})
 
 		// Go into a blocking wait for the requested signal notifications
 		<-signals
@@ -164,6 +173,9 @@ func DaemonMain(version string, commitHash string) {
 		// This is commented out because otherwise the gRPC listener panics when SIGTERM is
 		// received during the processing of an RPC.
 		//s.GracefulStop()
+
+		// Give go routines a chance to gracefully terminate
+		time.Sleep(time.Second * 15)
 
 		// other cleanup
 		gGlobalsLock.Lock()

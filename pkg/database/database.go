@@ -6,26 +6,72 @@ import (
 	"errors"
 	"log"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/mattn/go-sqlite3"
 )
 
 type DB struct {
-	dbConn *sql.DB
+	dbConn      *sql.DB
+	sqlite3Conn *sqlite3.SQLiteConn
 }
 
+var (
+	isDoOnceDone bool                = false
+	sqlite3Conn  *sqlite3.SQLiteConn = nil
+)
+
 func NewDB(dbFilePath string) (*DB, error) {
-	db, err := sql.Open("sqlite3", dbFilePath)
+	if !isDoOnceDone {
+		sql.Register("sqlite3_with_connect_hook",
+			&sqlite3.SQLiteDriver{
+				ConnectHook: func(sc *sqlite3.SQLiteConn) error {
+					sqlite3Conn = sc
+					return nil
+				},
+			})
+		isDoOnceDone = true
+	}
+
+	db, err := sql.Open("sqlite3_with_connect_hook", dbFilePath)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error: NewDB: ", err)
+	}
+	if err = db.Ping(); err != nil {
+		log.Fatalf("error: NewDB: db.Ping failed: %v", err)
+	}
+	if sqlite3Conn == nil {
+		log.Fatalf("error: NewDB: sqlite3Conn is nil")
 	}
 
 	return &DB{
-		dbConn: db,
+		dbConn:      db,
+		sqlite3Conn: sqlite3Conn,
 	}, nil
 }
 
 func (db *DB) Close() {
 	db.dbConn.Close()
+}
+
+func (dbSrc *DB) BackupTo(dbDst *DB) {
+	sqliteBackup, err := dbDst.sqlite3Conn.Backup("main", dbSrc.sqlite3Conn, "main")
+	if err != nil {
+		log.Fatal("error: BackupTo: ", err)
+	}
+	for {
+		bDone, err := sqliteBackup.Step(-1)
+		if err != nil {
+			log.Fatal("error: BackupTo: ", err)
+		}
+		if bDone {
+			break
+		} else {
+			log.Println("error: BackupTo: !bDone (looping)")
+		}
+	}
+	err = sqliteBackup.Finish()
+	if err != nil {
+		log.Fatal("error: BackupTo: ", err)
+	}
 }
 
 func (db *DB) querySingleRowCount(sql string) (int, error) {
