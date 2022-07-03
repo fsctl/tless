@@ -45,6 +45,7 @@ service DaemonCtl {
 
   // Misc RPCs
   rpc LogStream (LogStreamRequest) returns (stream LogStreamResponse) {}
+  rpc ChangePassword (ChangePasswordRequest) returns (ChangePasswordResponse) {}
 }
 
 message HelloRequest {
@@ -261,4 +262,15 @@ message LogStreamResponse {
   repeated string LogLines = 3;
   int64 NextOffset = 4;
   double PercentDone = 5;
+}
+
+message ChangePasswordRequest {
+  string OldPassword = 1;
+  string NewPassword = 2;
+  bool UpdateConfigFile = 3;
+}
+
+message ChangePasswordResponse {
+  bool DidSucceed = 1;
+  string ErrMsg = 2;
 }

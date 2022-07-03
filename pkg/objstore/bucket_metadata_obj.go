@@ -231,3 +231,43 @@ func (objst *ObjStore) VerifyKeys(ctx context.Context, bucket string, masterPass
 	}
 	return nil
 }
+
+// Reencrypts encKey and hmacKey under new pdKey (derived from newPassword + new salt) and saves encrypted keys to cloud bucket
+func (objst *ObjStore) ChangePassword(ctx context.Context, bucket string, encKey []byte, hmacKey []byte, newPassword string, vlog *util.VLog) error {
+	// generate the new salt we're going to use when writing new bucket
+	salt := util.GenerateRandomSalt()
+
+	// derive pdKey using new salt
+	pdKey, err := cryptography.DeriveKey(salt, newPassword)
+	if err != nil {
+		e := fmt.Errorf("error: ChangePassword: could not derive pdKey: %v", err)
+		vlog.Println(e.Error())
+		return e
+	}
+
+	encryptedEncKey, err := cryptography.EncryptBuffer(pdKey, encKey)
+	if err != nil {
+		log.Println("error: ChangePassword: cannot encrypt encKey: ", err)
+		return err
+	}
+	encryptedEncKeyB64 := base64.URLEncoding.EncodeToString(encryptedEncKey)
+
+	encryptedHmacKey, err := cryptography.EncryptBuffer(pdKey, hmacKey)
+	if err != nil {
+		log.Println("error: ChangePassword: cannot encrypt hmacKey: ", err)
+		return err
+	}
+	encryptedHmacKeyB64 := base64.URLEncoding.EncodeToString(encryptedHmacKey)
+
+	bMdata := &BucketMetadata{
+		Salt:                salt,
+		Version:             1,
+		EncryptedEncKeyB64:  encryptedEncKeyB64,
+		EncryptedHmacKeyB64: encryptedHmacKeyB64,
+	}
+	if err := objst.writeBucketMetadataFile(ctx, bucket, bMdata, vlog); err != nil {
+		log.Println("error: ChangePassword: cannot write new bucket metadata file: ", err)
+		return err
+	}
+	return nil
+}

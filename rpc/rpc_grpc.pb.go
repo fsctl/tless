@@ -52,6 +52,7 @@ type DaemonCtlClient interface {
 	CheckBucketPassword(ctx context.Context, in *CheckBucketPasswordRequest, opts ...grpc.CallOption) (*CheckBucketPasswordResponse, error)
 	// Misc RPCs
 	LogStream(ctx context.Context, in *LogStreamRequest, opts ...grpc.CallOption) (DaemonCtl_LogStreamClient, error)
+	ChangePassword(ctx context.Context, in *ChangePasswordRequest, opts ...grpc.CallOption) (*ChangePasswordResponse, error)
 }
 
 type daemonCtlClient struct {
@@ -318,6 +319,15 @@ func (x *daemonCtlLogStreamClient) Recv() (*LogStreamResponse, error) {
 	return m, nil
 }
 
+func (c *daemonCtlClient) ChangePassword(ctx context.Context, in *ChangePasswordRequest, opts ...grpc.CallOption) (*ChangePasswordResponse, error) {
+	out := new(ChangePasswordResponse)
+	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/ChangePassword", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonCtlServer is the server API for DaemonCtl service.
 // All implementations must embed UnimplementedDaemonCtlServer
 // for forward compatibility
@@ -352,6 +362,7 @@ type DaemonCtlServer interface {
 	CheckBucketPassword(context.Context, *CheckBucketPasswordRequest) (*CheckBucketPasswordResponse, error)
 	// Misc RPCs
 	LogStream(*LogStreamRequest, DaemonCtl_LogStreamServer) error
+	ChangePassword(context.Context, *ChangePasswordRequest) (*ChangePasswordResponse, error)
 	mustEmbedUnimplementedDaemonCtlServer()
 }
 
@@ -412,6 +423,9 @@ func (UnimplementedDaemonCtlServer) CheckBucketPassword(context.Context, *CheckB
 }
 func (UnimplementedDaemonCtlServer) LogStream(*LogStreamRequest, DaemonCtl_LogStreamServer) error {
 	return status.Errorf(codes.Unimplemented, "method LogStream not implemented")
+}
+func (UnimplementedDaemonCtlServer) ChangePassword(context.Context, *ChangePasswordRequest) (*ChangePasswordResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ChangePassword not implemented")
 }
 func (UnimplementedDaemonCtlServer) mustEmbedUnimplementedDaemonCtlServer() {}
 
@@ -767,6 +781,24 @@ func (x *daemonCtlLogStreamServer) Send(m *LogStreamResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _DaemonCtl_ChangePassword_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ChangePasswordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonCtlServer).ChangePassword(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/rpc.DaemonCtl/ChangePassword",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonCtlServer).ChangePassword(ctx, req.(*ChangePasswordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonCtl_ServiceDesc is the grpc.ServiceDesc for DaemonCtl service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -829,6 +861,10 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CheckBucketPassword",
 			Handler:    _DaemonCtl_CheckBucketPassword_Handler,
+		},
+		{
+			MethodName: "ChangePassword",
+			Handler:    _DaemonCtl_ChangePassword_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
