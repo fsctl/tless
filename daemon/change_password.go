@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"log"
+	"strings"
 
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/util"
@@ -43,11 +44,19 @@ func (s *server) ChangePassword(ctx context.Context, in *pb.ChangePasswordReques
 	// Check if a metadata file with salt and encrypted keys exists and retrieve it
 	_, _, encKey, hmacKey, err := objst.GetOrCreateBucketMetadata(ctx, bucket, oldPassword, vlog)
 	if err != nil {
-		log.Println("error: ChangePassword: GetOrCreateBucketMetadata failed: ", err)
-		return &pb.ChangePasswordResponse{
-			DidSucceed: false,
-			ErrMsg:     err.Error(),
-		}, nil
+		if strings.Contains(err.Error(), "message authentication failed") {
+			// Probably incorrect old password
+			return &pb.ChangePasswordResponse{
+				DidSucceed: false,
+				ErrMsg:     "Old password is incorrect for bucket.",
+			}, nil
+		} else {
+			log.Println("error: ChangePassword: GetOrCreateBucketMetadata failed: ", err)
+			return &pb.ChangePasswordResponse{
+				DidSucceed: false,
+				ErrMsg:     err.Error(),
+			}, nil
+		}
 	}
 
 	// Verify the encKey by trying to decrypt some filenames in bucket

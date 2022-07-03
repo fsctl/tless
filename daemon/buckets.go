@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/util"
@@ -112,18 +113,25 @@ func (s *server) CheckBucketPassword(ctx context.Context, in *pb.CheckBucketPass
 	accessKey := gCfg.AccessKeyId
 	secretKey := gCfg.SecretAccessKey
 	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
-	masterPassword := gCfg.MasterPassword
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 
 	// Check if a metadata file with salt and encrypted keys exists and retrieve it
-	_, bucketVersion, encKey, hmacKey, err := objst.GetOrCreateBucketMetadata(ctx, in.GetBucketName(), masterPassword, vlog)
+	_, bucketVersion, encKey, hmacKey, err := objst.GetOrCreateBucketMetadata(ctx, in.GetBucketName(), in.GetPassword(), vlog)
 	if err != nil {
-		log.Println("error: CheckBucketPassword: GetOrCreateBucketMetadata failed: ", err)
-		return &pb.CheckBucketPasswordResponse{
-			Result: pb.CheckBucketPasswordResponse_ERR_OTHER,
-			ErrMsg: err.Error(),
-		}, nil
+		if strings.Contains(err.Error(), "message authentication failed") {
+			// probably a wrong password
+			return &pb.CheckBucketPasswordResponse{
+				Result: pb.CheckBucketPasswordResponse_ERR_PASSWORD_WRONG,
+				ErrMsg: "Old password is incorrect for bucket.",
+			}, nil
+		} else {
+			log.Println("error: CheckBucketPassword: GetOrCreateBucketMetadata failed: ", err)
+			return &pb.CheckBucketPasswordResponse{
+				Result: pb.CheckBucketPasswordResponse_ERR_OTHER,
+				ErrMsg: err.Error(),
+			}, nil
+		}
 	}
 	if !util.IntSliceContains(objstore.SupportedBucketVersions, bucketVersion) {
 		msg := fmt.Sprintf("error: bucket version %d is not supported by this version of the program", bucketVersion)
@@ -135,7 +143,7 @@ func (s *server) CheckBucketPassword(ctx context.Context, in *pb.CheckBucketPass
 	}
 
 	// Verify the encKey by trying to decrypt some filenames in bucket
-	if err = objst.VerifyKeys(ctx, in.GetBucketName(), masterPassword, encKey, hmacKey, vlog); err != nil {
+	if err = objst.VerifyKeys(ctx, in.GetBucketName(), in.GetPassword(), encKey, hmacKey, vlog); err != nil {
 		log.Println("error: CheckBucketPassword: VerifyKeyAndSalt failed: ", err)
 		return &pb.CheckBucketPasswordResponse{
 			Result: pb.CheckBucketPasswordResponse_ERR_PASSWORD_WRONG,
