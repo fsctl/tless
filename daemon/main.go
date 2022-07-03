@@ -92,9 +92,6 @@ func initDbConn(globalsLock *sync.Mutex) {
 	}
 	globalsLock.Lock()
 	sqliteFilePath := filepath.Join(sqliteDir, "state.db")
-	if gDb != nil {
-		gDb.Close()
-	}
 	gDb, err = database.NewDB(sqliteFilePath)
 	globalsLock.Unlock()
 	if err != nil {
