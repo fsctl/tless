@@ -84,8 +84,23 @@ func (s *server) ReadAllSnapshotsMetadata(context.Context, *pb.ReadAllSnapshotsM
 func (s *server) ReadSnapshotPaths(in *pb.ReadSnapshotPathsRequest, srv pb.DaemonCtl_ReadSnapshotPathsServer) error {
 	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
-	log.Printf(">> GOT COMMAND: ReadSnapshotPaths (for '%s')", in.BackupName+"/"+in.SnapshotName)
+	log.Printf(">> GOT COMMAND: ReadSnapshotPaths (for '%s'/'%s')", in.BackupName, in.SnapshotName)
 	defer log.Println(">> COMPLETED COMMAND: ReadSnapshotPaths")
+
+	// Make sure arguments are non-blank as expected
+	if in.BackupName == "" || in.SnapshotName == "" {
+		msg := fmt.Sprintf("error: ReadSnapshotPaths: received blank argument(s): in.BackupName='%s', in.SnapshotName='%s'", in.BackupName, in.SnapshotName)
+		log.Println(msg)
+		resp := pb.ReadSnapshotPathsResponse{
+			DidSucceed: false,
+			ErrMsg:     "backup name or snapshot name was blank",
+			RelPaths:   nil,
+		}
+		if err := srv.Send(&resp); err != nil {
+			log.Println("error: server.Send failed: ", err)
+		}
+		return nil
+	}
 
 	// Make sure the global config we need is initialized
 	gGlobalsLock.Lock()

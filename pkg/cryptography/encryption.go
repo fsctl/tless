@@ -22,13 +22,19 @@ import (
 // nonce so that the nonce reuse does not leak any information except
 // that the same plaintext was encrypted.
 func EncryptFilename(key []byte, filename string) (string, error) {
+	// Protect from panic when trying to encrypt empty string
+	if filename == "" {
+		err := fmt.Errorf("filename was blank")
+		log.Println("error: EncryptFilename: ", err)
+		return "", err
+	}
+
 	// gzip filename to shorten it if it's long
 	filenameGz := gz(filename)
 
 	aessiv, err := siv.NewGCM(key)
 	if err != nil {
-		// TODO: don't Fatalln here, just return the error
-		log.Fatalln("error: EncryptFilename: ", err)
+		log.Println("error: EncryptFilename: ", err)
 		return "", err
 	}
 
