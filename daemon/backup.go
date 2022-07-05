@@ -164,8 +164,10 @@ func Backup(vlog *util.VLog, completion func()) {
 		vlog.Printf("Inspecting %s...\n", backupDirPath)
 
 		// Display the backup dir we're doing this iteration of the loop
+		// Each iteration of the loop we start back at 0%
 		gGlobalsLock.Lock()
 		gStatus.msg = backupDirName
+		gStatus.percentage = 0.0
 		gGlobalsLock.Unlock()
 
 		// Setup update progress callback
@@ -184,8 +186,17 @@ func Backup(vlog *util.VLog, completion func()) {
 			}
 		}
 
+		// Define traversal cancel func
+		checkAndHandleTraversalCancelation := func() bool {
+			util.LockIf(&gGlobalsLock)
+			defer util.UnlockIf(&gGlobalsLock)
+			isCancelRequested := gCancelRequested
+			gCancelRequested = false
+			return isCancelRequested
+		}
+
 		// Traverse the FS for changed files and do the journaled backup
-		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludePaths, vlog, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress)
+		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludePaths, vlog, checkAndHandleTraversalCancelation, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress)
 		for _, e := range backupReportedEvents {
 			if e.Kind == util.ERR_OP_NOT_PERMITTED {
 				backupEndedInError = true

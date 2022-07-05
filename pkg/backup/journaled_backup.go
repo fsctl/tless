@@ -23,7 +23,7 @@ type UpdateProgressFuncType func(finished int64, total int64, globalsLock *sync.
 type SetReplayInitialProgressFuncType func(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog)
 type SetBackupInitialProgressFuncType func(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog)
 
-func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, excludePaths []string, vlog *util.VLog, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, setBackupInitialProgressFunc SetBackupInitialProgressFuncType, updateBackupProgressFunc UpdateProgressFuncType) (backupReportedEvents []util.ReportedEvent, breakFromLoop bool, continueLoop bool, fatalError bool) {
+func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, excludePaths []string, vlog *util.VLog, checkAndHandleTraversalCancelation fstraverse.CheckAndHandleTraversalCancelationFuncType, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, setBackupInitialProgressFunc SetBackupInitialProgressFuncType, updateBackupProgressFunc UpdateProgressFuncType) (backupReportedEvents []util.ReportedEvent, breakFromLoop bool, continueLoop bool, fatalError bool) {
 	// Return values
 	breakFromLoop = false
 	continueLoop = false
@@ -40,7 +40,11 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 		return
 	}
 	var backupIdsQueue fstraverse.BackupIdsQueue
-	backupReportedEvents, _ = fstraverse.Traverse(backupDirPath, prevPaths, db, globalsLock, &backupIdsQueue, excludePaths)
+	backupReportedEvents, err = fstraverse.Traverse(backupDirPath, prevPaths, db, globalsLock, &backupIdsQueue, excludePaths, checkAndHandleTraversalCancelation)
+	if errors.Is(err, fstraverse.ErrTraversalCanceled) {
+		breakFromLoop = true // signals cancelation to caller
+		return
+	}
 
 	// Iterate over the queue of dirent id's inserting them into journal
 	util.LockIf(globalsLock)

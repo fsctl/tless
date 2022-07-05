@@ -3,6 +3,7 @@
 package fstraverse
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -17,6 +18,12 @@ import (
 
 	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/util"
+)
+
+type CheckAndHandleTraversalCancelationFuncType func() bool
+
+var (
+	ErrTraversalCanceled = fmt.Errorf("backup canceled")
 )
 
 type BackupIdsQueueItem struct {
@@ -47,7 +54,7 @@ type dirEntryInsert struct {
 	lastBackupUnixtime int64
 }
 
-func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLock *sync.Mutex, backupIdsQueue *BackupIdsQueue, excludePathPrefixes []string) ([]util.ReportedEvent, error) {
+func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLock *sync.Mutex, backupIdsQueue *BackupIdsQueue, excludePathPrefixes []string, checkAndHandleTraversalCancelation CheckAndHandleTraversalCancelationFuncType) ([]util.ReportedEvent, error) {
 	rootPath = util.StripTrailingSlashes(rootPath)
 	rootDirName := filepath.Base(rootPath)
 
@@ -158,10 +165,22 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 			pendingDirEntryInserts = append(pendingDirEntryInserts, dirEntryInsert{rootPath: rootDirName, relPath: relPath, lastBackupUnixtime: 0})
 		}
 
+		// Check for cancelation and return ErrTraversalCanceled if it occurs
+		if checkAndHandleTraversalCancelation != nil {
+			isCanceled := checkAndHandleTraversalCancelation()
+			if isCanceled {
+				return ErrTraversalCanceled
+			}
+		}
+
 		return nil
 	})
 	if err != nil {
-		log.Printf("error: during traverse: %v\n", err)
+		if errors.Is(err, ErrTraversalCanceled) {
+			return nil, ErrTraversalCanceled
+		} else {
+			log.Printf("error: during traverse: %v\n", err)
+		}
 	}
 
 	// Do all the dir entry inserts, get the ids and enqueue them for backup

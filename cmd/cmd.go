@@ -42,6 +42,8 @@ a password that never leaves the local machine.`,
 )
 
 func Execute() {
+	_ = hmacKey // currently unused; this line could go anywhere
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
