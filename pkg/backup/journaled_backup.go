@@ -134,7 +134,7 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 			log.Printf("error: DoJournaledBackup: could not find '%s'/'%s' in dirents: %v", backupDirName, deletedPath, err)
 			continue
 		}
-		vlog.Printf("Found deleted file '%s'/'%s' (dirents id = %d)", backupDirName, deletedPath, dirEntId)
+		vlog.Printf("Found deleted file '%s' / '%s' (dirents id = %d)", backupDirName, deletedPath, dirEntId)
 		deletedDirentIds = append(deletedDirentIds, int64(dirEntId))
 	}
 	util.LockIf(globalsLock)
