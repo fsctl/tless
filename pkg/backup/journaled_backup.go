@@ -48,6 +48,11 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 	util.UnlockIf(globalsLock)
 	memDbLastPersistedToFileUnixtime := time.Now().Unix()
 
+	// This function will persist the memory db back to disk (overwriting disk db) in 3 cases:
+	// 1) If forcePersist is true
+	// 2) If maximum time since last persist has been exceeded
+	// 3) If minimum time since last persist exceeded AND it's a "good time" to parallelize with
+	// upload operation (ie, goodTime is true)
 	persistMemDbToFile := func(runWhileUploadingFinished chan bool, goodTime bool, forcePersist bool) {
 		defer func() {
 			if runWhileUploadingFinished != nil {
@@ -55,8 +60,8 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 			}
 		}()
 		secondsSinceLastPersist := time.Now().Unix() - memDbLastPersistedToFileUnixtime
-		minPersistInterval := int64(3 * 60)
-		maxPersistInterval := int64(10 * 60)
+		minPersistInterval := int64(10 * 60)
+		maxPersistInterval := int64(20 * 60)
 		if forcePersist || (secondsSinceLastPersist > maxPersistInterval) || (secondsSinceLastPersist > minPersistInterval && goodTime) {
 			vlog.Println("PERSIST_MEMDB> starting persist")
 			util.LockIf(globalsLock)
