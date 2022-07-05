@@ -294,7 +294,9 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 			RelPath: relPath,
 		}
 
-		stats.AddFile()
+		if stats != nil {
+			stats.AddFile()
+		}
 
 		finishTaskImmediately := true
 		if bjt.ChangeType == database.Updated {
@@ -305,7 +307,9 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 				completeTask(db, globalsLock, bjt, nil)
 				finishTaskImmediately = false
 			} else {
-				stats.AddBytesFromChunkExtents(chunkExtents)
+				if stats != nil {
+					stats.AddBytesFromChunkExtents(chunkExtents)
+				}
 
 				if pendingInChunkPacker {
 					finishTaskImmediately = false
@@ -319,7 +323,9 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 				chunkExtents := prevSnapshot.RelPaths[relPath].ChunkExtents
 				crp.ChunkExtents = chunkExtents
 
-				stats.AddBytesFromChunkExtents(chunkExtents)
+				if stats != nil {
+					stats.AddBytesFromChunkExtents(chunkExtents)
+				}
 			} else {
 				log.Printf("warning: found an unchanged file but have no previous snapshot; treating it as updated: '%s/%s'", rootDirName, relPath)
 				chunkExtents, pendingInChunkPacker, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, vlog, cp, bjt)
@@ -328,7 +334,9 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 					completeTask(db, globalsLock, bjt, nil)
 					finishTaskImmediately = false
 				} else {
-					stats.AddBytesFromChunkExtents(chunkExtents)
+					if stats != nil {
+						stats.AddBytesFromChunkExtents(chunkExtents)
+					}
 
 					if pendingInChunkPacker {
 						finishTaskImmediately = false
