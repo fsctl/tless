@@ -63,7 +63,7 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 		minPersistInterval := int64(10 * 60)
 		maxPersistInterval := int64(20 * 60)
 		if (forcePersist) || (secondsSinceLastPersist > maxPersistInterval) || ((secondsSinceLastPersist > minPersistInterval) && goodTime) {
-			vlog.Printf("PERSIST_MEMDB> starting persist (b/c forcePersist=%v || max=%v || min=%v)", forcePersist, (secondsSinceLastPersist > maxPersistInterval), ((secondsSinceLastPersist > minPersistInterval) && goodTime))
+			vlog.Printf("PERSIST_MEMDB> starting persist (b/c forcePersist=%v || max=%v || min=%v with goodTime=%v)", forcePersist, (secondsSinceLastPersist > maxPersistInterval), ((secondsSinceLastPersist > minPersistInterval) && goodTime), goodTime)
 			util.LockIf(globalsLock)
 			dbMem.BackupTo(db)
 			dbMem.HasDirEnt("", "")
