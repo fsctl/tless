@@ -37,7 +37,7 @@ func (cp *chunkPacker) AddDirEntry(relPath string, buf []byte, bjt *database.Bac
 
 	// If adding this buffer would exceed chunk's capacity, return false immediately
 	if int64(len(buf))+int64(cp.posInPlaintextChunk) > ChunkSize {
-		cp.vlog.Printf("chunkPacker: AddDirEntry: declining (%d+%d kb = %d kb would exceed ChunkSize = %d kb)", int64(len(buf))/1024, int64(cp.posInPlaintextChunk)/1024, (int64(len(buf))+int64(cp.posInPlaintextChunk))/1024, ChunkSize/1024)
+		//cp.vlog.Printf("chunkPacker: AddDirEntry: declining (%d+%d kb = %d kb would exceed ChunkSize = %d kb)", int64(len(buf))/1024, int64(cp.posInPlaintextChunk)/1024, (int64(len(buf))+int64(cp.posInPlaintextChunk))/1024, ChunkSize/1024)
 		return false
 	}
 
