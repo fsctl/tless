@@ -125,7 +125,7 @@ func Backup(vlog *util.VLog, completion func()) {
 	gGlobalsLock.Lock()
 	masterPassword := gCfg.MasterPassword
 	gGlobalsLock.Unlock()
-	salt, bucketVersion, encKey, hmacKey, err := objst.GetOrCreateBucketMetadata(ctx, bucket, masterPassword, vlog)
+	salt, _, encKey, hmacKey, err := objst.GetOrCreateBucketMetadata(ctx, bucket, masterPassword, vlog)
 	if err != nil || len(salt) == 0 {
 		msg := fmt.Sprintf("error: could not read or initialize bucket metadata: %v", err)
 		log.Println(msg)
@@ -137,25 +137,7 @@ func Backup(vlog *util.VLog, completion func()) {
 		gGlobalsLock.Unlock()
 		return
 	}
-	if !util.IntSliceContains(objstore.SupportedBucketVersions, bucketVersion) {
-		gGlobalsLock.Lock()
-		gStatus.reportedEvents = append(gStatus.reportedEvents, util.ReportedEvent{
-			Kind:     util.ERR_INCOMPATIBLE_BUCKET_VERSION,
-			Path:     "",
-			IsDir:    false,
-			Datetime: time.Now().Unix(),
-		})
-		gGlobalsLock.Unlock()
-		msg := fmt.Sprintf("error: bucket version %d is not compatible with this version of the program", bucketVersion)
-		log.Println(msg)
 
-		gGlobalsLock.Lock()
-		gStatus.state = Idle
-		gStatus.percentage = -1.0
-		gStatus.msg = "Incompatible bucket version"
-		gGlobalsLock.Unlock()
-		return
-	}
 	gGlobalsLock.Lock()
 	gCfg.Salt = salt
 	gEncKey = encKey
@@ -173,7 +155,8 @@ func Backup(vlog *util.VLog, completion func()) {
 	dirs := gCfg.Dirs
 	excludePaths := gCfg.ExcludePaths
 	gGlobalsLock.Unlock()
-	endedInErrorOrCancelation := false
+	backupEndedInError := false
+	backupEndedInCancelation := false
 	for _, backupDirPath := range dirs {
 		backupDirName := filepath.Base(backupDirPath)
 
@@ -204,22 +187,22 @@ func Backup(vlog *util.VLog, completion func()) {
 		// Traverse the FS for changed files and do the journaled backup
 		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludePaths, vlog, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress)
 		for _, e := range backupReportedEvents {
-			if e.Kind == util.ERR_OP_NOT_PERMITTED || e.Kind == util.ERR_INCOMPATIBLE_BUCKET_VERSION {
-				endedInErrorOrCancelation = true
+			if e.Kind == util.ERR_OP_NOT_PERMITTED {
+				backupEndedInError = true
 			}
 			gGlobalsLock.Lock()
 			gStatus.reportedEvents = append(gStatus.reportedEvents, e)
 			gGlobalsLock.Unlock()
 		}
 		if fatalError {
-			endedInErrorOrCancelation = true
+			backupEndedInError = true
 			goto done
 		}
 		if continueLoop {
 			continue
 		}
 		if breakFromLoop {
-			endedInErrorOrCancelation = true
+			backupEndedInCancelation = true
 			break
 		}
 
@@ -232,13 +215,34 @@ func Backup(vlog *util.VLog, completion func()) {
 
 	// Add a backup completed event only if none of the reported events were error type,
 	// and backup was not canceled
-	if !endedInErrorOrCancelation {
+	if backupEndedInError {
+		gGlobalsLock.Lock()
+		gStatus.reportedEvents = append(gStatus.reportedEvents, util.ReportedEvent{
+			Kind:     util.INFO_BACKUP_COMPLETED_WITH_ERRORS,
+			Path:     "",
+			IsDir:    false,
+			Datetime: time.Now().Unix(),
+			Msg:      "",
+		})
+		gGlobalsLock.Unlock()
+	} else if backupEndedInCancelation {
+		gGlobalsLock.Lock()
+		gStatus.reportedEvents = append(gStatus.reportedEvents, util.ReportedEvent{
+			Kind:     util.INFO_BACKUP_CANCELED,
+			Path:     "",
+			IsDir:    false,
+			Datetime: time.Now().Unix(),
+			Msg:      "",
+		})
+		gGlobalsLock.Unlock()
+	} else {
 		gGlobalsLock.Lock()
 		gStatus.reportedEvents = append(gStatus.reportedEvents, util.ReportedEvent{
 			Kind:     util.INFO_BACKUP_COMPLETED,
 			Path:     "",
 			IsDir:    false,
 			Datetime: time.Now().Unix(),
+			Msg:      "",
 		})
 		gGlobalsLock.Unlock()
 	}

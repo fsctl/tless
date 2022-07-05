@@ -72,11 +72,14 @@ message ReportedEvent {
     ErrOperationNotPermitted = 0;
     InfoBackupCompleted = 1;
     ErrIncompatibleBucketVersion = 2;
+    InfoBackupCompletedWithErrors = 3;
+    InfoBackupCanceled = 4;
   }
   ReportedEventKind Kind = 1;
   string Path = 2;
   bool IsDir = 3;
   int64 Datetime = 4;
+  string Msg = 5;
 }
 
 message DaemonStatusResponse {

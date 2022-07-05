@@ -79,6 +79,7 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 					Path:     path,
 					IsDir:    true,
 					Datetime: time.Now().Unix(),
+					Msg:      "",
 				})
 			}
 

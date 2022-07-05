@@ -34,6 +34,7 @@ var (
 		percentage:     -1.0,
 		reportedEvents: make([]util.ReportedEvent, 0),
 	}
+	dbgReturnFakeOpNotPermitteds = false
 )
 
 // Callback for rpc.DaemonCtlServer.Status requests
@@ -58,7 +59,30 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 	defer gGlobalsLock.Unlock()
 
 	if gStatus.state == Idle {
-		// move the reported events over to the return pb struct and clear them here
+		// Debugging feature
+		if dbgReturnFakeOpNotPermitteds {
+			dbgReturnFakeOpNotPermitteds = false
+			gStatus.reportedEvents = append(gStatus.reportedEvents, util.ReportedEvent{
+				Kind:     util.ERR_OP_NOT_PERMITTED,
+				Path:     "/example/inaccessible/path",
+				IsDir:    true,
+				Datetime: time.Now().Unix(),
+			})
+			gStatus.reportedEvents = append(gStatus.reportedEvents, util.ReportedEvent{
+				Kind:     util.ERR_OP_NOT_PERMITTED,
+				Path:     "/example/inaccessible/path2",
+				IsDir:    true,
+				Datetime: time.Now().Unix(),
+			})
+			gStatus.reportedEvents = append(gStatus.reportedEvents, util.ReportedEvent{
+				Kind:     util.ERR_OP_NOT_PERMITTED,
+				Path:     "/another/example/inaccessible/path",
+				IsDir:    true,
+				Datetime: time.Now().Unix(),
+			})
+		}
+
+		// Move the reported events over to the return pb struct and clear them here
 		pbReportedEvents := make([]*pb.ReportedEvent, 0)
 		for _, e := range gStatus.reportedEvents {
 			switch e.Kind {
@@ -68,6 +92,7 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 					Path:     e.Path,
 					IsDir:    e.IsDir,
 					Datetime: e.Datetime,
+					Msg:      e.Msg,
 				})
 			case util.INFO_BACKUP_COMPLETED:
 				pbReportedEvents = append(pbReportedEvents, &pb.ReportedEvent{
@@ -75,6 +100,7 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 					Path:     e.Path,
 					IsDir:    e.IsDir,
 					Datetime: e.Datetime,
+					Msg:      e.Msg,
 				})
 			case util.ERR_INCOMPATIBLE_BUCKET_VERSION:
 				pbReportedEvents = append(pbReportedEvents, &pb.ReportedEvent{
@@ -82,6 +108,23 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 					Path:     e.Path,
 					IsDir:    e.IsDir,
 					Datetime: e.Datetime,
+					Msg:      e.Msg,
+				})
+			case util.INFO_BACKUP_COMPLETED_WITH_ERRORS:
+				pbReportedEvents = append(pbReportedEvents, &pb.ReportedEvent{
+					Kind:     pb.ReportedEvent_InfoBackupCompletedWithErrors,
+					Path:     e.Path,
+					IsDir:    e.IsDir,
+					Datetime: e.Datetime,
+					Msg:      e.Msg,
+				})
+			case util.INFO_BACKUP_CANCELED:
+				pbReportedEvents = append(pbReportedEvents, &pb.ReportedEvent{
+					Kind:     pb.ReportedEvent_InfoBackupCanceled,
+					Path:     e.Path,
+					IsDir:    e.IsDir,
+					Datetime: e.Datetime,
+					Msg:      e.Msg,
 				})
 			}
 		}
