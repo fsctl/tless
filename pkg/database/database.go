@@ -177,7 +177,7 @@ func (db *DB) createTables() error {
 func (db *DB) HasDirEnt(rootDirName string, relPath string) (isFound bool, lastBackupUnix int64, id int, err error) {
 	stmt, err := db.dbConn.Prepare("select id, last_backup from dirents where rootdir = ? AND relpath = ?")
 	if err != nil {
-		log.Printf("Error: HasDirEnt: %v", err)
+		log.Printf("error: HasDirEnt (1): %v", err)
 		return false, 0, 0, err
 	}
 	defer stmt.Close()
@@ -185,7 +185,7 @@ func (db *DB) HasDirEnt(rootDirName string, relPath string) (isFound bool, lastB
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, 0, 0, nil
 	} else if err != nil {
-		log.Printf("Error: HasDirEnt: %v", err)
+		log.Printf("error: HasDirEnt (2): %v", err)
 		return false, 0, 0, err
 	} else {
 		return true, lastBackupUnix, id, nil

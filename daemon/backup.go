@@ -51,27 +51,6 @@ func (s *server) Backup(ctx context.Context, in *pb.BackupRequest) (*pb.BackupRe
 		gGlobalsLock.Unlock()
 	}
 
-	_ = gDbMem
-	// // Experiment to prove creating memory db and backing up into it
-	// var err error
-	// log.Printf("MEMORY DB> Creating memory db")
-	// gGlobalsLock.Lock()
-	// gDbMem, err = database.NewDB(":memory:")
-	// gGlobalsLock.Unlock()
-	// if err != nil {
-	// 	log.Fatalf("error: cannot open memory database: %v", err)
-	// }
-	// gGlobalsLock.Lock()
-	// gDb.BackupTo(gDbMem)
-	// isDirtyJournal, err := gDbMem.HasDirtyBackupJournal()
-	// gGlobalsLock.Unlock()
-	// if err != nil {
-	// 	log.Fatalf("error: cannot open memory database: %v", err)
-	// }
-	// log.Printf("MEMORY DB> Successfully created memory db")
-	// log.Printf("MEMORY DB> isDirtyJournal=%v", isDirtyJournal)
-	// // --- end - experiment ----------------------------------------
-
 	// Force full backup?
 	isForceFullBackup := in.ForceFullBackup
 	if isForceFullBackup {

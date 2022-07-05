@@ -30,7 +30,6 @@ var (
 	gConstCommitHash string // not protected by lock
 	gGlobalsLock     sync.Mutex
 	gDb              *database.DB
-	gDbMem           *database.DB
 	gCancelRequested bool
 )
 

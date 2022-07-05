@@ -29,10 +29,53 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 	continueLoop = false
 	fatalError = false
 
+	// The memory DB pnly exists within this routine and the subroutines it calls:
+	// - We create it here at the beginning using file DB's current contents.
+	// - We defer til exit of this routine mem db's persist back to disk and closing of mem db.
+	// - Periodically, during uploads, we persist the mem db back to disk for protection in
+	// case of crash.
+	// - Mem db accesses are serialized by same lock as regular db.
+
+	// Init the mem db
+	util.LockIf(globalsLock)
+	dbMem, err := database.NewDB(":memory:")
+	util.UnlockIf(globalsLock)
+	if err != nil {
+		log.Fatalf("error: cannot open memory database: %v", err)
+	}
+	util.LockIf(globalsLock)
+	db.BackupTo(dbMem)
+	util.UnlockIf(globalsLock)
+	memDbLastPersistedToFileUnixtime := time.Now().Unix()
+
+	persistMemDbToFile := func(runWhileUploadingFinished chan bool, goodTime bool, forcePersist bool) {
+		defer func() {
+			if runWhileUploadingFinished != nil {
+				runWhileUploadingFinished <- true
+			}
+		}()
+		secondsSinceLastPersist := time.Now().Unix() - memDbLastPersistedToFileUnixtime
+		minPersistInterval := int64(3 * 60)
+		maxPersistInterval := int64(10 * 60)
+		if forcePersist || (secondsSinceLastPersist > maxPersistInterval) || (secondsSinceLastPersist > minPersistInterval && goodTime) {
+			vlog.Println("PERSIST_MEMDB> starting persist")
+			util.LockIf(globalsLock)
+			dbMem.BackupTo(db)
+			dbMem.HasDirEnt("", "")
+			util.UnlockIf(globalsLock)
+			vlog.Println("PERSIST_MEMDB> finished persist")
+			memDbLastPersistedToFileUnixtime = time.Now().Unix()
+		}
+	}
+	defer func() {
+		persistMemDbToFile(nil, true, true)
+		dbMem.Close()
+	}()
+
 	// Traverse the filesystem looking for changed directory entries
 	backupDirName := filepath.Base(backupDirPath)
 	util.LockIf(globalsLock)
-	prevPaths, err := db.GetAllKnownPaths(backupDirName)
+	prevPaths, err := dbMem.GetAllKnownPaths(backupDirName)
 	util.UnlockIf(globalsLock)
 	if err != nil {
 		log.Printf("error: DoJournaledBackup: cannot get paths list: %v", err)
@@ -40,15 +83,15 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 		return
 	}
 	var backupIdsQueue fstraverse.BackupIdsQueue
-	backupReportedEvents, err = fstraverse.Traverse(backupDirPath, prevPaths, db, globalsLock, &backupIdsQueue, excludePaths, checkAndHandleTraversalCancelation)
+	backupReportedEvents, err = fstraverse.Traverse(backupDirPath, prevPaths, dbMem, globalsLock, &backupIdsQueue, excludePaths, checkAndHandleTraversalCancelation)
 	if errors.Is(err, fstraverse.ErrTraversalCanceled) {
 		breakFromLoop = true // signals cancelation to caller
 		return
 	}
 
-	// Iterate over the queue of dirent id's inserting them into journal
+	// Iterate over the queue of backup dirent id's inserting them into journal
 	util.LockIf(globalsLock)
-	insertBJTxn, err := db.NewInsertBackupJournalStmt(backupDirPath)
+	insertBJTxn, err := dbMem.NewInsertBackupJournalStmt(backupDirPath)
 	util.UnlockIf(globalsLock)
 	if err != nil {
 		log.Printf("error: DoJournaledBackup: could not bulk insert into journal: %v", err)
@@ -57,16 +100,27 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 	}
 	for _, backupQueueItem := range backupIdsQueue.Items {
 		util.LockIf(globalsLock)
-		insertBJTxn.InsertBackupJournalRow(int64(backupQueueItem.Id), database.Unstarted, backupQueueItem.ChangeType)
+		err = insertBJTxn.InsertBackupJournalRow(int64(backupQueueItem.Id), database.Unstarted, backupQueueItem.ChangeType)
 		util.UnlockIf(globalsLock)
+		if err != nil {
+			log.Printf("error: DoJournaledBackup: could not insert backup item into journal txn: %v", err)
+			fatalError = true
+			return
+		}
 	}
+	util.LockIf(globalsLock)
+	insertBJTxn.Close()
+	util.UnlockIf(globalsLock)
+
+	// Now iterate over queue of deleted items, bulk insert them into journal
+	deletedDirentIds := make([]int64, 0)
 	for deletedPath := range prevPaths {
 		// deletedPath is backupDirName/deletedRelPath.  Make it just deletedRelPath
 		deletedPath = strings.TrimPrefix(deletedPath, backupDirName)
 		deletedPath = strings.TrimPrefix(deletedPath, "/")
 
 		util.LockIf(globalsLock)
-		isFound, _, dirEntId, err := db.HasDirEnt(backupDirName, deletedPath)
+		isFound, _, dirEntId, err := dbMem.HasDirEnt(backupDirName, deletedPath)
 		util.UnlockIf(globalsLock)
 		if err != nil {
 			log.Printf("error: DoJournaledBackup: failed while trying to find '%s'/'%s' in dirents: %v", backupDirName, deletedPath, err)
@@ -77,9 +131,25 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 			continue
 		}
 		vlog.Printf("Found deleted file '%s'/'%s' (dirents id = %d)", backupDirName, deletedPath, dirEntId)
+		deletedDirentIds = append(deletedDirentIds, int64(dirEntId))
+	}
+	util.LockIf(globalsLock)
+	insertBJTxn, err = dbMem.NewInsertBackupJournalStmt(backupDirPath)
+	util.UnlockIf(globalsLock)
+	if err != nil {
+		log.Printf("error: DoJournaledBackup: could not bulk insert into journal: %v", err)
+		fatalError = true
+		return
+	}
+	for _, dirEntId := range deletedDirentIds {
 		util.LockIf(globalsLock)
-		insertBJTxn.InsertBackupJournalRow(int64(dirEntId), database.Unstarted, database.Deleted)
+		err = insertBJTxn.InsertBackupJournalRow(dirEntId, database.Unstarted, database.Deleted)
 		util.UnlockIf(globalsLock)
+		if err != nil {
+			log.Printf("error: DoJournaledBackup: could not insert deleted item into journal txn: %v", err)
+			fatalError = true
+			return
+		}
 	}
 	util.LockIf(globalsLock)
 	insertBJTxn.Close()
@@ -87,7 +157,7 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 
 	// Get the snapshot name from timestamp in backup_info
 	util.LockIf(globalsLock)
-	_, snapshotUnixtime, err := db.GetJournaledBackupInfo()
+	_, snapshotUnixtime, err := dbMem.GetJournaledBackupInfo()
 	util.UnlockIf(globalsLock)
 	if errors.Is(err, sql.ErrNoRows) {
 		// If no rows were just inserted into journal, then nothing to backup for this snapshot
@@ -95,7 +165,7 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 		continueLoop = true
 		return
 	} else if err != nil {
-		log.Printf("error: DoJournaledBackup: db.GetJournaledBackupInfo: %v", err)
+		log.Printf("error: DoJournaledBackup: dbMem.GetJournaledBackupInfo: %v", err)
 		fatalError = true
 		return
 	}
@@ -104,19 +174,19 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 	// Set the initial progress bar
 	if setBackupInitialProgressFunc != nil {
 		util.LockIf(globalsLock)
-		finished, total, err := db.GetBackupJournalCounts()
+		finished, total, err := dbMem.GetBackupJournalCounts()
 		util.UnlockIf(globalsLock)
 		if err != nil {
-			log.Printf("error: DoJournaledBackup: db.GetBackupJournalCounts: %v", err)
+			log.Printf("error: DoJournaledBackup: dbMem.GetBackupJournalCounts: %v", err)
 		}
 		setBackupInitialProgressFunc(finished, total, backupDirName, globalsLock, vlog)
 	}
 
-	breakFromLoop = PlayBackupJournal(ctx, key, db, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateBackupProgressFunc)
+	breakFromLoop = PlayBackupJournal(ctx, key, dbMem, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateBackupProgressFunc, persistMemDbToFile)
 	return
 }
 
-func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string, vlog *util.VLog, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, updateProgressFunc UpdateProgressFuncType) (breakFromLoop bool) {
+func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string, vlog *util.VLog, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, updateProgressFunc UpdateProgressFuncType, persistMemDbToFile runWhileUploadingFuncType) (breakFromLoop bool) {
 	// By default, don't signal we want to break out of caller's loop over backups
 	breakFromLoop = false
 
@@ -167,7 +237,7 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 		vlog.Printf("Done with journal")
 	}
 
-	cp := newChunkPacker(ctx, objst, bucket, db, globalsLock, key, vlog)
+	cp := newChunkPacker(ctx, objst, bucket, db, globalsLock, key, vlog, persistMemDbToFile)
 	for {
 		// Sleep this go routine briefly on every iteration of the for loop
 		time.Sleep(time.Millisecond * 1)
@@ -178,6 +248,12 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 			if isCanceled {
 				return true
 			}
+		}
+
+		// On every iteration, we persist mem db without the force option so it can decide when
+		// it's been long enough (time b/t persists is defined in the function)
+		if persistMemDbToFile != nil {
+			persistMemDbToFile(nil, false, false)
 		}
 
 		util.LockIf(globalsLock)
@@ -340,7 +416,7 @@ func ReplayBackupJournal(ctx context.Context, key []byte, objst *objstore.ObjSto
 	}
 
 	// Roll the journal forward
-	_ = PlayBackupJournal(ctx, key, db, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateProgressFunc)
+	_ = PlayBackupJournal(ctx, key, db, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateProgressFunc, nil)
 
 	vlog.Println("Journal replay finished")
 }

@@ -12,6 +12,8 @@ import (
 	"github.com/fsctl/tless/pkg/util"
 )
 
+type runWhileUploadingFuncType func(runWhileUploadingFinished chan bool, goodTime bool, forcePersist bool)
+
 type chunkPackerItem struct {
 	relPath string
 	Offset  int
@@ -20,16 +22,17 @@ type chunkPackerItem struct {
 }
 
 type chunkPacker struct {
-	items               []chunkPackerItem
-	plaintextChunkBuf   []byte
-	posInPlaintextChunk int
-	db                  *database.DB
-	dbLock              *sync.Mutex
-	ctx                 context.Context
-	objst               *objstore.ObjStore
-	bucket              string
-	key                 []byte
-	vlog                *util.VLog
+	items                 []chunkPackerItem
+	plaintextChunkBuf     []byte
+	posInPlaintextChunk   int
+	db                    *database.DB
+	dbLock                *sync.Mutex
+	ctx                   context.Context
+	objst                 *objstore.ObjStore
+	bucket                string
+	key                   []byte
+	vlog                  *util.VLog
+	runWhileUploadingFunc runWhileUploadingFuncType
 }
 
 func (cp *chunkPacker) AddDirEntry(relPath string, buf []byte, bjt *database.BackupJournalTask) (succeeded bool) {
@@ -73,7 +76,15 @@ func (cp *chunkPacker) Complete() (isJournalComplete bool) {
 			return
 		}
 
-		// Upload chunk
+		// Set up runWhileUploadingFunc
+		runWhileUploadingFinished := make(chan bool, 1)
+		if cp.runWhileUploadingFunc != nil {
+			go cp.runWhileUploadingFunc(runWhileUploadingFinished, true, false)
+		} else {
+			runWhileUploadingFinished <- true
+		}
+
+		// Upload chunk (and run unrelated parallel func during upload)
 		objName := "chunks/" + chunkName
 		cp.vlog.Printf("chunkPacker: Complete: writing object '%s' to cloud (%s)", objName, util.FormatBytesAsString(len(ciphertextChunkBuf)))
 		err = cp.objst.UploadObjFromBuffer(cp.ctx, cp.bucket, objName, ciphertextChunkBuf, objstore.ComputeETag(ciphertextChunkBuf))
@@ -81,6 +92,11 @@ func (cp *chunkPacker) Complete() (isJournalComplete bool) {
 			log.Printf("error: chunkPacker.Complete: failed while uploading '%s': %v\n", chunkName, err)
 			return
 		}
+
+		// Wait for runWhileUploadingFunc to finish
+		cp.vlog.Println("RUN WHILE UPLOAD> Waiting for 'runWhileUploadingFunc' to finish...")
+		<-runWhileUploadingFinished
+		cp.vlog.Println("RUN WHILE UPLOAD> Has finished: 'runWhileUploadingFunc'")
 	}
 
 	//
@@ -115,17 +131,18 @@ func (cp *chunkPacker) Complete() (isJournalComplete bool) {
 	return isJournalComplete
 }
 
-func newChunkPacker(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, dbLock *sync.Mutex, key []byte, vlog *util.VLog) *chunkPacker {
+func newChunkPacker(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, dbLock *sync.Mutex, key []byte, vlog *util.VLog, runWhileUploadingFunc runWhileUploadingFuncType) *chunkPacker {
 	return &chunkPacker{
-		items:               make([]chunkPackerItem, 0),
-		plaintextChunkBuf:   make([]byte, 0),
-		posInPlaintextChunk: 0,
-		db:                  db,
-		dbLock:              dbLock,
-		ctx:                 ctx,
-		objst:               objst,
-		bucket:              bucket,
-		key:                 key,
-		vlog:                vlog,
+		items:                 make([]chunkPackerItem, 0),
+		plaintextChunkBuf:     make([]byte, 0),
+		posInPlaintextChunk:   0,
+		db:                    db,
+		dbLock:                dbLock,
+		ctx:                   ctx,
+		objst:                 objst,
+		bucket:                bucket,
+		key:                   key,
+		vlog:                  vlog,
+		runWhileUploadingFunc: runWhileUploadingFunc,
 	}
 }
