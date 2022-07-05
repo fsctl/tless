@@ -23,7 +23,7 @@ type UpdateProgressFuncType func(finished int64, total int64, globalsLock *sync.
 type SetReplayInitialProgressFuncType func(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog)
 type SetBackupInitialProgressFuncType func(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog)
 
-func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, excludePaths []string, vlog *util.VLog, checkAndHandleTraversalCancelation fstraverse.CheckAndHandleTraversalCancelationFuncType, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, setBackupInitialProgressFunc SetBackupInitialProgressFuncType, updateBackupProgressFunc UpdateProgressFuncType) (backupReportedEvents []util.ReportedEvent, breakFromLoop bool, continueLoop bool, fatalError bool) {
+func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, excludePaths []string, vlog *util.VLog, checkAndHandleTraversalCancelation fstraverse.CheckAndHandleTraversalCancelationFuncType, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, setBackupInitialProgressFunc SetBackupInitialProgressFuncType, updateBackupProgressFunc UpdateProgressFuncType, stats *BackupStats) (backupReportedEvents []util.ReportedEvent, breakFromLoop bool, continueLoop bool, fatalError bool) {
 	// Return values
 	breakFromLoop = false
 	continueLoop = false
@@ -186,11 +186,11 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 		setBackupInitialProgressFunc(finished, total, backupDirName, globalsLock, vlog)
 	}
 
-	breakFromLoop = PlayBackupJournal(ctx, key, dbMem, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateBackupProgressFunc, persistMemDbToFile)
+	breakFromLoop = PlayBackupJournal(ctx, key, dbMem, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateBackupProgressFunc, persistMemDbToFile, stats)
 	return
 }
 
-func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string, vlog *util.VLog, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, updateProgressFunc UpdateProgressFuncType, persistMemDbToFile runWhileUploadingFuncType) (breakFromLoop bool) {
+func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string, vlog *util.VLog, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, updateProgressFunc UpdateProgressFuncType, persistMemDbToFile runWhileUploadingFuncType, stats *BackupStats) (breakFromLoop bool) {
 	// By default, don't signal we want to break out of caller's loop over backups
 	breakFromLoop = false
 
@@ -294,6 +294,8 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 			RelPath: relPath,
 		}
 
+		stats.AddFile()
+
 		finishTaskImmediately := true
 		if bjt.ChangeType == database.Updated {
 			//vlog.Printf("Backing up '%s/%s'", rootDirName, relPath)
@@ -303,6 +305,8 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 				completeTask(db, globalsLock, bjt, nil)
 				finishTaskImmediately = false
 			} else {
+				stats.AddBytesFromChunkExtents(chunkExtents)
+
 				if pendingInChunkPacker {
 					finishTaskImmediately = false
 				} else {
@@ -314,6 +318,8 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 				// Just use the same extents as prev snapshot had
 				chunkExtents := prevSnapshot.RelPaths[relPath].ChunkExtents
 				crp.ChunkExtents = chunkExtents
+
+				stats.AddBytesFromChunkExtents(chunkExtents)
 			} else {
 				log.Printf("warning: found an unchanged file but have no previous snapshot; treating it as updated: '%s/%s'", rootDirName, relPath)
 				chunkExtents, pendingInChunkPacker, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, vlog, cp, bjt)
@@ -322,6 +328,8 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 					completeTask(db, globalsLock, bjt, nil)
 					finishTaskImmediately = false
 				} else {
+					stats.AddBytesFromChunkExtents(chunkExtents)
+
 					if pendingInChunkPacker {
 						finishTaskImmediately = false
 					} else {
@@ -420,7 +428,7 @@ func ReplayBackupJournal(ctx context.Context, key []byte, objst *objstore.ObjSto
 	}
 
 	// Roll the journal forward
-	_ = PlayBackupJournal(ctx, key, db, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateProgressFunc, nil)
+	_ = PlayBackupJournal(ctx, key, db, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateProgressFunc, nil, nil)
 
 	vlog.Println("Journal replay finished")
 }

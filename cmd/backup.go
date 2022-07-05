@@ -132,7 +132,8 @@ func backupMain() {
 		progressBar = nil
 
 		// Traverse the FS for changed files and do the journaled backup
-		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, cfgBucket, db, nil, backupDirPath, cfgExcludePaths, vlog, nil, nil, setBackupInitialProgress, updateBackupProgress)
+		stats := backup.NewBackupStats()
+		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, cfgBucket, db, nil, backupDirPath, cfgExcludePaths, vlog, nil, nil, setBackupInitialProgress, updateBackupProgress, stats)
 		for _, e := range backupReportedEvents {
 			if e.Kind == util.ERR_OP_NOT_PERMITTED {
 				log.Printf("warning:  insufficient permissions to process path '%s'", e.Path)

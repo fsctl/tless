@@ -16,6 +16,9 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
+
 	"github.com/sethvargo/go-diceware/diceware"
 )
 
@@ -300,18 +303,52 @@ func UnlockIf(lock *sync.Mutex) {
 
 // Returns a formatted string representing the number of bytes in a sensible unit,
 // such as "36.0 mb" for input of 37748736.  Ranges from "b" to "gb".
-func FormatBytesAsString(bcount int) string {
+func FormatBytesAsString(bcount int64) string {
 	if bcount < 1024 {
 		return fmt.Sprintf("%d bytes", bcount)
 	} else if bcount < 1024*1024 {
-		return fmt.Sprintf("%01f kb", float64(bcount)/1024)
+		return fmt.Sprintf("%.01f kb", float64(bcount)/1024)
 	} else if bcount < 1024*1024*1024 {
-		return fmt.Sprintf("%01f mb", float64(bcount)/float64(1024*1024))
+		return fmt.Sprintf("%.01f mb", float64(bcount)/float64(1024*1024))
 	} else if bcount < 1024*1024*1024*1024 {
-		return fmt.Sprintf("%01f gb", float64(bcount)/float64(1024*1024*1024))
+		return fmt.Sprintf("%.01f gb", float64(bcount)/float64(1024*1024*1024))
 	} else {
 		// default to just printing number of bytes
 		return fmt.Sprintf("%d bytes", bcount)
+	}
+}
+
+func FormatSecondsAsString(sec int64) string {
+	if sec < 60 {
+		return fmt.Sprintf("%d sec", sec)
+	} else if sec < 60*60 {
+		return fmt.Sprintf("%d min", sec/60)
+	} else if sec < 24*60*60 {
+		hours := sec / (60 * 60)
+		min := (sec % (60 * 60)) / 60
+		return fmt.Sprintf("%d hours %d min", hours, min)
+	} else if sec < 90*24*60*60 {
+		days := sec / (24 * 60 * 60)
+		hours := (sec % (24 * 60 * 60)) / (60 * 60)
+		return fmt.Sprintf("%d days %d hours", days, hours)
+	} else {
+		// default to just printing number of seconds
+		return fmt.Sprintf("%d sec", sec)
+	}
+}
+
+func FormatNumberAsString(n int64) string {
+	p := message.NewPrinter(language.English)
+	return p.Sprintf("%d", n)
+}
+
+func FormatDataRateAsString(bcount int64, sec int64) string {
+	mb := float64(bcount) / 1024 / 1024
+	if sec < 60 {
+		return fmt.Sprintf("%.1f mb/sec", mb/float64(sec))
+	} else {
+		min := float64(sec) / 60
+		return fmt.Sprintf("%.1f mb/min", mb/min)
 	}
 }
 

@@ -130,6 +130,7 @@ func Backup(vlog *util.VLog, completion func()) {
 	gGlobalsLock.Unlock()
 
 	// Now start backing up
+	stats := backup.NewBackupStats()
 	gGlobalsLock.Lock()
 	dirs := gCfg.Dirs
 	excludePaths := gCfg.ExcludePaths
@@ -175,7 +176,7 @@ func Backup(vlog *util.VLog, completion func()) {
 		}
 
 		// Traverse the FS for changed files and do the journaled backup
-		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludePaths, vlog, checkAndHandleTraversalCancelation, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress)
+		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludePaths, vlog, checkAndHandleTraversalCancelation, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress, stats)
 		for _, e := range backupReportedEvents {
 			if e.Kind == util.ERR_OP_NOT_PERMITTED {
 				backupEndedInError = true
@@ -212,7 +213,7 @@ func Backup(vlog *util.VLog, completion func()) {
 			Path:     "",
 			IsDir:    false,
 			Datetime: time.Now().Unix(),
-			Msg:      "",
+			Msg:      stats.FinalReport(),
 		})
 		gGlobalsLock.Unlock()
 	} else if backupEndedInCancelation {
@@ -232,7 +233,7 @@ func Backup(vlog *util.VLog, completion func()) {
 			Path:     "",
 			IsDir:    false,
 			Datetime: time.Now().Unix(),
-			Msg:      "",
+			Msg:      stats.FinalReport(),
 		})
 		gGlobalsLock.Unlock()
 	}
