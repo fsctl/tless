@@ -53,6 +53,9 @@ type CfgSettings struct {
 	Dirs                 []string
 	ExcludePaths         []string
 	VerboseDaemon        bool
+	CachesPath           string
+	MaxChunkCacheMb      int64
+	ResourceUtilization  string
 }
 
 func GenerateConfigTemplate(configValues *CfgSettings) string {
@@ -61,7 +64,7 @@ func GenerateConfigTemplate(configValues *CfgSettings) string {
 # store, your credentials for the object store, and a bucket you have ALREADY 
 # created for storing backups.
 #
-# You can leave access_key_id blank; you then will need to supply it on each
+# You can leave access_secret blank; you then will need to supply it on each
 # run of the program.
 endpoint = "`
 
@@ -175,6 +178,40 @@ verbose = `
 	}
 
 	template += `
+
+[system]
+# These parameters control use of system resources and performance tradeoffs.
+caches_path = "`
+
+	if configValues != nil && configValues.CachesPath != "" {
+		template += configValues.CachesPath
+	} else {
+		template += "/tmp/tless-cache"
+	}
+
+	template += `"
+max_chunk_cache_mb = `
+
+	if configValues != nil && configValues.MaxChunkCacheMb != 0 {
+		template += fmt.Sprintf("%d", configValues.MaxChunkCacheMb)
+	} else {
+		template += "2048"
+	}
+
+	template += `
+system_resource_utilization = "`
+
+	if configValues != nil && configValues.ResourceUtilization != "" {
+		if strings.ToLower(configValues.ResourceUtilization) == "low" {
+			template += "low"
+		} else {
+			template += "high"
+		}
+	} else {
+		template += "high"
+	}
+
+	template += `"
 `
 
 	return template

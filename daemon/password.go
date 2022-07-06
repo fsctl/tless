@@ -10,7 +10,7 @@ import (
 	pb "github.com/fsctl/tless/rpc"
 )
 
-// Callback for rpc.DaemonCtlServer.CheckBucketPassword requests
+// Callback for rpc.DaemonCtlServer.ChangePassword requests
 func (s *server) ChangePassword(ctx context.Context, in *pb.ChangePasswordRequest) (*pb.ChangePasswordResponse, error) {
 	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
@@ -115,6 +115,9 @@ func (s *server) ChangePassword(ctx context.Context, in *pb.ChangePasswordReques
 			Dirs:                 gCfg.Dirs,
 			ExcludePaths:         gCfg.ExcludePaths,
 			VerboseDaemon:        gCfg.VerboseDaemon,
+			CachesPath:           gCfg.CachesPath,
+			MaxChunkCacheMb:      gCfg.MaxChunkCacheMb,
+			ResourceUtilization:  gCfg.ResourceUtilization,
 		}
 
 		gGlobalsLock.Lock()
@@ -131,5 +134,19 @@ func (s *server) ChangePassword(ctx context.Context, in *pb.ChangePasswordReques
 	return &pb.ChangePasswordResponse{
 		DidSucceed: true,
 		ErrMsg:     "",
+	}, nil
+}
+
+// Callback for rpc.DaemonCtlServer.GeneratePassphrase requests
+func (s *server) GeneratePassphrase(ctx context.Context, in *pb.GeneratePassphraseRequest) (*pb.GeneratePassphraseResponse, error) {
+	log.Println(">> GOT COMMAND: GeneratePassphrase")
+	defer log.Println(">> COMPLETED COMMAND: GeneratePassphrase")
+
+	passphrase := util.GenerateRandomPassphrase(10)
+
+	return &pb.GeneratePassphraseResponse{
+		DidSucceed: true,
+		ErrMsg:     "",
+		Passphrase: passphrase,
 	}, nil
 }

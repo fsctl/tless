@@ -68,6 +68,9 @@ func initConfig(globalsLock *sync.Mutex) error {
 		Dirs:                 viper.GetStringSlice("backups.dirs"),
 		ExcludePaths:         viper.GetStringSlice("backups.excludes"),
 		VerboseDaemon:        viper.GetBool("daemon.verbose"),
+		CachesPath:           viper.GetString("system.caches_path"),
+		MaxChunkCacheMb:      viper.GetInt64("system.max_chunk_cache_mb"),
+		ResourceUtilization:  viper.GetString("system.system_resource_utilization"),
 	}
 	globalsLock.Unlock()
 
@@ -193,6 +196,9 @@ func (s *server) ReadDaemonConfig(ctx context.Context, in *pb.ReadConfigRequest)
 			Dirs:                 gCfg.Dirs,
 			Excludes:             gCfg.ExcludePaths,
 			Verbose:              gCfg.VerboseDaemon,
+			CachesPath:           gCfg.CachesPath,
+			MaxChunkCacheMb:      gCfg.MaxChunkCacheMb,
+			ResourceUtilization:  gCfg.ResourceUtilization,
 		}
 		gGlobalsLock.Unlock()
 		return resp, nil
@@ -231,6 +237,9 @@ func (s *server) WriteToDaemonConfig(ctx context.Context, in *pb.WriteConfigRequ
 		Dirs:                 in.GetDirs(),
 		ExcludePaths:         in.GetExcludes(),
 		VerboseDaemon:        in.GetVerbose(),
+		CachesPath:           in.GetCachesPath(),
+		MaxChunkCacheMb:      in.GetMaxChunkCacheMb(),
+		ResourceUtilization:  in.GetResourceUtilization(),
 	}
 
 	gGlobalsLock.Lock()

@@ -46,6 +46,7 @@ service DaemonCtl {
   // Misc RPCs
   rpc LogStream (LogStreamRequest) returns (stream LogStreamResponse) {}
   rpc ChangePassword (ChangePasswordRequest) returns (ChangePasswordResponse) {}
+  rpc GeneratePassphrase (GeneratePassphraseRequest) returns (GeneratePassphraseResponse) {}
 }
 
 message HelloRequest {
@@ -128,9 +129,12 @@ message ReadConfigResponse {
   repeated string Dirs = 8;
   repeated string Excludes = 9;
   bool Verbose = 10;
+  string CachesPath = 11;
+  int64 MaxChunkCacheMb = 12;
+  string ResourceUtilization = 13;
 
-  bool IsValid = 11;
-  string ErrMsg = 12;
+  bool IsValid = 14;
+  string ErrMsg = 15;
 }
 
 message WriteConfigRequest {
@@ -143,6 +147,9 @@ message WriteConfigRequest {
   repeated string Dirs = 7;
   repeated string Excludes = 8;
   bool Verbose = 9;
+  string CachesPath = 10;
+  int64 MaxChunkCacheMb = 11;
+  string ResourceUtilization = 12;
 }
 
 message WriteConfigResponse {
@@ -276,4 +283,12 @@ message ChangePasswordRequest {
 message ChangePasswordResponse {
   bool DidSucceed = 1;
   string ErrMsg = 2;
+}
+
+message GeneratePassphraseRequest { }
+
+message GeneratePassphraseResponse {
+  bool DidSucceed = 1;
+  string ErrMsg = 2;
+  string Passphrase = 3;
 }
