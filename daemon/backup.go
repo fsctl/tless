@@ -295,7 +295,10 @@ func replayBackupJournal() {
 	}
 
 	// Replay the journal
-	backup.ReplayBackupJournal(ctx, encKey, objst, bucket, db, &gGlobalsLock, vlog, setReplayInitialProgress, checkAndHandleCancelation, updateBackupProgress)
+	re := backup.ReplayBackupJournal(ctx, encKey, objst, bucket, db, &gGlobalsLock, vlog, setReplayInitialProgress, checkAndHandleCancelation, updateBackupProgress)
+	gGlobalsLock.Lock()
+	gStatus.reportedEvents = append(gStatus.reportedEvents, re)
+	gGlobalsLock.Unlock()
 
 	// Finally set the status back to Idle since we are done with backup
 	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)

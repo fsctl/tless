@@ -405,7 +405,7 @@ func purgeFromDb(db *database.DB, dbLock *sync.Mutex, backupDirName string, dele
 	return nil
 }
 
-func ReplayBackupJournal(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, db *database.DB, globalsLock *sync.Mutex, vlog *util.VLog, setReplayInitialProgressFunc SetReplayInitialProgressFuncType, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, updateProgressFunc UpdateProgressFuncType) {
+func ReplayBackupJournal(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, db *database.DB, globalsLock *sync.Mutex, vlog *util.VLog, setReplayInitialProgressFunc SetReplayInitialProgressFuncType, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, updateProgressFunc UpdateProgressFuncType) util.ReportedEvent {
 	// Reset all InProgress -> Unstarted
 	util.LockIf(globalsLock)
 	err := db.ResetAllInProgressBackupJournalTasks()
@@ -435,8 +435,25 @@ func ReplayBackupJournal(ctx context.Context, key []byte, objst *objstore.ObjSto
 		setReplayInitialProgressFunc(finished, total, backupDirName, globalsLock, vlog)
 	}
 
-	// Roll the journal forward
-	_ = PlayBackupJournal(ctx, key, db, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateProgressFunc, nil, nil)
+	breakFromLoop := PlayBackupJournal(ctx, key, db, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateProgressFunc, nil, nil)
 
 	vlog.Println("Journal replay finished")
+
+	if breakFromLoop {
+		return util.ReportedEvent{
+			Kind:     util.INFO_BACKUP_CANCELED,
+			Path:     "",
+			IsDir:    false,
+			Datetime: time.Now().Unix(),
+			Msg:      "",
+		}
+	} else {
+		return util.ReportedEvent{
+			Kind:     util.INFO_BACKUP_COMPLETED,
+			Path:     "",
+			IsDir:    false,
+			Datetime: time.Now().Unix(),
+			Msg:      "",
+		}
+	}
 }
