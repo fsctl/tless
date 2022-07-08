@@ -36,7 +36,7 @@ service DaemonCtl {
   rpc CancelRestore (CancelRequest) returns (CancelResponse) {}
 
   // Special operations
-  rpc WipeCloud (WipeCloudRequest) returns (WipeCloudResponse) {}
+  rpc WipeCloud (WipeCloudRequest) returns (stream WipeCloudResponse) {}
 
   // Bucket operations
   rpc ListBuckets (ListBucketsRequest) returns (ListBucketsResponse) {}
@@ -224,8 +224,9 @@ message RestoreResponse {
 message WipeCloudRequest {}
 
 message WipeCloudResponse {
-  bool isStarting = 1;
-  string ErrMsg = 2;
+  bool DidSucceed = 1;
+  double PercentDone = 2;
+  string ErrMsg = 3;
 }
 
 message ListBucketsRequest {}

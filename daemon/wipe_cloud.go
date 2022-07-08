@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/fsctl/tless/pkg/objstore"
@@ -9,8 +10,19 @@ import (
 	pb "github.com/fsctl/tless/rpc"
 )
 
-func (s *server) WipeCloud(ctx context.Context, in *pb.WipeCloudRequest) (*pb.WipeCloudResponse, error) {
+func (s *server) WipeCloud(in *pb.WipeCloudRequest, srv pb.DaemonCtl_WipeCloudServer) error {
 	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
+
+	sendPartialFunc := func(didSucceed bool, percentDone float64, errMsg string) {
+		resp := pb.WipeCloudResponse{
+			DidSucceed:  didSucceed,
+			PercentDone: percentDone,
+			ErrMsg:      errMsg,
+		}
+		if err := srv.Send(&resp); err != nil {
+			log.Println("error: server.Send failed: ", err)
+		}
+	}
 
 	log.Println(">> GOT COMMAND: Wipe Cloud")
 
@@ -20,10 +32,8 @@ func (s *server) WipeCloud(ctx context.Context, in *pb.WipeCloudRequest) (*pb.Wi
 	if !isIdle {
 		log.Println("WIPE-CLOUD> Not in Idle state, cannot wipe cloud right now")
 		log.Println(">> COMPLETED COMMAND: Wipe Cloud")
-		return &pb.WipeCloudResponse{
-			IsStarting: false,
-			ErrMsg:     "not in Idle state",
-		}, nil
+		sendPartialFunc(false, float64(0), "not in Idle state")
+		return nil
 	}
 
 	gGlobalsLock.Lock()
@@ -31,18 +41,6 @@ func (s *server) WipeCloud(ctx context.Context, in *pb.WipeCloudRequest) (*pb.Wi
 	gStatus.msg = "Deleting all cloud data"
 	gStatus.percentage = 0.0
 	gGlobalsLock.Unlock()
-
-	go WipeCloud(vlog, func() { log.Println(">> COMPLETED COMMAND: Wipe Cloud") })
-
-	return &pb.WipeCloudResponse{
-		IsStarting: true,
-		ErrMsg:     "",
-	}, nil
-}
-
-func WipeCloud(vlog *util.VLog, completion func()) {
-	// Last step:  call the completion routine
-	defer completion()
 
 	// Sets status back to Idle when routine is done
 	done := func() {
@@ -52,6 +50,8 @@ func WipeCloud(vlog *util.VLog, completion func()) {
 		gStatus.msg = "Last backup: " + lastBackupTimeFormatted
 		gStatus.percentage = -1.0
 		gGlobalsLock.Unlock()
+
+		sendPartialFunc(true, float64(100), "")
 	}
 	defer done()
 
@@ -67,8 +67,10 @@ func WipeCloud(vlog *util.VLog, completion func()) {
 
 	allObjects, err := objst.GetObjList(ctx, bucket, "", true, vlog)
 	if err != nil {
-		log.Printf("error: WipeCloud: GetObjList failed: %v", err)
-		return
+		msg := fmt.Sprintf("error: WipeCloud: GetObjList failed: %v", err)
+		log.Println(msg)
+		sendPartialFunc(false, float64(0), msg)
+		return nil
 	}
 	totalObjects := len(allObjects)
 	doneObjects := 0
@@ -86,5 +88,9 @@ func WipeCloud(vlog *util.VLog, completion func()) {
 		gGlobalsLock.Unlock()
 
 		vlog.Printf("WIPE-CLOUD> Deleted %s (%.2f%% done)\n", objName, percentDone)
+
+		sendPartialFunc(true, float64(percentDone), "")
 	}
+
+	return nil
 }

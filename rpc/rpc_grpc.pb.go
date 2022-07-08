@@ -45,7 +45,7 @@ type DaemonCtlClient interface {
 	Restore(ctx context.Context, opts ...grpc.CallOption) (DaemonCtl_RestoreClient, error)
 	CancelRestore(ctx context.Context, in *CancelRequest, opts ...grpc.CallOption) (*CancelResponse, error)
 	// Special operations
-	WipeCloud(ctx context.Context, in *WipeCloudRequest, opts ...grpc.CallOption) (*WipeCloudResponse, error)
+	WipeCloud(ctx context.Context, in *WipeCloudRequest, opts ...grpc.CallOption) (DaemonCtl_WipeCloudClient, error)
 	// Bucket operations
 	ListBuckets(ctx context.Context, in *ListBucketsRequest, opts ...grpc.CallOption) (*ListBucketsResponse, error)
 	MakeBucket(ctx context.Context, in *MakeBucketRequest, opts ...grpc.CallOption) (*MakeBucketResponse, error)
@@ -252,13 +252,36 @@ func (c *daemonCtlClient) CancelRestore(ctx context.Context, in *CancelRequest, 
 	return out, nil
 }
 
-func (c *daemonCtlClient) WipeCloud(ctx context.Context, in *WipeCloudRequest, opts ...grpc.CallOption) (*WipeCloudResponse, error) {
-	out := new(WipeCloudResponse)
-	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/WipeCloud", in, out, opts...)
+func (c *daemonCtlClient) WipeCloud(ctx context.Context, in *WipeCloudRequest, opts ...grpc.CallOption) (DaemonCtl_WipeCloudClient, error) {
+	stream, err := c.cc.NewStream(ctx, &DaemonCtl_ServiceDesc.Streams[3], "/rpc.DaemonCtl/WipeCloud", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &daemonCtlWipeCloudClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type DaemonCtl_WipeCloudClient interface {
+	Recv() (*WipeCloudResponse, error)
+	grpc.ClientStream
+}
+
+type daemonCtlWipeCloudClient struct {
+	grpc.ClientStream
+}
+
+func (x *daemonCtlWipeCloudClient) Recv() (*WipeCloudResponse, error) {
+	m := new(WipeCloudResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func (c *daemonCtlClient) ListBuckets(ctx context.Context, in *ListBucketsRequest, opts ...grpc.CallOption) (*ListBucketsResponse, error) {
@@ -289,7 +312,7 @@ func (c *daemonCtlClient) CheckBucketPassword(ctx context.Context, in *CheckBuck
 }
 
 func (c *daemonCtlClient) LogStream(ctx context.Context, in *LogStreamRequest, opts ...grpc.CallOption) (DaemonCtl_LogStreamClient, error) {
-	stream, err := c.cc.NewStream(ctx, &DaemonCtl_ServiceDesc.Streams[3], "/rpc.DaemonCtl/LogStream", opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonCtl_ServiceDesc.Streams[4], "/rpc.DaemonCtl/LogStream", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -365,7 +388,7 @@ type DaemonCtlServer interface {
 	Restore(DaemonCtl_RestoreServer) error
 	CancelRestore(context.Context, *CancelRequest) (*CancelResponse, error)
 	// Special operations
-	WipeCloud(context.Context, *WipeCloudRequest) (*WipeCloudResponse, error)
+	WipeCloud(*WipeCloudRequest, DaemonCtl_WipeCloudServer) error
 	// Bucket operations
 	ListBuckets(context.Context, *ListBucketsRequest) (*ListBucketsResponse, error)
 	MakeBucket(context.Context, *MakeBucketRequest) (*MakeBucketResponse, error)
@@ -420,8 +443,8 @@ func (UnimplementedDaemonCtlServer) Restore(DaemonCtl_RestoreServer) error {
 func (UnimplementedDaemonCtlServer) CancelRestore(context.Context, *CancelRequest) (*CancelResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelRestore not implemented")
 }
-func (UnimplementedDaemonCtlServer) WipeCloud(context.Context, *WipeCloudRequest) (*WipeCloudResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method WipeCloud not implemented")
+func (UnimplementedDaemonCtlServer) WipeCloud(*WipeCloudRequest, DaemonCtl_WipeCloudServer) error {
+	return status.Errorf(codes.Unimplemented, "method WipeCloud not implemented")
 }
 func (UnimplementedDaemonCtlServer) ListBuckets(context.Context, *ListBucketsRequest) (*ListBucketsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListBuckets not implemented")
@@ -702,22 +725,25 @@ func _DaemonCtl_CancelRestore_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DaemonCtl_WipeCloud_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WipeCloudRequest)
-	if err := dec(in); err != nil {
-		return nil, err
+func _DaemonCtl_WipeCloud_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WipeCloudRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
 	}
-	if interceptor == nil {
-		return srv.(DaemonCtlServer).WipeCloud(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/rpc.DaemonCtl/WipeCloud",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonCtlServer).WipeCloud(ctx, req.(*WipeCloudRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return srv.(DaemonCtlServer).WipeCloud(m, &daemonCtlWipeCloudServer{stream})
+}
+
+type DaemonCtl_WipeCloudServer interface {
+	Send(*WipeCloudResponse) error
+	grpc.ServerStream
+}
+
+type daemonCtlWipeCloudServer struct {
+	grpc.ServerStream
+}
+
+func (x *daemonCtlWipeCloudServer) Send(m *WipeCloudResponse) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 func _DaemonCtl_ListBuckets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -879,10 +905,6 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _DaemonCtl_CancelRestore_Handler,
 		},
 		{
-			MethodName: "WipeCloud",
-			Handler:    _DaemonCtl_WipeCloud_Handler,
-		},
-		{
 			MethodName: "ListBuckets",
 			Handler:    _DaemonCtl_ListBuckets_Handler,
 		},
@@ -918,6 +940,11 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "Restore",
 			Handler:       _DaemonCtl_Restore_Handler,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "WipeCloud",
+			Handler:       _DaemonCtl_WipeCloud_Handler,
+			ServerStreams: true,
 		},
 		{
 			StreamName:    "LogStream",
