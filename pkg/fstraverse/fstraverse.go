@@ -55,7 +55,7 @@ type dirEntryInsert struct {
 	lastBackupUnixtime int64
 }
 
-func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLock *sync.Mutex, backupIdsQueue *BackupIdsQueue, excludePathPrefixes []string, checkAndHandleTraversalCancelation CheckAndHandleTraversalCancelationFuncType) ([]util.ReportedEvent, error) {
+func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLock *sync.Mutex, backupIdsQueue *BackupIdsQueue, excludes []string, checkAndHandleTraversalCancelation CheckAndHandleTraversalCancelationFuncType) ([]util.ReportedEvent, error) {
 	rootPath = util.StripTrailingSlashes(rootPath)
 	rootDirName := filepath.Base(rootPath)
 
@@ -69,7 +69,7 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 	var dirsCnt int64 = 0
 
 	err := filepath.WalkDir(rootPath, func(path string, dirent fs.DirEntry, err error) error {
-		if isInExcludePathPrefixes(path, excludePathPrefixes) {
+		if isExcluded(path, excludes) {
 			return nil
 		}
 		if err != nil {
@@ -220,10 +220,42 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 	return reportedEvents, nil
 }
 
-func isInExcludePathPrefixes(path string, excludePathPrefixes []string) bool {
-	for _, excludePathPrefix := range excludePathPrefixes {
-		if strings.HasPrefix(path, excludePathPrefix) {
+// Returns true if path is excluded from backup by one of the elements in excludes.
+// There are two types of excludes:  (1) path prefixes and (2) shell globs. A path prefix like
+// "/usr" excludes every path beginning with "/usr".  A shell glob, which is identified by
+// whether it contains "*" or "?", excludes shell glob matches against the beginning or all of
+// path.
+// path should always be absolute.
+func isExcluded(path string, excludes []string) bool {
+	for _, exclude := range excludes {
+		if isGlob(exclude) && isExcludedByGlob(path, exclude) {
 			return true
+		} else if strings.HasPrefix(path, exclude) {
+			return true
+		}
+	}
+	return false
+}
+
+func isGlob(s string) bool {
+	return strings.Contains(s, "*") || strings.Contains(s, "?")
+}
+
+// Returns true if path is excluded by the glob glob.
+// glob is matched against path and each parent of path except the root (/) itself.
+// For example, the glob "/Users/*/.Trash" would match "/Users/wintermute/.Trash/DeletedFile1".
+func isExcludedByGlob(path string, glob string) bool {
+	for {
+		isMatch, err := filepath.Match(glob, path)
+		if err != nil {
+			return false
+		}
+		if isMatch {
+			return true
+		}
+		path = filepath.Dir(path)
+		if path == "." || path == "/" {
+			break
 		}
 	}
 	return false

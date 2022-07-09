@@ -133,7 +133,7 @@ func Backup(vlog *util.VLog, completion func()) {
 	stats := backup.NewBackupStats()
 	gGlobalsLock.Lock()
 	dirs := gCfg.Dirs
-	excludePaths := gCfg.ExcludePaths
+	excludes := gCfg.ExcludePaths
 	gGlobalsLock.Unlock()
 	backupEndedInError := false
 	backupEndedInCancelation := false
@@ -176,7 +176,7 @@ func Backup(vlog *util.VLog, completion func()) {
 		}
 
 		// Traverse the FS for changed files and do the journaled backup
-		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludePaths, vlog, checkAndHandleTraversalCancelation, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress, stats)
+		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludes, vlog, checkAndHandleTraversalCancelation, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress, stats)
 		for _, e := range backupReportedEvents {
 			if e.Kind == util.ERR_OP_NOT_PERMITTED {
 				backupEndedInError = true
