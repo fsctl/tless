@@ -166,6 +166,10 @@ func (objst *ObjStore) GetOrCreateBucketMetadata(ctx context.Context, bucket str
 				return "", 0, nil, nil, err
 			}
 			encryptedEncKey, err := cryptography.EncryptBuffer(pdKey, encKey)
+			if err != nil {
+				log.Println("error: readBucketMetadataFile: could not encrypt buffer with encKey")
+				return "", 0, nil, nil, err
+			}
 			encryptedEncKeyB64 := base64.URLEncoding.EncodeToString(encryptedEncKey)
 
 			hmacKey = make([]byte, 32)
@@ -173,6 +177,10 @@ func (objst *ObjStore) GetOrCreateBucketMetadata(ctx context.Context, bucket str
 				return "", 0, nil, nil, err
 			}
 			encryptedHmacKey, err := cryptography.EncryptBuffer(pdKey, hmacKey)
+			if err != nil {
+				log.Println("error: readBucketMetadataFile: could not encrypt buffer with hmacKey")
+				return "", 0, nil, nil, err
+			}
 			encryptedHmacKeyB64 := base64.URLEncoding.EncodeToString(encryptedHmacKey)
 
 			bMdata = &BucketMetadata{
@@ -215,7 +223,11 @@ func (objst *ObjStore) VerifyKeys(ctx context.Context, bucket string, masterPass
 	// Further verify encKey by decrypting top level objects if there are any
 	topLevelObjs, err := objst.GetObjListTopLevel(ctx, bucket, []string{"metadata", "chunks"})
 	if err != nil {
-		log.Printf("error: could not get top level bucket objects '%s': %v", topLevelObjs[0], err)
+		topLevelObjsZero := "???"
+		if len(topLevelObjs) > 0 {
+			topLevelObjsZero = topLevelObjs[0]
+		}
+		log.Printf("error: could not get top level bucket objects '%s': %v", topLevelObjsZero, err)
 		return err
 	}
 	if len(topLevelObjs) > 0 {

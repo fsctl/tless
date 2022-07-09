@@ -117,7 +117,7 @@ func (cp *chunkPacker) Complete() (isJournalComplete bool) {
 				},
 			},
 		}
-		//cp.vlog.Printf("chunkPacker: Complete: finalizing '%s' with offset=%d, len=%d", crp.RelPath, crp.ChunkExtents[0].Offset, crp.ChunkExtents[0].Len)
+		cp.vlog.Printf("chunkPacker: Complete: finalizing '%s' with offset=%d, len=%d", crp.RelPath, crp.ChunkExtents[0].Offset, crp.ChunkExtents[0].Len)
 		updateLastBackupTime(cp.db, cp.dbLock, item.bjt.DirEntId)
 		isJournalComplete = completeTask(cp.db, cp.dbLock, item.bjt, crp)
 	}

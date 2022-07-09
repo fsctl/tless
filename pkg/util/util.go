@@ -42,6 +42,18 @@ func StripTrailingSlashes(s string) string {
 	}
 }
 
+// Returns s with no leading slashes.  If s does not have leading slashes, it is returned
+// unchanged.  If s is all slashes, an empty string is returned.
+func StripLeadingSlashes(s string) string {
+	for {
+		if strings.HasPrefix(s, "/") {
+			s = strings.TrimPrefix(s, "/")
+		} else {
+			return s
+		}
+	}
+}
+
 type CfgSettings struct {
 	Endpoint             string
 	AccessKeyId          string

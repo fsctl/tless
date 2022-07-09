@@ -129,13 +129,20 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 
 	// Split the name to get both parts
 	parts := strings.Split(snapshotRawName, "/")
-	if len(parts) != 2 {
+	if len(parts) != 2 && !strings.HasPrefix(snapshotRawName, "//") {
 		log.Printf("error: malformed restore snapshot: '%s'", snapshotRawName)
 		done()
 		return
 	}
-	backupName := parts[0]
-	snapshotName := parts[1]
+	var backupName string
+	var snapshotName string
+	if len(parts) == 2 {
+		backupName = parts[0]
+		snapshotName = parts[1]
+	} else if strings.HasPrefix(snapshotRawName, "//") {
+		backupName = "/"
+		snapshotName = strings.TrimPrefix(snapshotRawName, "//")
+	}
 
 	// Encrypt the backup name and snapshot name so we can form the index file name
 	encBackupName, err := cryptography.EncryptFilename(encKey, backupName)
@@ -167,6 +174,7 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 	}
 
 	// Filter the rel paths we want to restore
+	//vlog.Printf("RESTORE: selectedRelPaths='%v'", selectedRelPaths)
 	mRelPathsObjsMap := backup.FilterRelPaths(snapshotObj, selectedRelPaths, nil)
 	totalItems := len(mRelPathsObjsMap)
 	doneItems := 0

@@ -54,13 +54,17 @@ func DeleteSnapshots(ctx context.Context, key []byte, deleteSnapshots []Snapshot
 
 func SplitSnapshotName(snapshotName string) (backupDirName string, snapshotTime string, err error) {
 	snapshotNameParts := strings.Split(snapshotName, "/")
-	if len(snapshotNameParts) != 2 {
-		return "", "", fmt.Errorf("should be slash-splitable into 2 parts")
+	if len(snapshotNameParts) == 2 {
+		backupDirName = snapshotNameParts[0]
+		snapshotTime = snapshotNameParts[1]
+		return backupDirName, snapshotTime, nil
+	} else if strings.HasPrefix(snapshotName, "//") {
+		backupDirName = "/"
+		snapshotTime = strings.TrimPrefix(snapshotName, "//")
+		return backupDirName, snapshotTime, nil
+	} else {
+		return "", "", fmt.Errorf("malformed snapshot name '%s'", snapshotName)
 	}
-
-	backupDirName = snapshotNameParts[0]
-	snapshotTime = snapshotNameParts[1]
-	return backupDirName, snapshotTime, nil
 }
 
 // Returns true if the specified backupName+snapshotName is the most recent snapshot existing for backup backupName

@@ -220,6 +220,7 @@ func FilterRelPaths(snapshotObj *snapshots.Snapshot, specificRelPaths []string, 
 			ret[relPath] = snapshotObj.RelPaths[relPath]
 		} else if len(specificRelPaths) > 0 {
 			for _, srp := range specificRelPaths {
+				//log.Printf("RESTORE: relPath='%s'=='%s'=srp", relPath, srp)
 				if relPath == srp {
 					// accept it because it matched exactly an element in specific rel paths
 					ret[relPath] = snapshotObj.RelPaths[relPath]

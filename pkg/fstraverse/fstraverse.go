@@ -37,6 +37,7 @@ type BackupIdsQueue struct {
 
 func relativizePath(path string, prefix string) string {
 	relPath := strings.TrimPrefix(path, util.StripTrailingSlashes(prefix)+"/")
+	relPath = util.StripLeadingSlashes(relPath)
 	return relPath
 }
 
@@ -94,7 +95,7 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 		}
 
 		relPath := relativizePath(path, rootPath)
-		if relPath == rootPath {
+		if relPath == rootPath || relPath == "" {
 			return nil
 		}
 
@@ -132,13 +133,9 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 		// If not:
 		//   - Insert it into dirents with last_backup set to 0
 		//   - Enqueue it for backup.
-		if dbLock != nil {
-			dbLock.Lock()
-		}
+		util.LockIf(dbLock)
 		hasDirEnt, lastBackupUnix, id, err := db.HasDirEnt(rootDirName, relPath)
-		if dbLock != nil {
-			dbLock.Unlock()
-		}
+		util.UnlockIf(dbLock)
 		if err != nil {
 			log.Printf("Error while searching for %s/%s, skipping this dirent", rootDirName, relPath)
 			return nil

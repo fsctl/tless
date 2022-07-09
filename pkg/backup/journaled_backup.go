@@ -242,6 +242,12 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 	}
 
 	cp := newChunkPacker(ctx, objst, bucket, db, globalsLock, key, vlog, persistMemDbToFile)
+
+	// Force persist once before the backup starts
+	if persistMemDbToFile != nil {
+		persistMemDbToFile(nil, true, true)
+	}
+
 	for {
 		// Sleep this go routine briefly on every iteration of the for loop
 		time.Sleep(time.Millisecond * 1)
