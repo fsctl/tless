@@ -23,6 +23,49 @@ type UpdateProgressFuncType func(finished int64, total int64, globalsLock *sync.
 type SetReplayInitialProgressFuncType func(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog)
 type SetBackupInitialProgressFuncType func(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog)
 
+//
+// MemDB Functions (see note in DoJournaledBackup)
+//
+func initMemDb(globalsLock *sync.Mutex, db *database.DB) (*database.DB, int64) {
+	util.LockIf(globalsLock)
+	dbMem, err := database.NewDB(":memory:")
+	util.UnlockIf(globalsLock)
+	if err != nil {
+		log.Fatalf("error: cannot open memory database: %v", err)
+	}
+	util.LockIf(globalsLock)
+	db.BackupTo(dbMem)
+	util.UnlockIf(globalsLock)
+	memDbLastPersistedToFileUnixtime := time.Now().Unix()
+	return dbMem, memDbLastPersistedToFileUnixtime
+}
+
+// This function will persist the memory db back to disk (overwriting disk db) in 3 cases:
+// 1) If forcePersist is true
+// 2) If maximum time since last persist has been exceeded
+// 3) If minimum time since last persist exceeded AND it's a "good time" to parallelize with
+// upload operation (ie, goodTime is true)
+func makePersistMemDbToFile(db *database.DB, dbMem *database.DB, globalsLock *sync.Mutex, memDbLastPersistedToFileUnixtime int64, vlog *util.VLog) func(runWhileUploadingFinished chan bool, goodTime bool, forcePersist bool) {
+	return func(runWhileUploadingFinished chan bool, goodTime bool, forcePersist bool) {
+		defer func() {
+			if runWhileUploadingFinished != nil {
+				runWhileUploadingFinished <- true
+			}
+		}()
+		secondsSinceLastPersist := time.Now().Unix() - memDbLastPersistedToFileUnixtime
+		minPersistInterval := int64(5 * 60)
+		maxPersistInterval := int64(10 * 60)
+		if (forcePersist) || (secondsSinceLastPersist > maxPersistInterval) || ((secondsSinceLastPersist > minPersistInterval) && goodTime) {
+			vlog.Printf("PERSIST_MEMDB> starting persist (b/c forcePersist=%v || max=%v || min=%v && goodTime=%v)", forcePersist, (secondsSinceLastPersist > maxPersistInterval), (secondsSinceLastPersist > minPersistInterval), goodTime)
+			util.LockIf(globalsLock)
+			dbMem.BackupTo(db)
+			util.UnlockIf(globalsLock)
+			vlog.Println("PERSIST_MEMDB> finished persist")
+			memDbLastPersistedToFileUnixtime = time.Now().Unix()
+		}
+	}
+}
+
 func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, excludes []string, vlog *util.VLog, checkAndHandleTraversalCancelation fstraverse.CheckAndHandleTraversalCancelationFuncType, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, setBackupInitialProgressFunc SetBackupInitialProgressFuncType, updateBackupProgressFunc UpdateProgressFuncType, stats *BackupStats) (backupReportedEvents []util.ReportedEvent, breakFromLoop bool, continueLoop bool, fatalError bool) {
 	// Return values
 	breakFromLoop = false
@@ -35,42 +78,8 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 	// - Periodically, during uploads, we persist the mem db back to disk for protection in
 	// case of crash.
 	// - Mem db accesses are serialized by same lock as regular db.
-
-	// Init the mem db
-	util.LockIf(globalsLock)
-	dbMem, err := database.NewDB(":memory:")
-	util.UnlockIf(globalsLock)
-	if err != nil {
-		log.Fatalf("error: cannot open memory database: %v", err)
-	}
-	util.LockIf(globalsLock)
-	db.BackupTo(dbMem)
-	util.UnlockIf(globalsLock)
-	memDbLastPersistedToFileUnixtime := time.Now().Unix()
-
-	// This function will persist the memory db back to disk (overwriting disk db) in 3 cases:
-	// 1) If forcePersist is true
-	// 2) If maximum time since last persist has been exceeded
-	// 3) If minimum time since last persist exceeded AND it's a "good time" to parallelize with
-	// upload operation (ie, goodTime is true)
-	persistMemDbToFile := func(runWhileUploadingFinished chan bool, goodTime bool, forcePersist bool) {
-		defer func() {
-			if runWhileUploadingFinished != nil {
-				runWhileUploadingFinished <- true
-			}
-		}()
-		secondsSinceLastPersist := time.Now().Unix() - memDbLastPersistedToFileUnixtime
-		minPersistInterval := int64(10 * 60)
-		maxPersistInterval := int64(20 * 60)
-		if (forcePersist) || (secondsSinceLastPersist > maxPersistInterval) || ((secondsSinceLastPersist > minPersistInterval) && goodTime) {
-			vlog.Printf("PERSIST_MEMDB> starting persist (b/c forcePersist=%v || max=%v || min=%v && goodTime=%v)", forcePersist, (secondsSinceLastPersist > maxPersistInterval), (secondsSinceLastPersist > minPersistInterval), goodTime)
-			util.LockIf(globalsLock)
-			dbMem.BackupTo(db)
-			util.UnlockIf(globalsLock)
-			vlog.Println("PERSIST_MEMDB> finished persist")
-			memDbLastPersistedToFileUnixtime = time.Now().Unix()
-		}
-	}
+	dbMem, memDbLastPersistedToFileUnixtime := initMemDb(globalsLock, db)
+	persistMemDbToFile := makePersistMemDbToFile(db, dbMem, globalsLock, memDbLastPersistedToFileUnixtime, vlog)
 	defer func() {
 		persistMemDbToFile(nil, true, true)
 		dbMem.Close()
@@ -412,20 +421,28 @@ func purgeFromDb(db *database.DB, dbLock *sync.Mutex, backupDirName string, dele
 }
 
 func ReplayBackupJournal(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, db *database.DB, globalsLock *sync.Mutex, vlog *util.VLog, setReplayInitialProgressFunc SetReplayInitialProgressFuncType, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, updateProgressFunc UpdateProgressFuncType) util.ReportedEvent {
+	// MemDB - see note at top of DoJournaledBackup
+	dbMem, memDbLastPersistedToFileUnixtime := initMemDb(globalsLock, db)
+	persistMemDbToFile := makePersistMemDbToFile(db, dbMem, globalsLock, memDbLastPersistedToFileUnixtime, vlog)
+	defer func() {
+		persistMemDbToFile(nil, true, true)
+		dbMem.Close()
+	}()
+
 	// Reset all InProgress -> Unstarted
 	util.LockIf(globalsLock)
-	err := db.ResetAllInProgressBackupJournalTasks()
+	err := dbMem.ResetAllInProgressBackupJournalTasks()
 	util.UnlockIf(globalsLock)
 	if err != nil {
-		log.Println("error: ReplayBackupJournal: db.ResetAllInProgressBackupJournalTasks: ", err)
+		log.Println("error: ReplayBackupJournal: dbMem.ResetAllInProgressBackupJournalTasks: ", err)
 	}
 
 	// Reconstruct backupDirPath, backupDirName and snapshotName from backup_info table
 	util.LockIf(globalsLock)
-	backupDirPath, snapshotUnixtime, err := db.GetJournaledBackupInfo()
+	backupDirPath, snapshotUnixtime, err := dbMem.GetJournaledBackupInfo()
 	util.UnlockIf(globalsLock)
 	if err != nil {
-		log.Printf("error: ReplayBackupJournal: db.GetJournaledBackupInfo(): %v", err)
+		log.Printf("error: ReplayBackupJournal: dbMem.GetJournaledBackupInfo(): %v", err)
 	}
 	backupDirName := filepath.Base(backupDirPath)
 	snapshotName := time.Unix(snapshotUnixtime, 0).UTC().Format("2006-01-02_15.04.05")
@@ -433,15 +450,15 @@ func ReplayBackupJournal(ctx context.Context, key []byte, objst *objstore.ObjSto
 	// Set the initial progress where the back up is starting
 	if setReplayInitialProgressFunc != nil {
 		util.LockIf(globalsLock)
-		finished, total, err := db.GetBackupJournalCounts()
+		finished, total, err := dbMem.GetBackupJournalCounts()
 		util.UnlockIf(globalsLock)
 		if err != nil {
-			log.Printf("error: ReplayBackupJournal: db.GetBackupJournalCounts: %v", err)
+			log.Printf("error: ReplayBackupJournal: dbMem.GetBackupJournalCounts: %v", err)
 		}
 		setReplayInitialProgressFunc(finished, total, backupDirName, globalsLock, vlog)
 	}
 
-	breakFromLoop := PlayBackupJournal(ctx, key, db, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateProgressFunc, nil, nil)
+	breakFromLoop := PlayBackupJournal(ctx, key, dbMem, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateProgressFunc, persistMemDbToFile, nil)
 
 	vlog.Println("Journal replay finished")
 
