@@ -328,7 +328,9 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 			chunkExtents, pendingInChunkPacker, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, vlog, cp, bjt)
 			if err != nil {
 				log.Printf("error: PlayBackupJournal (Updated): backup.Backup: %v", err)
-				completeTask(db, globalsLock, bjt, nil, &totalCntJournal, &finishedCountJournal)
+				vlog.Printf("Completing task after error")
+				isJournalComplete := completeTask(db, globalsLock, bjt, nil, &totalCntJournal, &finishedCountJournal)
+				vlog.Printf("Done completing task after error (isJournalComplete=%v)", isJournalComplete)
 				finishTaskImmediately = false
 			} else {
 				if stats != nil {

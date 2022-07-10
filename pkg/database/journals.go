@@ -44,33 +44,33 @@ func (db *DB) NewInsertBackupJournalStmt(backupDirPath string) (*InsertBackupJou
 	// First insert the backup_info row so we have its id
 	stmtInfoInsert, err := db.dbConn.Prepare("INSERT INTO backup_info (dirpath, snapshot_time) VALUES (?, strftime('%s','now'))")
 	if err != nil {
-		log.Printf("Error: NewInsertBackupJournalStmt: %v", err)
+		log.Printf("error: NewInsertBackupJournalStmt: %v", err)
 		return nil, err
 	}
 	defer stmtInfoInsert.Close()
 
 	result, err := stmtInfoInsert.Exec(backupDirPath)
 	if err != nil {
-		log.Printf("Error: NewInsertBackupJournalStmt: %v", err)
+		log.Printf("error: NewInsertBackupJournalStmt: %v", err)
 		return nil, err
 	}
 
 	backupsInfoId, err := result.LastInsertId()
 	if err != nil {
-		log.Printf("Error: NewInsertBackupJournalStmt: %v", err)
+		log.Printf("error: NewInsertBackupJournalStmt: %v", err)
 		return nil, err
 	}
 
 	// Now begin the transaction to insert all the other rows
 	tx, err := db.dbConn.Begin()
 	if err != nil {
-		log.Printf("Error: NewInsertBackupJournalStmt: %v", err)
+		log.Printf("error: NewInsertBackupJournalStmt: %v", err)
 		return nil, err
 	}
 
 	stmt, err := tx.Prepare("INSERT INTO backup_journal (backup_info_id, dirent_id, status, change_type) values (?, ?, ?, ?)")
 	if err != nil {
-		log.Printf("Error: NewInsertBackupJournalStmt: %v", err)
+		log.Printf("error: NewInsertBackupJournalStmt: %v", err)
 		return nil, err
 	}
 
@@ -87,7 +87,7 @@ func (ibst *InsertBackupJournalStmt) Close() {
 func (ibst *InsertBackupJournalStmt) InsertBackupJournalRow(dirEntId int64, status JournalStatus, changeType ChangeType) error {
 	_, err := ibst.stmt.Exec(ibst.backupsInfoId, dirEntId, status, changeType)
 	if err != nil {
-		log.Printf("Error: InsertBackupJournalRow: %v", err)
+		log.Printf("error: InsertBackupJournalRow: %v", err)
 		return err
 	}
 
@@ -106,20 +106,20 @@ func (db *DB) ClaimNextBackupJournalTask() (backupJournalTask *BackupJournalTask
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNoWork
 		} else if err != nil {
-			log.Printf("Error: ClaimNextBackupJournalTask(): %v", err)
+			log.Printf("error: ClaimNextBackupJournalTask(): %v", err)
 			return nil, err
 		}
 
 		stmt, err := db.dbConn.Prepare("UPDATE backup_journal SET status = ? WHERE id = ?")
 		if err != nil {
-			log.Printf("Error: ClaimNextBackupJournalTask: %v", err)
+			log.Printf("error: ClaimNextBackupJournalTask: %v", err)
 			return nil, err
 		}
 		defer stmt.Close()
 
 		result, err := stmt.Exec(InProgress, id)
 		if err != nil {
-			log.Printf("Error: ClaimNextBackupJournalTask: %v", err)
+			log.Printf("error: ClaimNextBackupJournalTask: %v", err)
 			return nil, err
 		}
 		if rowsAffected, err := result.RowsAffected(); err == nil {
@@ -133,7 +133,7 @@ func (db *DB) ClaimNextBackupJournalTask() (backupJournalTask *BackupJournalTask
 				continue
 			}
 		} else {
-			log.Printf("Error: ClaimNextBackupJournalTask: %v", err)
+			log.Printf("error: ClaimNextBackupJournalTask: %v", err)
 			return nil, err
 		}
 	}
@@ -142,7 +142,7 @@ func (db *DB) ClaimNextBackupJournalTask() (backupJournalTask *BackupJournalTask
 func (db *DB) selectNextBackupJournalCandidateTask() (id int64, dirEntId int64, changeType ChangeType, err error) {
 	stmt, err := db.dbConn.Prepare("SELECT id, dirent_id, change_type FROM backup_journal WHERE status = ? LIMIT 1")
 	if err != nil {
-		log.Printf("Error: selectNextBackupJournalCandidateTask: %v", err)
+		log.Printf("error: selectNextBackupJournalCandidateTask: %v", err)
 		return 0, 0, 0, err
 	}
 	defer stmt.Close()
@@ -151,7 +151,7 @@ func (db *DB) selectNextBackupJournalCandidateTask() (id int64, dirEntId int64, 
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, 0, 0, err
 	} else if err != nil {
-		log.Printf("Error: selectNextBackupJournalCandidateTask: %v", err)
+		log.Printf("error: selectNextBackupJournalCandidateTask: %v", err)
 		return 0, 0, 0, err
 	}
 
@@ -164,14 +164,14 @@ func (db *DB) CompleteBackupJournalTask(backupJournalTask *BackupJournalTask, in
 	// Mark this task as done
 	stmt, err := db.dbConn.Prepare("UPDATE backup_journal SET status = ?, index_entry = ? WHERE id = ?")
 	if err != nil {
-		log.Printf("Error: CompleteBackupJournalTask: %v", err)
+		log.Printf("error: CompleteBackupJournalTask: %v", err)
 		return err
 	}
 	defer stmt.Close()
 
 	_, err = stmt.Exec(Finished, indexEntry, backupJournalTask.id)
 	if err != nil {
-		log.Printf("Error: CompleteBackupJournalTask: %v", err)
+		log.Printf("error: CompleteBackupJournalTask: %v", err)
 		return err
 	}
 	return nil
@@ -192,14 +192,14 @@ func (db *DB) WipeBackupJournal() error {
 func (db *DB) ResetAllInProgressBackupJournalTasks() error {
 	stmt, err := db.dbConn.Prepare("UPDATE backup_journal SET status = ? WHERE status = ?")
 	if err != nil {
-		log.Printf("Error: ResetAllInProgressBackupJournalTasks: %v", err)
+		log.Printf("error: ResetAllInProgressBackupJournalTasks: %v", err)
 		return err
 	}
 	defer stmt.Close()
 
 	_, err = stmt.Exec(Unstarted, InProgress)
 	if err != nil {
-		log.Printf("Error: ResetAllInProgressBackupJournalTasks: %v", err)
+		log.Printf("error: ResetAllInProgressBackupJournalTasks: %v", err)
 		return err
 	}
 
@@ -222,14 +222,14 @@ func (db *DB) GetBackupJournalCounts() (finishedCount int64, totalCount int64, e
 func (db *DB) getCountFinishedBackupJournal() (count int64, err error) {
 	stmt, err := db.dbConn.Prepare("SELECT COUNT(*) FROM backup_journal WHERE status = ?")
 	if err != nil {
-		log.Printf("Error: getCountFinishedBackupJournal: %v", err)
+		log.Printf("error: getCountFinishedBackupJournal: %v", err)
 		return 0, err
 	}
 	defer stmt.Close()
 
 	err = stmt.QueryRow(Finished).Scan(&count)
 	if err != nil {
-		log.Printf("Error: getCountFinishedBackupJournal: %v", err)
+		log.Printf("error: getCountFinishedBackupJournal: %v", err)
 		return 0, err
 	}
 
@@ -239,14 +239,14 @@ func (db *DB) getCountFinishedBackupJournal() (count int64, err error) {
 func (db *DB) getCountTotalBackupJournal() (count int64, err error) {
 	stmt, err := db.dbConn.Prepare("SELECT COUNT(*) FROM backup_journal")
 	if err != nil {
-		log.Printf("Error: getCountTotalBackupJournal: %v", err)
+		log.Printf("error: getCountTotalBackupJournal: %v", err)
 		return 0, err
 	}
 	defer stmt.Close()
 
 	err = stmt.QueryRow().Scan(&count)
 	if err != nil {
-		log.Printf("Error: getCountTotalBackupJournal: %v", err)
+		log.Printf("error: getCountTotalBackupJournal: %v", err)
 		return 0, err
 	}
 
@@ -256,14 +256,14 @@ func (db *DB) getCountTotalBackupJournal() (count int64, err error) {
 func (db *DB) deleteAllRowsBackupJournal() error {
 	stmt, err := db.dbConn.Prepare("DELETE FROM backup_journal")
 	if err != nil {
-		log.Printf("Error: deleteAllRowsBackupJournal: %v", err)
+		log.Printf("error: deleteAllRowsBackupJournal: %v", err)
 		return err
 	}
 	defer stmt.Close()
 
 	_, err = stmt.Exec()
 	if err != nil {
-		log.Printf("Error: deleteAllRowsBackupJournal: %v", err)
+		log.Printf("error: deleteAllRowsBackupJournal: %v", err)
 		return err
 	}
 
@@ -273,7 +273,7 @@ func (db *DB) deleteAllRowsBackupJournal() error {
 func (db *DB) GetLastCompletedBackupUnixTime() (unixtime int64, err error) {
 	count, err := db.getCountTotalBackupJournal()
 	if err != nil {
-		log.Printf("Error: GetLastCompletedBackupUnixTime: %v", err)
+		log.Printf("error: GetLastCompletedBackupUnixTime: %v", err)
 		return 0, err
 	}
 
@@ -287,7 +287,7 @@ func (db *DB) GetLastCompletedBackupUnixTime() (unixtime int64, err error) {
 		stmt, err = db.dbConn.Prepare(`SELECT MAX(backup_info.snapshot_time) FROM backup_info`)
 	}
 	if err != nil {
-		log.Printf("Error: GetLastCompletedBackupUnixTime: %v", err)
+		log.Printf("error: GetLastCompletedBackupUnixTime: %v", err)
 		return 0, err
 	}
 	defer stmt.Close()
@@ -305,7 +305,7 @@ func (db *DB) GetLastCompletedBackupUnixTime() (unixtime int64, err error) {
 func (db *DB) HasDirtyBackupJournal() (bool, error) {
 	stmt, err := db.dbConn.Prepare(`SELECT COUNT(*) FROM backup_journal;`)
 	if err != nil {
-		log.Printf("Error: HasDirtyBackupJournal: %v", err)
+		log.Printf("error: HasDirtyBackupJournal: %v", err)
 		return false, err
 	}
 	defer stmt.Close()
@@ -313,7 +313,7 @@ func (db *DB) HasDirtyBackupJournal() (bool, error) {
 	var count int64 = 0
 	err = stmt.QueryRow().Scan(&count)
 	if err != nil {
-		log.Printf("Error: HasDirtyBackupJournal: %v", err)
+		log.Printf("error: HasDirtyBackupJournal: %v", err)
 		return false, err
 	}
 
@@ -323,7 +323,7 @@ func (db *DB) HasDirtyBackupJournal() (bool, error) {
 func (db *DB) GetJournaledBackupInfo() (backupDirPath string, snapshotUnixTime int64, err error) {
 	stmt, err := db.dbConn.Prepare(`SELECT dirpath, snapshot_time FROM backup_info WHERE backup_info.id IN (SELECT backup_journal.backup_info_id FROM backup_journal);`)
 	if err != nil {
-		log.Printf("Error: GetJournaledBackupInfo: %v", err)
+		log.Printf("error: GetJournaledBackupInfo: %v", err)
 		return "", 0, err
 	}
 	defer stmt.Close()
@@ -334,7 +334,7 @@ func (db *DB) GetJournaledBackupInfo() (backupDirPath string, snapshotUnixTime i
 		// and return the error for caller to handle
 		return "", 0, err
 	} else if err != nil {
-		log.Printf("Error: GetJournaledBackupInfo: %v", err)
+		log.Printf("error: GetJournaledBackupInfo: %v", err)
 		return "", 0, err
 	}
 
@@ -345,14 +345,14 @@ func (db *DB) GetJournaledBackupInfo() (backupDirPath string, snapshotUnixTime i
 func (db *DB) CancelationResetLastBackupTime() error {
 	stmt, err := db.dbConn.Prepare("UPDATE dirents SET last_backup=0 WHERE id in (SELECT dirent_id FROM backup_journal WHERE status = ? OR status = ?)")
 	if err != nil {
-		log.Printf("Error: CancelationResetLastBackupTime: %v", err)
+		log.Printf("error: CancelationResetLastBackupTime: %v", err)
 		return err
 	}
 	defer stmt.Close()
 
 	_, err = stmt.Exec(InProgress, Finished)
 	if err != nil {
-		log.Printf("Error: CancelationResetLastBackupTime: %v", err)
+		log.Printf("error: CancelationResetLastBackupTime: %v", err)
 		return err
 	}
 
@@ -365,21 +365,21 @@ func (db *DB) CancelationCleanupJournal() error {
 	// Delete backup_info row so this doesn't look like a completed backup
 	stmt, err := db.dbConn.Prepare("DELETE FROM backup_info WHERE id in (SELECT DISTINCT(backup_info_id) FROM backup_journal)")
 	if err != nil {
-		log.Printf("Error: CancelationResetLastBackupTime: %v", err)
+		log.Printf("error: CancelationResetLastBackupTime: %v", err)
 		return err
 	}
 	defer stmt.Close()
 
 	_, err = stmt.Exec()
 	if err != nil {
-		log.Printf("Error: CancelationResetLastBackupTime: %v", err)
+		log.Printf("error: CancelationResetLastBackupTime: %v", err)
 		return err
 	}
 
 	// Delete all items in journal
 	err = db.deleteAllRowsBackupJournal()
 	if err != nil {
-		log.Printf("Error: CancelationResetLastBackupTime: %v", err)
+		log.Printf("error: CancelationResetLastBackupTime: %v", err)
 		return err
 	}
 
