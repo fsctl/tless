@@ -255,11 +255,7 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 		vlog.Printf("Done with journal")
 	}
 
-	// Profiling accumulators
-	a := NewBackupAccums()
-	dba := database.NewDbAccums()
-
-	cp := newChunkPacker(ctx, objst, bucket, db, globalsLock, key, vlog, persistMemDbToFile, dba, &totalCntJournal, &finishedCountJournal)
+	cp := newChunkPacker(ctx, objst, bucket, db, globalsLock, key, vlog, persistMemDbToFile, &totalCntJournal, &finishedCountJournal)
 
 	// Force persist once before the backup starts
 	if persistMemDbToFile != nil {
@@ -268,14 +264,12 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 
 	n := 0
 	for {
-		a.Overall.Start()
 
 		// Sleep this go routine briefly on every iteration of the for loop
 		if resourceUtilization == "low" {
 			time.Sleep(time.Millisecond * 50)
 		}
 
-		a.CancelCheck.Start()
 		// Has cancelation been requested?
 		if checkAndHandleCancelationFunc != nil {
 			isCanceled := checkAndHandleCancelationFunc(ctx, key, objst, bucket, globalsLock, db, backupDirPath, snapshotName)
@@ -283,7 +277,6 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 				return true
 			}
 		}
-		a.CancelCheck.Stop()
 
 		// On every iteration, we persist mem db without the force option so it can decide when
 		// it's been long enough (time b/t persists is defined in the function)
@@ -291,7 +284,6 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 			persistMemDbToFile(nil, false, false)
 		}
 
-		a.GetDirEnt.Start()
 		util.LockIf(globalsLock)
 		bjt, err := db.ClaimNextBackupJournalTask()
 		util.UnlockIf(globalsLock)
@@ -320,7 +312,6 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 		if err != nil {
 			log.Printf("error: PlayBackupJournal: db.GetDirEntPaths: could not get dirent id '%d'\n", bjt.DirEntId)
 		}
-		a.GetDirEnt.Stop()
 
 		// For JSON serialization into journal
 		crp := &snapshots.CloudRelPath{
@@ -333,12 +324,11 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 
 		finishTaskImmediately := true
 		if bjt.ChangeType == database.Updated {
-			a.Updated.Start()
 			//vlog.Printf("Backing up '%s/%s'", rootDirName, relPath)
 			chunkExtents, pendingInChunkPacker, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, vlog, cp, bjt)
 			if err != nil {
 				log.Printf("error: PlayBackupJournal (Updated): backup.Backup: %v", err)
-				completeTask(db, globalsLock, bjt, nil, dba, &totalCntJournal, &finishedCountJournal)
+				completeTask(db, globalsLock, bjt, nil, &totalCntJournal, &finishedCountJournal)
 				finishTaskImmediately = false
 			} else {
 				if stats != nil {
@@ -351,9 +341,7 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 					crp.ChunkExtents = chunkExtents
 				}
 			}
-			a.Updated.Stop()
 		} else if bjt.ChangeType == database.Unchanged {
-			a.Unchanged.Start()
 			if prevSnapshot != nil {
 				// Just use the same extents as prev snapshot had
 				chunkExtents := prevSnapshot.RelPaths[relPath].ChunkExtents
@@ -367,7 +355,7 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 				chunkExtents, pendingInChunkPacker, err := Backup(ctx, key, rootDirName, relPath, backupDirPath, snapshotName, objst, bucket, vlog, cp, bjt)
 				if err != nil {
 					log.Printf("error: PlayBackupJournal (Unchanged): backup.Backup: %v", err)
-					completeTask(db, globalsLock, bjt, nil, dba, &totalCntJournal, &finishedCountJournal)
+					completeTask(db, globalsLock, bjt, nil, &totalCntJournal, &finishedCountJournal)
 					finishTaskImmediately = false
 				} else {
 					if stats != nil {
@@ -381,49 +369,28 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 					}
 				}
 			}
-			a.Unchanged.Stop()
 		} else if bjt.ChangeType == database.Deleted {
-			a.Deleted.Start()
 			// Remove from dirents table
 			if err = purgeFromDb(db, globalsLock, filepath.Base(backupDirPath), relPath); err != nil {
 				log.Printf("error: PlayBackupJournal (Deleted): failed to purge from dirents '%s': %v", relPath, err)
 			}
 			crp = nil
-			a.Deleted.Stop()
 		} else {
 			log.Printf("error: PlayBackupJournal: unrecognized journal type '%v' on '%s'", bjt.ChangeType, relPath)
 		}
 
-		a.FinishTask.Start()
 		if finishTaskImmediately {
-			a.UpdateLastBackupTime.Start()
 			updateLastBackupTime(db, globalsLock, bjt.DirEntId)
-			a.UpdateLastBackupTime.Stop()
-			a.CompleteTask.Start()
-			isJournalComplete := completeTask(db, globalsLock, bjt, crp, dba, &totalCntJournal, &finishedCountJournal)
+			isJournalComplete := completeTask(db, globalsLock, bjt, crp, &totalCntJournal, &finishedCountJournal)
 			if isJournalComplete {
 				writeIndexFileAndWipeJournal()
 				return
 			}
-			a.CompleteTask.Stop()
 		}
-		a.FinishTask.Stop()
 
-		a.ProgressUpdate.Start()
 		n += 1
 		if (totalCntJournal <= 1000) || (n%1000 == 0) {
 			progressUpdateClosure(totalCntJournal, finishedCountJournal)
-		}
-		a.ProgressUpdate.Stop()
-		a.Overall.Stop()
-
-		a.Iterations += 1
-		dba.Iterations += 1
-		if (a.Iterations % 50000) == 0 {
-			a.Print()
-		}
-		if (dba.Iterations % 50000) == 0 {
-			dba.Print()
 		}
 	}
 }
@@ -437,13 +404,13 @@ func updateLastBackupTime(db *database.DB, dbLock *sync.Mutex, dirEntId int64) {
 	}
 }
 
-func completeTask(db *database.DB, dbLock *sync.Mutex, bjt *database.BackupJournalTask, crp *snapshots.CloudRelPath, dba *database.DbAccums, totalCntJournal *int64, finishedCountJournal *int64) (isJournalComplete bool) {
+func completeTask(db *database.DB, dbLock *sync.Mutex, bjt *database.BackupJournalTask, crp *snapshots.CloudRelPath, totalCntJournal *int64, finishedCountJournal *int64) (isJournalComplete bool) {
 	var err error
 	util.LockIf(dbLock)
 	if crp == nil {
-		err = db.CompleteBackupJournalTask(bjt, nil, dba)
+		err = db.CompleteBackupJournalTask(bjt, nil)
 	} else {
-		err = db.CompleteBackupJournalTask(bjt, crp.ToJson(), dba)
+		err = db.CompleteBackupJournalTask(bjt, crp.ToJson())
 	}
 	util.UnlockIf(dbLock)
 	if err != nil {
@@ -451,9 +418,9 @@ func completeTask(db *database.DB, dbLock *sync.Mutex, bjt *database.BackupJourn
 	}
 	*finishedCountJournal += 1
 
+	// Double check with values from db before concluding that isJournalComplete
 	isJournalComplete = false
 	if *finishedCountJournal >= *totalCntJournal {
-		// Double check with values from db
 		util.LockIf(dbLock)
 		*finishedCountJournal, *totalCntJournal, err = db.GetBackupJournalCounts()
 		util.UnlockIf(dbLock)

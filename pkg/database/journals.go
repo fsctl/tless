@@ -160,16 +160,8 @@ func (db *DB) selectNextBackupJournalCandidateTask() (id int64, dirEntId int64, 
 
 // Marks backupJournalTask as Finished.  If this was the last task that was not yet complete,
 // returns true for isJournalComplete.
-func (db *DB) CompleteBackupJournalTask(backupJournalTask *BackupJournalTask, indexEntry []byte, dba *DbAccums) (err error) {
-	if dba != nil {
-		dba.Overall.Start()
-		defer dba.Overall.Stop()
-	}
-
+func (db *DB) CompleteBackupJournalTask(backupJournalTask *BackupJournalTask, indexEntry []byte) (err error) {
 	// Mark this task as done
-	if dba != nil {
-		dba.Update.Start()
-	}
 	stmt, err := db.dbConn.Prepare("UPDATE backup_journal SET status = ?, index_entry = ? WHERE id = ?")
 	if err != nil {
 		log.Printf("Error: CompleteBackupJournalTask: %v", err)
@@ -182,35 +174,7 @@ func (db *DB) CompleteBackupJournalTask(backupJournalTask *BackupJournalTask, in
 		log.Printf("Error: CompleteBackupJournalTask: %v", err)
 		return err
 	}
-	if dba != nil {
-		dba.Update.Stop()
-	}
 	return nil
-
-	// // Get count of finished and total. If all tasks are finished, return true for isJournalComplete==true
-	// if dba != nil {
-	// 	dba.CountTotal.Start()
-	// }
-	// totalCount, err := db.getCountTotalBackupJournal()
-	// if err != nil {
-	// 	return err
-	// }
-	// if dba != nil {
-	// 	dba.CountTotal.Stop()
-	// 	dba.CountFinished.Start()
-	// }
-	// finishedCount, err := db.getCountFinishedBackupJournal()
-	// if err != nil {
-	// 	return err
-	// }
-	// if dba != nil {
-	// 	dba.CountFinished.Stop()
-	// }
-	// if finishedCount >= totalCount {
-	// 	return nil
-	// } else {
-	// 	return nil
-	// }
 }
 
 // Deletes all journal rows

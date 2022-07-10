@@ -192,7 +192,7 @@ func DaemonMain(version string, commitHash string) {
 		//s.GracefulStop()
 
 		// Give go routines a chance to gracefully terminate
-		time.Sleep(time.Second * 15)
+		time.Sleep(time.Second * 5)
 
 		// other cleanup
 		gGlobalsLock.Lock()

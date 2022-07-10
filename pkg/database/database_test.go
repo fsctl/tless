@@ -202,7 +202,7 @@ func TestBackupJournalFunctions(t *testing.T) {
 			time.Sleep(time.Second / 10)
 
 			lock.Lock()
-			err = db.CompleteBackupJournalTask(bjt, []byte(""), nil)
+			err = db.CompleteBackupJournalTask(bjt, []byte(""))
 			assert.NoError(t, err)
 			finished, total, err := db.GetBackupJournalCounts()
 			assert.NoError(t, err)
