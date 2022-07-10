@@ -176,7 +176,10 @@ func Backup(vlog *util.VLog, completion func()) {
 		}
 
 		// Traverse the FS for changed files and do the journaled backup
-		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludes, vlog, checkAndHandleTraversalCancelation, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress, stats)
+		util.LockIf(&gGlobalsLock)
+		resourceUtilization := gCfg.ResourceUtilization
+		util.UnlockIf(&gGlobalsLock)
+		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludes, vlog, checkAndHandleTraversalCancelation, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress, stats, resourceUtilization)
 		for _, e := range backupReportedEvents {
 			if e.Kind == util.ERR_OP_NOT_PERMITTED {
 				backupEndedInError = true
@@ -295,7 +298,10 @@ func replayBackupJournal() {
 	}
 
 	// Replay the journal
-	re := backup.ReplayBackupJournal(ctx, encKey, objst, bucket, db, &gGlobalsLock, vlog, setReplayInitialProgress, checkAndHandleCancelation, updateBackupProgress)
+	gGlobalsLock.Lock()
+	resourceUtilization := gCfg.ResourceUtilization
+	gGlobalsLock.Unlock()
+	re := backup.ReplayBackupJournal(ctx, encKey, objst, bucket, db, &gGlobalsLock, vlog, setReplayInitialProgress, checkAndHandleCancelation, updateBackupProgress, resourceUtilization)
 	gGlobalsLock.Lock()
 	gStatus.reportedEvents = append(gStatus.reportedEvents, re)
 	gGlobalsLock.Unlock()

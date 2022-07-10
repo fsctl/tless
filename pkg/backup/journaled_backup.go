@@ -66,7 +66,7 @@ func makePersistMemDbToFile(db *database.DB, dbMem *database.DB, globalsLock *sy
 	}
 }
 
-func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, excludes []string, vlog *util.VLog, checkAndHandleTraversalCancelation fstraverse.CheckAndHandleTraversalCancelationFuncType, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, setBackupInitialProgressFunc SetBackupInitialProgressFuncType, updateBackupProgressFunc UpdateProgressFuncType, stats *BackupStats) (backupReportedEvents []util.ReportedEvent, breakFromLoop bool, continueLoop bool, fatalError bool) {
+func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, excludes []string, vlog *util.VLog, checkAndHandleTraversalCancelation fstraverse.CheckAndHandleTraversalCancelationFuncType, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, setBackupInitialProgressFunc SetBackupInitialProgressFuncType, updateBackupProgressFunc UpdateProgressFuncType, stats *BackupStats, resourceUtilization string) (backupReportedEvents []util.ReportedEvent, breakFromLoop bool, continueLoop bool, fatalError bool) {
 	// Return values
 	breakFromLoop = false
 	continueLoop = false
@@ -195,11 +195,11 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 		setBackupInitialProgressFunc(finished, total, backupDirName, globalsLock, vlog)
 	}
 
-	breakFromLoop = PlayBackupJournal(ctx, key, dbMem, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateBackupProgressFunc, persistMemDbToFile, stats)
+	breakFromLoop = PlayBackupJournal(ctx, key, dbMem, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateBackupProgressFunc, persistMemDbToFile, stats, resourceUtilization)
 	return
 }
 
-func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string, vlog *util.VLog, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, updateProgressFunc UpdateProgressFuncType, persistMemDbToFile runWhileUploadingFuncType, stats *BackupStats) (breakFromLoop bool) {
+func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string, vlog *util.VLog, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, updateProgressFunc UpdateProgressFuncType, persistMemDbToFile runWhileUploadingFuncType, stats *BackupStats, resourceUtilization string) (breakFromLoop bool) {
 	// By default, don't signal we want to break out of caller's loop over backups
 	breakFromLoop = false
 
@@ -259,7 +259,9 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 
 	for {
 		// Sleep this go routine briefly on every iteration of the for loop
-		time.Sleep(time.Millisecond * 1)
+		if resourceUtilization == "low" {
+			time.Sleep(time.Millisecond * 50)
+		}
 
 		// Has cancelation been requested?
 		if checkAndHandleCancelationFunc != nil {
@@ -420,7 +422,7 @@ func purgeFromDb(db *database.DB, dbLock *sync.Mutex, backupDirName string, dele
 	return nil
 }
 
-func ReplayBackupJournal(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, db *database.DB, globalsLock *sync.Mutex, vlog *util.VLog, setReplayInitialProgressFunc SetReplayInitialProgressFuncType, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, updateProgressFunc UpdateProgressFuncType) util.ReportedEvent {
+func ReplayBackupJournal(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, db *database.DB, globalsLock *sync.Mutex, vlog *util.VLog, setReplayInitialProgressFunc SetReplayInitialProgressFuncType, checkAndHandleCancelationFunc CheckAndHandleCancelationFuncType, updateProgressFunc UpdateProgressFuncType, resourceUtilization string) util.ReportedEvent {
 	// MemDB - see note at top of DoJournaledBackup
 	dbMem, memDbLastPersistedToFileUnixtime := initMemDb(globalsLock, db)
 	persistMemDbToFile := makePersistMemDbToFile(db, dbMem, globalsLock, memDbLastPersistedToFileUnixtime, vlog)
@@ -458,7 +460,7 @@ func ReplayBackupJournal(ctx context.Context, key []byte, objst *objstore.ObjSto
 		setReplayInitialProgressFunc(finished, total, backupDirName, globalsLock, vlog)
 	}
 
-	breakFromLoop := PlayBackupJournal(ctx, key, dbMem, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateProgressFunc, persistMemDbToFile, nil)
+	breakFromLoop := PlayBackupJournal(ctx, key, dbMem, globalsLock, backupDirPath, snapshotName, objst, bucket, vlog, checkAndHandleCancelationFunc, updateProgressFunc, persistMemDbToFile, nil, resourceUtilization)
 
 	vlog.Println("Journal replay finished")
 

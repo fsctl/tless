@@ -133,7 +133,7 @@ func backupMain() {
 
 		// Traverse the FS for changed files and do the journaled backup
 		stats := backup.NewBackupStats()
-		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, cfgBucket, db, nil, backupDirPath, cfgExcludePaths, vlog, nil, nil, setBackupInitialProgress, updateBackupProgress, stats)
+		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, cfgBucket, db, nil, backupDirPath, cfgExcludePaths, vlog, nil, nil, setBackupInitialProgress, updateBackupProgress, stats, cfgResourceUtilization)
 		for _, e := range backupReportedEvents {
 			if e.Kind == util.ERR_OP_NOT_PERMITTED {
 				log.Printf("warning:  insufficient permissions to process path '%s'", e.Path)
@@ -170,7 +170,7 @@ func handleReplay(ctx context.Context, objst *objstore.ObjStore, db *database.DB
 	if hasDirtyBackupJournal {
 		if cfgResumeBackup {
 			fmt.Println("Resuming previous interrupted backup... (--resume-backup=false to roll back)")
-			backup.ReplayBackupJournal(ctx, encKey, objst, cfgBucket, db, nil, vlog, setBackupInitialProgressFunc, nil, updateBackupProgressFunc)
+			backup.ReplayBackupJournal(ctx, encKey, objst, cfgBucket, db, nil, vlog, setBackupInitialProgressFunc, nil, updateBackupProgressFunc, cfgResourceUtilization)
 		} else {
 			fmt.Println("Rolling back previous interrupted backup...")
 
