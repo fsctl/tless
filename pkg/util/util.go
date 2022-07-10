@@ -410,3 +410,14 @@ func IntSliceContains(sl []int, i int) bool {
 	}
 	return false
 }
+
+// Just like slice = append(slice, x) except won't add x if it's already present
+func AppendIfNotPresent(slice []string, x string) []string {
+	for _, s := range slice {
+		if x == s {
+			return slice
+		}
+	}
+	slice = append(slice, x)
+	return slice
+}

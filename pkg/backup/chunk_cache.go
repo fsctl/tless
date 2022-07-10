@@ -35,6 +35,9 @@ type CacheStatistics struct {
 	totalChunkDownloads      int
 	totalChunkDownloadsBytes int64
 	totalMemoryUseBytes      int64
+	evictedChunks            []string
+	redownloadedChunks       []string
+	redownloadedChunksBytes  int64
 }
 
 type ChunkCache struct {
@@ -77,6 +80,9 @@ func NewChunkCache(objst *objstore.ObjStore, key []byte, vlog *util.VLog, uid in
 			totalChunkDownloads:      0,
 			totalChunkDownloadsBytes: 0,
 			totalMemoryUseBytes:      0,
+			evictedChunks:            make([]string, 0),
+			redownloadedChunks:       make([]string, 0),
+			redownloadedChunksBytes:  0,
 		},
 	}
 
@@ -141,7 +147,7 @@ func NewChunkCache(objst *objstore.ObjStore, key []byte, vlog *util.VLog, uid in
 	return cc
 }
 
-func (cc *ChunkCache) FetchExtentIntoBuffer(ctx context.Context, bucket string, objectName string, offset int64, len int64) (extent []byte, nonce []byte, err error) {
+func (cc *ChunkCache) FetchExtentIntoBuffer(ctx context.Context, bucket string, objectName string, offset int64, lenBytes int64) (extent []byte, nonce []byte, err error) {
 	chunkName := strings.TrimPrefix(objectName, "chunks/")
 
 	cc.vlog.Printf("FetchObjIntoBuffer: searching for chunk '%s'", chunkName)
@@ -157,13 +163,19 @@ func (cc *ChunkCache) FetchExtentIntoBuffer(ctx context.Context, bucket string, 
 			log.Printf("error: FetchObjToBuffer: failed to retrieve object '%s': %v", objectName, err)
 			return nil, nil, err
 		}
+
+		// Save stats on the download
 		cc.stats.totalChunkDownloads += 1
+		if isPreviouslyEvicted(cc.stats.evictedChunks, objectName) {
+			cc.stats.redownloadedChunks = util.AppendIfNotPresent(cc.stats.redownloadedChunks, objectName)
+			cc.stats.redownloadedChunksBytes += int64(len(ciphertextChunkBuf))
+		}
 		cc.saveObjToCache(chunkName, ciphertextChunkBuf)
 	}
 
 	// Extract just [offset:offset+len] from plaintext in memory
 	plaintextChunkBuf := cc.chunks[chunkName].plaintext
-	extent = plaintextChunkBuf[offset : offset+len]
+	extent = plaintextChunkBuf[offset : offset+lenBytes]
 
 	nonce = cc.chunks[chunkName].nonce
 
@@ -290,6 +302,7 @@ func (cc *ChunkCache) evictLeastRecentlyUsed() {
 	}
 	if lruObjName != "" {
 		path := filepath.Join(CacheDirectory, lruObjName)
+		cc.stats.evictedChunks = util.AppendIfNotPresent(cc.stats.evictedChunks, lruObjName)
 		if err := os.Remove(path); err != nil {
 			log.Printf("error: evictLeastRecentlyUsed: could not remove file '%s': %v\n", path, err)
 		}
@@ -307,6 +320,17 @@ func (cc *ChunkCache) PrintCacheStatistics() {
 		cc.vlog.Printf("ChunkCache> cache hit rate %d / %d (%02f%%)", cc.stats.hits, cc.stats.total, percentageHitRate)
 		cc.vlog.Printf("ChunkCache> downloaded %d chunks (%s)", cc.stats.totalChunkDownloads, util.FormatBytesAsString(cc.stats.totalChunkDownloadsBytes))
 		cc.vlog.Printf("ChunkCache> total memory usage %s", util.FormatBytesAsString(cc.stats.totalMemoryUseBytes))
+		cc.vlog.Printf("ChunkCache> evicted %d chunks with %d (%.02f%%) redownloaded later (%s redownloaded)", len(cc.stats.evictedChunks), len(cc.stats.redownloadedChunks), float64(len(cc.stats.redownloadedChunks))/float64(len(cc.stats.evictedChunks)), util.FormatBytesAsString(cc.stats.redownloadedChunksBytes))
 	}
 	cc.vlog.Printf("ChunkCache> --------------------------------------------------------")
+}
+
+// Returns true if chunkName is in the list evictedChunks.
+func isPreviouslyEvicted(evictedChunks []string, chunkName string) bool {
+	for _, el := range evictedChunks {
+		if el == chunkName {
+			return true
+		}
+	}
+	return false
 }
