@@ -156,14 +156,7 @@ func Backup(vlog *util.VLog, completion func()) {
 			util.LockIf(globalsLock)
 			gStatus.percentage = percentDone
 			util.UnlockIf(globalsLock)
-
-			if total > 500 {
-				if finished%500 == 0 {
-					vlog.Printf("%.2f%% written to cloud", percentDone)
-				}
-			} else {
-				vlog.Printf("%.2f%% written to cloud", percentDone)
-			}
+			vlog.Printf("%.2f%% written to cloud", percentDone)
 		}
 
 		// Define traversal cancel func
@@ -287,14 +280,7 @@ func replayBackupJournal() {
 		util.LockIf(globalsLock)
 		gStatus.percentage = percentDone
 		util.UnlockIf(globalsLock)
-
-		if total > 500 {
-			if finished%500 == 0 {
-				vlog.Printf("%.2f%% written to cloud (replay)", percentDone)
-			}
-		} else {
-			vlog.Printf("%.2f%% written to cloud (replay)", percentDone)
-		}
+		vlog.Printf("%.2f%% written to cloud (replay)", percentDone)
 	}
 
 	// Replay the journal

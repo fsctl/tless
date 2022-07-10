@@ -33,6 +33,9 @@ type chunkPacker struct {
 	key                   []byte
 	vlog                  *util.VLog
 	runWhileUploadingFunc runWhileUploadingFuncType
+	dba                   *database.DbAccums
+	totalCntJournal       *int64
+	finishedCountJournal  *int64
 }
 
 func (cp *chunkPacker) AddDirEntry(relPath string, buf []byte, bjt *database.BackupJournalTask) (succeeded bool) {
@@ -119,7 +122,7 @@ func (cp *chunkPacker) Complete() (isJournalComplete bool) {
 		}
 		cp.vlog.Printf("chunkPacker: Complete: finalizing '%s' with offset=%d, len=%d", crp.RelPath, crp.ChunkExtents[0].Offset, crp.ChunkExtents[0].Len)
 		updateLastBackupTime(cp.db, cp.dbLock, item.bjt.DirEntId)
-		isJournalComplete = completeTask(cp.db, cp.dbLock, item.bjt, crp)
+		isJournalComplete = completeTask(cp.db, cp.dbLock, item.bjt, crp, cp.dba, cp.totalCntJournal, cp.finishedCountJournal)
 	}
 
 	// Reset struct to initial state so it can be reused for next chunk
@@ -131,7 +134,7 @@ func (cp *chunkPacker) Complete() (isJournalComplete bool) {
 	return isJournalComplete
 }
 
-func newChunkPacker(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, dbLock *sync.Mutex, key []byte, vlog *util.VLog, runWhileUploadingFunc runWhileUploadingFuncType) *chunkPacker {
+func newChunkPacker(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, dbLock *sync.Mutex, key []byte, vlog *util.VLog, runWhileUploadingFunc runWhileUploadingFuncType, dba *database.DbAccums, totalCntJournal *int64, finishedCountJournal *int64) *chunkPacker {
 	return &chunkPacker{
 		items:                 make([]chunkPackerItem, 0),
 		plaintextChunkBuf:     make([]byte, 0),
@@ -144,5 +147,8 @@ func newChunkPacker(ctx context.Context, objst *objstore.ObjStore, bucket string
 		key:                   key,
 		vlog:                  vlog,
 		runWhileUploadingFunc: runWhileUploadingFunc,
+		dba:                   dba,
+		totalCntJournal:       totalCntJournal,
+		finishedCountJournal:  finishedCountJournal,
 	}
 }
