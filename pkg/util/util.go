@@ -421,3 +421,108 @@ func AppendIfNotPresent(slice []string, x string) []string {
 	slice = append(slice, x)
 	return slice
 }
+
+// Returns a slice of each path component in order from left to right.  If path is
+// absolute, the root is represented by an initial element "/".
+// If path is empty, an empty array is returned.  If path is "/", a single element
+// array ["/"] is returned.
+// Example:  /usr/local/bin => []string{"/","usr","local","bin"}
+// Example:  dir1/file1 => []string{"dir1","file1"}
+// Example:  '' => []string{}
+// Example:  / => []string{"/"}
+func pathComponents(path string) []string {
+	path = filepath.Clean(path)
+	if path == "." {
+		return []string{}
+	}
+
+	if path == "/" {
+		return []string{"/"}
+	}
+
+	ret := make([]string, 0)
+	if (len(path) > 0) && (path[0] == '/') {
+		ret = append(ret, "/")
+		path = path[1:]
+	}
+	components := strings.Split(path, "/")
+	ret = append(ret, components...)
+
+	return ret
+}
+
+func mkdirIfNotExist(dir string, perm os.FileMode) (bool, error) {
+	shouldCreateDir := false
+	fileInfo, err := os.Stat(dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			shouldCreateDir = true
+		} else {
+			return false, err
+		}
+	} else {
+		if !fileInfo.IsDir() {
+			return false, fmt.Errorf("error: MkdirWithUidGidMode: '%s' already exists but is not a dir", dir)
+		}
+	}
+
+	if shouldCreateDir {
+		if err = os.Mkdir(dir, perm); err != nil {
+			return false, err
+		} else {
+			return true, err
+		}
+	} else {
+		return false, nil
+	}
+}
+
+func MkdirWithUidGidMode(dir string, perm os.FileMode, uid int, gid int) error {
+	didCreate, err := mkdirIfNotExist(dir, perm)
+	if err != nil {
+		log.Println("error: MkdirWithUidGidMode: returned by MkdirIfNotExist: ", err)
+		return err
+	}
+
+	// If we created the dir, go on to set mode and uid/gid.  If we did not create the dir,
+	// just return.
+	if !didCreate {
+		return nil
+	}
+
+	if err = os.Chmod(dir, perm); err != nil {
+		return err
+	}
+
+	// Set UID and GID
+	if err := os.Chown(dir, uid, gid); err != nil {
+		log.Printf("error: could not chown dir '%s' to '%d/%d': %v", dir, uid, gid, err)
+		return err
+	}
+
+	return nil
+}
+
+func MkdirAllWithUidGidMode(path string, perm os.FileMode, uid int, gid int) error {
+	components := pathComponents(path)
+	if components[0] != "/" {
+		return fmt.Errorf("error: MkdirAllWithUidGidMode: path is not absolute '%s'", path)
+	}
+
+	dir := ""
+	for {
+		if len(components) == 0 {
+			break
+		}
+		dir = filepath.Join(dir, components[0])
+
+		if err := MkdirWithUidGidMode(dir, perm, uid, gid); err != nil {
+			log.Println("error: MkdirAllWithUidGidMode: MkdirWithUidGidMode failed")
+			return err
+		}
+
+		components = components[1:]
+	}
+
+	return nil
+}

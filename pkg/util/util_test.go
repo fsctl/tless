@@ -72,3 +72,28 @@ func TestGetUnixTimeFromSnapshotName(t *testing.T) {
 
 	assert.Equal(t, int64(7), unixTimestamp)
 }
+
+func TestPathComponents(t *testing.T) {
+	result := pathComponents("/usr/local/bin/")
+	assert.Equal(t, len(result), 4)
+	assert.Equal(t, result[0], "/")
+	assert.Equal(t, result[1], "usr")
+	assert.Equal(t, result[2], "local")
+	assert.Equal(t, result[3], "bin")
+
+	result = pathComponents("")
+	assert.Equal(t, len(result), 0)
+
+	result = pathComponents("/")
+	assert.Equal(t, len(result), 1)
+	assert.Equal(t, result[0], "/")
+
+	result = pathComponents("///////////")
+	assert.Equal(t, len(result), 1)
+	assert.Equal(t, result[0], "/")
+
+	result = pathComponents("dir1/file1")
+	assert.Equal(t, len(result), 2)
+	assert.Equal(t, result[0], "dir1")
+	assert.Equal(t, result[1], "file1")
+}

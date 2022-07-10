@@ -17,8 +17,8 @@ import (
 
 var (
 	// These initial values will be overwritten by NewChunkCache with user's config prefs
-	MaxCacheSizeOnDisk int64  = 1 * 1024 * 1024 * 1024 // 1 Gb default
-	CacheDirectory     string = "/tmp/tless-cache"     // default
+	MaxCacheSizeOnDisk int64  = 1 * 1024 * 1024 * 1024    // 1 Gb default
+	CacheDirectory     string = "/tmp/tless-cache/Chunks" // default
 )
 
 type CachedChunk struct {
@@ -58,9 +58,6 @@ func removeCachedChunk(objName string) {
 }
 
 func NewChunkCache(objst *objstore.ObjStore, key []byte, vlog *util.VLog, uid int, gid int, cachesDirPath string, maxChunkCacheSizeMb int64) *ChunkCache {
-	if cachesDirPath != "" {
-		CacheDirectory = filepath.Join(cachesDirPath, "Chunks")
-	}
 	if maxChunkCacheSizeMb > 0 {
 		MaxCacheSizeOnDisk = maxChunkCacheSizeMb * 1024 * 1024
 	}
@@ -87,13 +84,19 @@ func NewChunkCache(objst *objstore.ObjStore, key []byte, vlog *util.VLog, uid in
 	}
 
 	// Make cache directory if it doesn't already exist
-	if err := os.MkdirAll(CacheDirectory, 0755); err != nil {
-		log.Printf("error: NewChunkCache: cannot create cache directory '%s': %v", CacheDirectory, err)
-		return cc
-	}
-	if err := os.Chown(CacheDirectory, uid, gid); err != nil {
-		log.Printf("error: could not chown chunk cache dir '%s' to '%d/%d': %v", CacheDirectory, uid, gid, err)
-		return cc
+	if cachesDirPath != "" {
+		chunkCachesDirPath := filepath.Join(cachesDirPath, "Chunks")
+		if err := util.MkdirAllWithUidGidMode(chunkCachesDirPath, 0755, uid, gid); err != nil {
+			log.Printf("error: NewChunkCache: cannot create cache directory '%s': %v", chunkCachesDirPath, err)
+
+			// Try falling back to default CacheDirectory
+			if err := util.MkdirAllWithUidGidMode(CacheDirectory, 0755, uid, gid); err != nil {
+				log.Printf("error: NewChunkCache: also cannot create cache directory '%s': %v", CacheDirectory, err)
+				return cc
+			}
+		} else {
+			CacheDirectory = chunkCachesDirPath
+		}
 	}
 
 	// Iterate over cache directory in case we already have objects stored in it
