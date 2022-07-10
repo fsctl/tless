@@ -29,6 +29,9 @@ var (
 	cfgSalt                 string
 	cfgVerbose              bool
 	cfgForce                bool
+	cfgCachesPath           string
+	cfgMaxChunkCacheMb      int64
+	cfgResourceUtilization  string
 
 	// Root command
 	rootCmd = &cobra.Command{
@@ -60,6 +63,9 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&cfgVerbose, "verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolVarP(&cfgForce, "force", "f", false, "override check that salt and master password match\nwhat was previously used on server")
 	rootCmd.PersistentFlags().BoolVarP(&cfgTrustSelfSignedCerts, "trust-certs", "C", false, "trust a self-signed cert from your cloud provider")
+	rootCmd.PersistentFlags().StringVar(&cfgCachesPath, "caches-path", "", "use path for caching")
+	rootCmd.PersistentFlags().Int64Var(&cfgMaxChunkCacheMb, "chunk-cache-max-mb", 0, "max size of chunk cache in mb")
+	rootCmd.PersistentFlags().StringVar(&cfgResourceUtilization, "resource-utilization", "", "use 'high' or 'low' system resources")
 
 	rootCmd.Flags().Bool("version", false, "print the version")
 
@@ -153,6 +159,18 @@ func configFallbackToTomlFileOrInteractivePrompt() {
 	}
 	if len(cfgDirs) == 0 {
 		cfgDirs = viper.GetStringSlice("backups.dirs")
+	}
+	if cfgCachesPath == "" {
+		cfgCachesPath = viper.GetString("system.caches_path")
+	}
+	if cfgMaxChunkCacheMb <= 0 {
+		cfgMaxChunkCacheMb = viper.GetInt64("system.max_chunk_cache_mb")
+	}
+	if cfgResourceUtilization == "" {
+		cfgResourceUtilization = viper.GetString("system.system_resource_utilization")
+		if cfgResourceUtilization == "" {
+			cfgResourceUtilization = "high"
+		}
 	}
 }
 

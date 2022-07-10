@@ -15,10 +15,10 @@ import (
 	"github.com/fsctl/tless/pkg/util"
 )
 
-const (
-	MaxCacheSizeOnDisk int64 = 1 * 1024 * 1024 * 1024 // 1 Gb
-	//MaxCacheSizeOnDisk int64  = 512 * 1024 * 1024 // 512 Mb
-	CacheDirectory string = "/tmp/tless-cache"
+var (
+	// These initial values will be overwritten by NewChunkCache with user's config prefs
+	MaxCacheSizeOnDisk int64  = 1 * 1024 * 1024 * 1024 // 1 Gb default
+	CacheDirectory     string = "/tmp/tless-cache"     // default
 )
 
 type CachedChunk struct {
@@ -30,8 +30,11 @@ type CachedChunk struct {
 }
 
 type CacheStatistics struct {
-	hits  int
-	total int
+	hits                     int
+	total                    int
+	totalChunkDownloads      int
+	totalChunkDownloadsBytes int64
+	totalMemoryUseBytes      int64
 }
 
 type ChunkCache struct {
@@ -44,7 +47,22 @@ type ChunkCache struct {
 	stats  *CacheStatistics
 }
 
-func NewChunkCache(objst *objstore.ObjStore, key []byte, vlog *util.VLog, uid int, gid int) *ChunkCache {
+func removeCachedChunk(objName string) {
+	absPath := filepath.Join(CacheDirectory, objName)
+	if err := os.Remove(absPath); err != nil {
+		log.Printf("NewChunkCache: WalkDirFunc: failed to remove undecryptable chunk at '%s': %v\n", absPath, err)
+	}
+}
+
+func NewChunkCache(objst *objstore.ObjStore, key []byte, vlog *util.VLog, uid int, gid int, cachesDirPath string, maxChunkCacheSizeMb int64) *ChunkCache {
+	if cachesDirPath != "" {
+		CacheDirectory = filepath.Join(cachesDirPath, "Chunks")
+	}
+	if maxChunkCacheSizeMb > 0 {
+		MaxCacheSizeOnDisk = maxChunkCacheSizeMb * 1024 * 1024
+	}
+	vlog.Printf("ChunkCache> Chunk CacheDir = '%s' with max size %s", CacheDirectory, util.FormatBytesAsString(MaxCacheSizeOnDisk))
+
 	// Construct cache obj
 	cc := &ChunkCache{
 		objst:  objst,
@@ -54,8 +72,11 @@ func NewChunkCache(objst *objstore.ObjStore, key []byte, vlog *util.VLog, uid in
 		gid:    gid,
 		chunks: make(map[string]CachedChunk, 0),
 		stats: &CacheStatistics{
-			hits:  0,
-			total: 0,
+			hits:                     0,
+			total:                    0,
+			totalChunkDownloads:      0,
+			totalChunkDownloadsBytes: 0,
+			totalMemoryUseBytes:      0,
 		},
 	}
 
@@ -95,10 +116,7 @@ func NewChunkCache(objst *objstore.ObjStore, key []byte, vlog *util.VLog, uid in
 			if err != nil {
 				vlog.Printf("NewChunkCache: WalkDirFunc: DecryptBufferReturningNonce failed on chunk '%s' (purging): %v\n", objName, err)
 				// remove this chunk
-				absPath := filepath.Join(CacheDirectory, objName)
-				if err = os.Remove(absPath); err != nil {
-					log.Printf("NewChunkCache: WalkDirFunc: failed to remove undecryptable chunk at '%s': %v\n", absPath, err)
-				}
+				removeCachedChunk(objName)
 			} else {
 				// cache this chunk
 				cached := CachedChunk{
@@ -109,6 +127,8 @@ func NewChunkCache(objst *objstore.ObjStore, key []byte, vlog *util.VLog, uid in
 					nonce:            nonce,
 				}
 				cc.chunks[objName] = cached
+
+				cc.stats.totalMemoryUseBytes += int64(len(plaintextBuf))
 			}
 		}
 
@@ -137,6 +157,7 @@ func (cc *ChunkCache) FetchExtentIntoBuffer(ctx context.Context, bucket string, 
 			log.Printf("error: FetchObjToBuffer: failed to retrieve object '%s': %v", objectName, err)
 			return nil, nil, err
 		}
+		cc.stats.totalChunkDownloads += 1
 		cc.saveObjToCache(chunkName, ciphertextChunkBuf)
 	}
 
@@ -219,6 +240,7 @@ func (cc *ChunkCache) saveObjToCache(objName string, ciphertextBuf []byte) {
 		log.Printf("error: saveObjToCache: wrote only %d bytes (expected to write %d): ", n, len(ciphertextBuf))
 		return
 	}
+	cc.stats.totalChunkDownloadsBytes += int64(len(ciphertextBuf))
 
 	// Decrypt the ciphertext buffer and save its plaintext in memory
 	plaintextBuf, nonce, err := cryptography.DecryptBufferReturningNonce(cc.key, ciphertextBuf)
@@ -236,6 +258,8 @@ func (cc *ChunkCache) saveObjToCache(objName string, ciphertextBuf []byte) {
 		nonce:            nonce,
 	}
 	cc.chunks[objName] = cached
+
+	cc.stats.totalMemoryUseBytes += int64(len(plaintextBuf))
 }
 
 func (cc *ChunkCache) isObjCached(objName string) bool {
@@ -269,15 +293,20 @@ func (cc *ChunkCache) evictLeastRecentlyUsed() {
 		if err := os.Remove(path); err != nil {
 			log.Printf("error: evictLeastRecentlyUsed: could not remove file '%s': %v\n", path, err)
 		}
+		cc.stats.totalMemoryUseBytes -= int64(len(cc.chunks[lruObjName].plaintext))
 		delete(cc.chunks, lruObjName)
 	}
 }
 
 func (cc *ChunkCache) PrintCacheStatistics() {
+	cc.vlog.Printf("ChunkCache> --------------------------------------------------------")
 	if cc.stats.total == 0 {
-		cc.vlog.Println("ChunkCache: cache hit rate undefined (cache unused")
+		cc.vlog.Println("ChunkCache> cache hit rate undefined (cache unused)")
 	} else {
 		percentageHitRate := float64(100) * (float64(cc.stats.hits) / float64(cc.stats.total))
-		cc.vlog.Printf("ChunkCache: cache hit rate %d / %d (%02f%%)", cc.stats.hits, cc.stats.total, percentageHitRate)
+		cc.vlog.Printf("ChunkCache> cache hit rate %d / %d (%02f%%)", cc.stats.hits, cc.stats.total, percentageHitRate)
+		cc.vlog.Printf("ChunkCache> downloaded %d chunks (%s)", cc.stats.totalChunkDownloads, util.FormatBytesAsString(cc.stats.totalChunkDownloadsBytes))
+		cc.vlog.Printf("ChunkCache> total memory usage %s", util.FormatBytesAsString(cc.stats.totalMemoryUseBytes))
 	}
+	cc.vlog.Printf("ChunkCache> --------------------------------------------------------")
 }
