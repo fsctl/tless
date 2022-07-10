@@ -89,13 +89,34 @@ func initDbConn(globalsLock *sync.Mutex) {
 	if err != nil {
 		log.Fatalf("error: making sqlite dir: %v", err)
 	}
-	globalsLock.Lock()
+
+	// This code is intended to call Close on gDb in cases where it's not nil.  That might
+	// occur if the client disconnects and then reconnects, sending a new hello.
+	// Originally, we simply called gDB.Close() whenever gDb was non-nill. However, it turns
+	// out that some operations like backup and restore make copies of gDb and use the copies,
+	// so they were crashing with a closed handle.  To solve that, we only call gDb.Close() when
+	// we're in an Idle state, meaning no one is holding a long-lived copy of gDb.
+	// It's not perfect because we still leak some DB handles, but it's less leakage than before.
 	sqliteFilePath := filepath.Join(sqliteDir, "state.db")
-	gDb, err = database.NewDB(sqliteFilePath)
+	var dbTemp *database.DB
+	globalsLock.Lock()
+	dbTemp, err = database.NewDB(sqliteFilePath)
+	if err == nil {
+		// Only try to close current db conn if we're in an idle state
+		if gStatus.state == Idle {
+			if gDb != nil {
+				gDb.Close()
+			}
+			gDb = dbTemp
+		} else {
+			gDb = dbTemp
+		}
+	}
 	globalsLock.Unlock()
 	if err != nil {
 		log.Fatalf("error: cannot open database: %v", err)
 	}
+
 	globalsLock.Lock()
 	err = gDb.CreateTablesIfNotExist()
 	globalsLock.Unlock()
