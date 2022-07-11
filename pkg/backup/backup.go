@@ -24,6 +24,7 @@ var (
 	ErrSocket    = fmt.Errorf("the file is a socket")
 	ErrDevice    = fmt.Errorf("the file is a device")
 	ErrIrregular = fmt.Errorf("the file is an irregular filesystem entry")
+	ErrFifo      = fmt.Errorf("the file is a named pipe (FIFO)")
 )
 
 const (
@@ -64,6 +65,9 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 	}
 	if info.Mode()&fs.ModeIrregular != 0 {
 		return nil, false, ErrIrregular
+	}
+	if info.Mode()&fs.ModeNamedPipe != 0 {
+		return nil, false, ErrFifo
 	}
 
 	//
