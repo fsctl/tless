@@ -55,7 +55,7 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 	}
 
 	//
-	// filter out socket and device files
+	// filter out socket, FIFO and device files
 	//
 	if info.Mode()&fs.ModeDevice != 0 {
 		return nil, false, ErrDevice
