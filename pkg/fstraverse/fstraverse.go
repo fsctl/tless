@@ -194,13 +194,9 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 		log.Printf("error: Traverse: doPendingDirEntryInserts: %v\n", err)
 	}
 	for _, ins := range pendingDirEntryInserts {
-		if dbLock != nil {
-			dbLock.Lock()
-		}
+		util.LockIf(dbLock)
 		_, _, id, err := db.HasDirEnt(ins.rootPath, ins.relPath)
-		if dbLock != nil {
-			dbLock.Unlock()
-		}
+		util.UnlockIf(dbLock)
 		if err != nil {
 			log.Printf("error: Traverse: db.HasDirEnt: %v\n", err)
 		}
@@ -270,38 +266,26 @@ func isExcludedByGlob(path string, glob string) bool {
 }
 
 func doPendingDirEntryInserts(db *database.DB, dbLock *sync.Mutex, pendingDirEntryInserts []dirEntryInsert) error {
-	if dbLock != nil {
-		dbLock.Lock()
-	}
+	util.LockIf(dbLock)
 	dirEntStmt, err := database.NewInsertDirEntStmt(db)
-	if dbLock != nil {
-		dbLock.Unlock()
-	}
+	util.UnlockIf(dbLock)
 	if err != nil {
 		log.Printf("error: doPendingDirEntryInserts: %v", err)
 		return err
 	}
 
 	for _, ins := range pendingDirEntryInserts {
-		if dbLock != nil {
-			dbLock.Lock()
-		}
+		util.LockIf(dbLock)
 		err = dirEntStmt.InsertDirEnt(ins.rootPath, ins.relPath, ins.lastBackupUnixtime)
-		if dbLock != nil {
-			dbLock.Unlock()
-		}
+		util.UnlockIf(dbLock)
 		if err != nil {
 			log.Printf("error: doPendingDirEntryInserts: %v", err)
 			return err
 		}
 	}
 
-	if dbLock != nil {
-		dbLock.Lock()
-	}
+	util.LockIf(dbLock)
 	dirEntStmt.Close()
-	if dbLock != nil {
-		dbLock.Unlock()
-	}
+	util.UnlockIf(dbLock)
 	return nil
 }
