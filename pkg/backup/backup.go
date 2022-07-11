@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"math/big"
 	"os"
@@ -17,6 +18,12 @@ import (
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
+)
+
+var (
+	ErrSocket    = fmt.Errorf("the file is a socket")
+	ErrDevice    = fmt.Errorf("the file is a device")
+	ErrIrregular = fmt.Errorf("the file is an irregular filesystem entry")
 )
 
 const (
@@ -36,20 +43,33 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 	chunkExtents = make([]snapshots.ChunkExtent, 0)
 	pendingInChunkPacker = false
 
-	// strip any trailing slashes on destination path
 	backupDirPath = util.StripTrailingSlashes(backupDirPath)
 
-	// get the path for the dirent
 	absPath := filepath.Join(backupDirPath, relPath)
 
-	//
-	// get the metadata on dirent
-	//
 	info, err := os.Lstat(absPath)
 	if err != nil {
 		log.Printf("error: Backup: could not stat '%s'\n", absPath)
 		return nil, false, err
 	}
+
+	//
+	// filter out socket and device files
+	//
+	if info.Mode()&fs.ModeDevice != 0 {
+		return nil, false, ErrDevice
+	}
+	if info.Mode()&fs.ModeSocket != 0 {
+		return nil, false, ErrSocket
+	}
+	if info.Mode()&fs.ModeIrregular != 0 {
+		return nil, false, ErrIrregular
+	}
+
+	//
+	// get the metadata on dirent
+	//
+
 	// get symlink origin if it's a symlink
 	symlinkOrigin, err := getSymlinkOriginIfSymlink(absPath)
 	if err != nil {
