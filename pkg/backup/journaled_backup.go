@@ -96,7 +96,7 @@ func DoJournaledBackup(ctx context.Context, key []byte, objst *objstore.ObjStore
 		return
 	}
 	var backupIdsQueue fstraverse.BackupIdsQueue
-	backupReportedEvents, err = fstraverse.Traverse(backupDirPath, prevPaths, dbMem, globalsLock, &backupIdsQueue, excludes, checkAndHandleTraversalCancelation)
+	backupReportedEvents, err = fstraverse.Traverse(backupDirPath, prevPaths, dbMem, globalsLock, &backupIdsQueue, excludes, checkAndHandleTraversalCancelation, vlog)
 	if errors.Is(err, fstraverse.ErrTraversalCanceled) {
 		breakFromLoop = true // signals cancelation to caller
 		return

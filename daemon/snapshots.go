@@ -293,7 +293,7 @@ func (s *server) DeleteSnapshots(in *pb.DeleteSnapshotsRequest, srv pb.DaemonCtl
 	snapshotRawNames := in.SnapshotRawNames
 	ssDelItems := make([]snapshots.SnapshotForDeletion, 0)
 	for _, ssRawName := range snapshotRawNames {
-		backupDirName, snapshotTimestamp, err := snapshots.SplitSnapshotName(ssRawName)
+		backupDirName, snapshotTimestamp, err := util.SplitSnapshotName(ssRawName)
 		if err != nil {
 			log.Printf("Cannot split '%s' into backupDirName/snapshotTimestamp", ssRawName)
 			resp := pb.DeleteSnapshotsResponse{

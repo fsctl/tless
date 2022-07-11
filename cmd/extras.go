@@ -181,53 +181,17 @@ func genTemplateMain() {
 }
 
 func decObjNameMain(encObjectName string) {
-	// validate encryptedObjectName format
-	encObjectNameParts := strings.Split(encObjectName, "/")
-	if len(encObjectNameParts) != 1 && len(encObjectNameParts) != 2 && len(encObjectNameParts) != 4 {
-		fmt.Printf("malformed input: either 0, 1 or 3 slashes expected")
+	if strings.Contains(encObjectName, "/") {
+		fmt.Printf("malformed input: valid object names do not contain slash")
 		return
 	}
 
-	// decrypt each format
-	if len(encObjectNameParts) == 1 {
-		if decrypted, err := cryptography.DecryptFilename(encKey, encObjectNameParts[0]); err != nil {
-			fmt.Println("error: ", err)
-		} else {
-			fmt.Printf("=> %s\n", decrypted)
-		}
-	} else if len(encObjectNameParts) == 2 {
-		// We assume one slash means its a relpath, so join the two parts and decrypt
-		encRelPath := encObjectNameParts[0] + encObjectNameParts[1]
-		if strings.Contains(encRelPath, ".") {
-			encRelPath = encRelPath[:len(encRelPath)-4] // strip off .NNN
-		}
-		if decrypted, err := cryptography.DecryptFilename(encKey, encRelPath); err != nil {
-			fmt.Println("error: ", err)
-		} else {
-			fmt.Printf("=> %s\n", decrypted)
-		}
-	} else if len(encObjectNameParts) == 4 {
-		// We assume four slashes means its a full object name, so join the last two parts and decrypt
-		encBackupDirName := encObjectNameParts[0]
-		decBackupDirName, err := cryptography.DecryptFilename(encKey, encBackupDirName)
-		if err != nil {
-			fmt.Println("error: ", err)
-		}
+	// Just in case it's a snapshot index file
+	encObjectName = strings.TrimPrefix(encObjectName, "@")
 
-		encSnapshotName := encObjectNameParts[1]
-		decSnapshotName, err := cryptography.DecryptFilename(encKey, encSnapshotName)
-		if err != nil {
-			fmt.Println("error: ", err)
-		}
-
-		encRelPath := encObjectNameParts[2] + encObjectNameParts[3]
-		if strings.Contains(encRelPath, ".") {
-			encRelPath = encRelPath[:len(encRelPath)-4] // strip off .NNN
-		}
-		if decRelPath, err := cryptography.DecryptFilename(encKey, encRelPath); err != nil {
-			fmt.Println("error: ", err)
-		} else {
-			fmt.Printf("=> %s / %s / %s\n", decBackupDirName, decSnapshotName, decRelPath)
-		}
+	if decrypted, err := cryptography.DecryptFilename(encKey, encObjectName); err != nil {
+		fmt.Println("error: ", err)
+	} else {
+		fmt.Printf("=> %s\n", decrypted)
 	}
 }

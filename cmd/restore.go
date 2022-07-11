@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/fsctl/tless/pkg/backup"
@@ -67,13 +66,10 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 	ctx := context.Background()
 	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 
-	backupAndSnapshotNameParts := strings.Split(backupAndSnapshotName, "/")
-	if len(backupAndSnapshotNameParts) != 2 {
-		log.Fatalf("Malformed snapshot name: '%s'", backupAndSnapshotName)
+	backupName, snapshotName, err := util.SplitSnapshotName(backupAndSnapshotName)
+	if err != nil {
+		log.Fatalf("Cannot split '%s' into backupDirName/snapshotTimestamp", backupAndSnapshotName)
 	}
-	backupName := backupAndSnapshotNameParts[0]
-	snapshotName := backupAndSnapshotNameParts[1]
-	// TODO: validate both of these further to make sure argument is well-formed
 
 	// initialize progress bar container
 	progressBarContainer := mpb.New()

@@ -215,7 +215,10 @@ func validateConfigVars() error {
 	}
 
 	// Download (or create) the salt
-	salt, bucketVersion, encKey, hmacKey, err := objst.GetOrCreateBucketMetadata(ctx, cfgBucket, cfgMasterPassword, vlog)
+	var salt string
+	var bucketVersion int
+	var err error
+	salt, bucketVersion, encKey, hmacKey, err = objst.GetOrCreateBucketMetadata(ctx, cfgBucket, cfgMasterPassword, vlog)
 	if err != nil {
 		log.Println("error: could not read or initialize bucket metadata: ", err)
 	}

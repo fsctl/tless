@@ -391,14 +391,20 @@ func FormatNumberAsString(n int64) string {
 	return p.Sprintf("%d", n)
 }
 
+func FormatFloatAsString(fmt string, f float64) string {
+	p := message.NewPrinter(language.English)
+	return p.Sprintf(fmt, f)
+}
+
 func FormatDataRateAsString(bcount int64, sec int64) string {
 	mb := float64(bcount) / 1024 / 1024
-	if sec < 60 {
-		return fmt.Sprintf("%.1f mb/sec", mb/float64(sec))
+	var rate string
+	if mb < 1 {
+		rate = FormatFloatAsString("%0.2f", mb/float64(sec))
 	} else {
-		min := float64(sec) / 60
-		return fmt.Sprintf("%.1f mb/min", mb/min)
+		rate = FormatFloatAsString("%0.0f", mb/float64(sec))
 	}
+	return fmt.Sprintf("%s mb/sec", rate)
 }
 
 // Returns true if int slice `sl` contains int `i`, else false.
@@ -525,4 +531,19 @@ func MkdirAllWithUidGidMode(path string, perm os.FileMode, uid int, gid int) err
 	}
 
 	return nil
+}
+
+func SplitSnapshotName(snapshotName string) (backupDirName string, snapshotTime string, err error) {
+	snapshotNameParts := strings.Split(snapshotName, "/")
+	if len(snapshotNameParts) == 2 {
+		backupDirName = snapshotNameParts[0]
+		snapshotTime = snapshotNameParts[1]
+		return backupDirName, snapshotTime, nil
+	} else if strings.HasPrefix(snapshotName, "//") {
+		backupDirName = "/"
+		snapshotTime = strings.TrimPrefix(snapshotName, "//")
+		return backupDirName, snapshotTime, nil
+	} else {
+		return "", "", fmt.Errorf("malformed snapshot name '%s'", snapshotName)
+	}
 }

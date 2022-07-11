@@ -56,7 +56,7 @@ func cloudrmMain() {
 
 	ssDeletes := make([]snapshots.SnapshotForDeletion, 0)
 	for _, snapshotRawName := range cloudrmCfgSnapshot {
-		backupDirName, snapshotTimestamp, err := snapshots.SplitSnapshotName(snapshotRawName)
+		backupDirName, snapshotTimestamp, err := util.SplitSnapshotName(snapshotRawName)
 		if err != nil {
 			log.Fatalf("Cannot split '%s' into backupDirName/snapshotTimestamp", cloudrmCfgSnapshot)
 		}

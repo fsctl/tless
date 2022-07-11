@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/fsctl/tless/pkg/objstore"
@@ -151,14 +150,10 @@ func cloudlsMainShowSnapshot() {
 	ctx := context.Background()
 	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 
-	snapshotFlagParts := strings.Split(cloudlsCfgSnapshot, "/")
-	if len(snapshotFlagParts) != 2 {
-		log.Printf("Malformed: '%s'", cloudlsCfgSnapshot)
-		return
+	backupName, snapshotName, err := util.SplitSnapshotName(cloudlsCfgSnapshot)
+	if err != nil {
+		log.Fatalf("Cannot split '%s' into backupDirName/snapshotTimestamp", cloudrmCfgSnapshot)
 	}
-	backupName := snapshotFlagParts[0]
-	snapshotName := snapshotFlagParts[1]
-	// TODO: check both parts for regex validity
 
 	groupedObjects, err := snapshots.GetGroupedSnapshots(ctx, objst, encKey, cfgBucket, vlog, nil, nil)
 	if err != nil {

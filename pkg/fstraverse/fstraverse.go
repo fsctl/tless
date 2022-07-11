@@ -55,7 +55,7 @@ type dirEntryInsert struct {
 	lastBackupUnixtime int64
 }
 
-func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLock *sync.Mutex, backupIdsQueue *BackupIdsQueue, excludes []string, checkAndHandleTraversalCancelation CheckAndHandleTraversalCancelationFuncType) ([]util.ReportedEvent, error) {
+func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLock *sync.Mutex, backupIdsQueue *BackupIdsQueue, excludes []string, checkAndHandleTraversalCancelation CheckAndHandleTraversalCancelationFuncType, vlog *util.VLog) ([]util.ReportedEvent, error) {
 	rootPath = util.StripTrailingSlashes(rootPath)
 	rootDirName := filepath.Base(rootPath)
 
@@ -94,6 +94,9 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 			return fs.SkipDir
 		}
 
+		if path == rootPath {
+			return nil
+		}
 		relPath := relativizePath(path, rootPath)
 		if relPath == rootPath || relPath == "" {
 			return nil
@@ -209,16 +212,18 @@ func Traverse(rootPath string, knownPaths map[string]int, db *database.DB, dbLoc
 	// print summary statistics
 	p := message.NewPrinter(language.English)
 	s := p.Sprintf("Traversal: %d files, %d dirs", filesCnt, dirsCnt)
-	log.Println("~~~ path traversal summary stats ~~~")
-	log.Println(s)
-	log.Printf("\nHistogram of size in Mb (%d files):\n", len(fileSizesMb))
+	vlog.Println("~~~ path traversal summary stats ~~~")
+	vlog.Println(s)
+	vlog.Printf("\nHistogram of size in Mb (%d files):\n", len(fileSizesMb))
 	hist := histogram.Hist(30, fileSizesMb)
 	writer := new(strings.Builder)
-	if err := histogram.Fprint(writer, hist, histogram.Linear(80)); err != nil {
-		log.Println("error: uniplot.Fprint: ", err)
+	if err := histogram.Fprint(writer, hist, histogram.Linear(60)); err != nil {
+		vlog.Println("error: uniplot.Fprint: ", err)
 	}
-	log.Println("\n" + writer.String())
-	log.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+	for _, s := range strings.Split(writer.String(), "\n") {
+		vlog.Println(s)
+	}
+	vlog.Println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 	// end - summary statistics
 
 	return reportedEvents, nil

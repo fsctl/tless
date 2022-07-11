@@ -52,21 +52,6 @@ func DeleteSnapshots(ctx context.Context, key []byte, deleteSnapshots []Snapshot
 	return nil
 }
 
-func SplitSnapshotName(snapshotName string) (backupDirName string, snapshotTime string, err error) {
-	snapshotNameParts := strings.Split(snapshotName, "/")
-	if len(snapshotNameParts) == 2 {
-		backupDirName = snapshotNameParts[0]
-		snapshotTime = snapshotNameParts[1]
-		return backupDirName, snapshotTime, nil
-	} else if strings.HasPrefix(snapshotName, "//") {
-		backupDirName = "/"
-		snapshotTime = strings.TrimPrefix(snapshotName, "//")
-		return backupDirName, snapshotTime, nil
-	} else {
-		return "", "", fmt.Errorf("malformed snapshot name '%s'", snapshotName)
-	}
-}
-
 // Returns true if the specified backupName+snapshotName is the most recent snapshot existing for backup backupName
 func IsMostRecentSnapshotForBackup(ctx context.Context, objst *objstore.ObjStore, bucket string, groupedObjects map[string]BackupDir, backupDirName string, snapshotTimestamp string) bool {
 	backupDirSnapshotsOnly := groupedObjects[backupDirName].Snapshots
