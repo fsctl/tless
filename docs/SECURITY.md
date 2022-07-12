@@ -1,6 +1,6 @@
 # Security
 
-This system is designed for a threat model in which you want to back up a folder on a local machine to an AWS S3-compatible cloud provider, but once you do so you have no control over (or visibility into) what happens to the data.  You're concerned that the cloud provider could be hacked, and your data subject to brute force decryption attempts for years or even decades.
+This system is designed for a threat model in which you want to back up a folder on a local machine to an AWS S3-compatible cloud provider, but once you do so you have no control over (or visibility into) what happens to the data.  You're concerned that the cloud provider could be hacked, and your data subject to brute force decryption attempts.
 
 ## Recommendations
 
@@ -12,21 +12,21 @@ Considering these factors, I recommend:
 
 ## What Information Is Protected or Revealed
 
-Here is what is protected:
+Here is what is encrypted client-side and protected against disclosure:
 
- - All of the metadata about a file, including file (and directory) names, modification times, permissions and extended attributes are serialized, encrypted client side and stored in the file stream.
- 
- - The actual file contents are client side encrypted.
+ - The contents of each file.
 
- Here is what is visible to an attacker who can obtain a one-time clone of your S3 bucket:
+ - All of the metadata about a file, including file (and directory) names, file size, modification times, permissions and extended attributes.
 
- - Upload times (which correlate with file change times, though an attacker cannot learn which file changed)
+ - The names of your backups and snapshots.
 
- - Approximate total size of each file
- 
+Here is what is visible to an attacker who can obtain a one-time clone of your S3 bucket:
+
+ - The times snapshots were made.
+
+ - Encrypted representations of your encryption key and HMAC key.  See [cryptographic design](CRYPTOGRAPHY.md) document.
+
  - The key derivation salt (see Cryptography Design below) is stored in plaintext on the server since it is not intended to be kept secret nor memorized.
- 
- - Because of the incremental nature of the backup process, it will be clear if some file is changing regularly over time (growing, being modified), though obviously what that file is and what the changes are will not be discoverable.
 
 ## Cryptographic Design
 
