@@ -398,13 +398,14 @@ func FormatFloatAsString(fmt string, f float64) string {
 
 func FormatDataRateAsString(bcount int64, sec int64) string {
 	mb := float64(bcount) / 1024 / 1024
+	mbPerSec := mb / float64(sec)
 	var rate string
 	if mb < 1 {
-		rate = FormatFloatAsString("%0.2f", mb/float64(sec))
+		rate = FormatFloatAsString("%0.2f", mbPerSec)
 	} else if mb < 10 {
-		rate = FormatFloatAsString("%0.1f", mb/float64(sec))
+		rate = FormatFloatAsString("%0.1f", mbPerSec)
 	} else {
-		rate = FormatFloatAsString("%0.0f", mb/float64(sec))
+		rate = FormatFloatAsString("%0.0f", mbPerSec)
 	}
 	return fmt.Sprintf("%s mb/sec", rate)
 }
