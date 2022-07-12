@@ -401,6 +401,8 @@ func FormatDataRateAsString(bcount int64, sec int64) string {
 	var rate string
 	if mb < 1 {
 		rate = FormatFloatAsString("%0.2f", mb/float64(sec))
+	} else if mb < 10 {
+		rate = FormatFloatAsString("%0.1f", mb/float64(sec))
 	} else {
 		rate = FormatFloatAsString("%0.0f", mb/float64(sec))
 	}
