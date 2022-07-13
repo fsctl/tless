@@ -39,4 +39,4 @@ Again, your binary will be called something different from `certgen-darwin-amd64
 $ chown <yourusername> ~/.minio/certs/*
 ```
 
-8.  Refer to [`scripts/start-minio.sh`](../scripts/start-minio.sh) in this repo to see how to start the Minio server pointed at the correct certs directory.
+8.  Add `--certs-dir ~/.minio/certs` to your minio startup command from now on. Refer to [`scripts/start-minio.sh`](../scripts/start-minio.sh) in this repo for an example of how to start the Minio server pointed at the correct certs directory.
