@@ -95,7 +95,7 @@ tless cloudls
 Snapshots are all named after the directory being backed up and the time the snapshot was made.  Pick one to restore from the list and run:
 
 ```
-tless restore Documents/2022-05-22_11:52:01 /tmp/restore-here
+tless restore Documents/2022-05-22_11.52.01 /tmp/restore-here
 ```
 
 You should get all your files back in `/tmp/restore-here`.
