@@ -64,7 +64,7 @@ It will be in `$HOME/.tless/config.toml`
 
 This is where you provide your object store endpoint, bucket name and credentials.  If you are using a self-signed TLS certificate (rather than a commercial S3-compatible provider like AWS or Digital Ocean), make sure that `trust_self_signed_certs` is set to `true`.
 
-A high-entropy Diceware password and a strong salt are generated for you, though you can change them if you like.  
+A high-entropy Diceware password is generated for you, though you can change it if you like.  
 
 The config file also specifies what directory tree(s) to back up.  For example, you may want to back up `/home/<your username>` on Linux or `/Users/<your username>/Documents` on macOS.
 
