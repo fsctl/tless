@@ -255,7 +255,7 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 		vlog.Printf("Done with journal")
 	}
 
-	cp := newChunkPacker(ctx, objst, bucket, db, globalsLock, key, vlog, persistMemDbToFile, &totalCntJournal, &finishedCountJournal)
+	cp := newChunkPacker(ctx, objst, bucket, db, globalsLock, key, vlog, persistMemDbToFile, &totalCntJournal, &finishedCountJournal, stats)
 
 	// Force persist once before the backup starts
 	if persistMemDbToFile != nil {
@@ -331,14 +331,13 @@ func PlayBackupJournal(ctx context.Context, key []byte, db *database.DB, globals
 				completeTask(db, globalsLock, bjt, nil, &totalCntJournal, &finishedCountJournal)
 				finishTaskImmediately = false
 			} else {
-				if stats != nil {
-					stats.AddBytesFromChunkExtents(chunkExtents)
-				}
-
 				if pendingInChunkPacker {
 					finishTaskImmediately = false
 				} else {
 					crp.ChunkExtents = chunkExtents
+					if stats != nil {
+						stats.AddBytesFromChunkExtents(chunkExtents)
+					}
 				}
 			}
 		} else if bjt.ChangeType == database.Unchanged {

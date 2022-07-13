@@ -35,6 +35,7 @@ type chunkPacker struct {
 	runWhileUploadingFunc runWhileUploadingFuncType
 	totalCntJournal       *int64
 	finishedCountJournal  *int64
+	stats                 *BackupStats
 }
 
 func (cp *chunkPacker) AddDirEntry(relPath string, buf []byte, bjt *database.BackupJournalTask) (succeeded bool) {
@@ -57,6 +58,9 @@ func (cp *chunkPacker) AddDirEntry(relPath string, buf []byte, bjt *database.Bac
 	cp.plaintextChunkBuf = append(cp.plaintextChunkBuf, buf...)
 	cp.posInPlaintextChunk += len(buf)
 	cp.items = append(cp.items, newItem)
+	if cp.stats != nil {
+		cp.stats.AddBytes(int64(len(buf)))
+	}
 	return true
 }
 
@@ -133,7 +137,7 @@ func (cp *chunkPacker) Complete() (isJournalComplete bool) {
 	return isJournalComplete
 }
 
-func newChunkPacker(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, dbLock *sync.Mutex, key []byte, vlog *util.VLog, runWhileUploadingFunc runWhileUploadingFuncType, totalCntJournal *int64, finishedCountJournal *int64) *chunkPacker {
+func newChunkPacker(ctx context.Context, objst *objstore.ObjStore, bucket string, db *database.DB, dbLock *sync.Mutex, key []byte, vlog *util.VLog, runWhileUploadingFunc runWhileUploadingFuncType, totalCntJournal *int64, finishedCountJournal *int64, stats *BackupStats) *chunkPacker {
 	return &chunkPacker{
 		items:                 make([]chunkPackerItem, 0),
 		plaintextChunkBuf:     make([]byte, 0),
@@ -148,5 +152,6 @@ func newChunkPacker(ctx context.Context, objst *objstore.ObjStore, bucket string
 		runWhileUploadingFunc: runWhileUploadingFunc,
 		totalCntJournal:       totalCntJournal,
 		finishedCountJournal:  finishedCountJournal,
+		stats:                 stats,
 	}
 }
