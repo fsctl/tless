@@ -502,7 +502,7 @@ func ReplayBackupJournal(ctx context.Context, key []byte, objst *objstore.ObjSto
 			Path:     "",
 			IsDir:    false,
 			Datetime: time.Now().Unix(),
-			Msg:      "",
+			Msg:      "with interruptions",
 		}
 	}
 }
