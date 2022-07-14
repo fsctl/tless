@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/fsctl/tless/pkg/util"
 	"github.com/minio/minio-go/v7"
@@ -64,24 +65,35 @@ func (os *ObjStore) UploadObjFromBuffer(ctx context.Context, bucket string, obje
 	// Upload the file
 	contentType := "application/octet-stream"
 
-	// convert byte slice to io.Reader
-	reader := bytes.NewReader(buffer)
+	backoffSec := 5
+	maxBackoffSec := 5 * 60
 
-	// Upload the file with FPutObject
-	info, err := os.minioClient.PutObject(ctx, bucket, objectName, reader, int64(len(buffer)), minio.PutObjectOptions{
-		ContentType: contentType,
-		PartSize:    ObjStoreMultiPartUploadPartSize})
-	if err != nil {
-		log.Printf("error: UploadObjFromBuffer (%s): %v", objectName, err)
-		return err
+	for {
+		reader := bytes.NewReader(buffer)
+		info, err := os.minioClient.PutObject(ctx, bucket, objectName, reader, int64(len(buffer)), minio.PutObjectOptions{
+			ContentType: contentType,
+			PartSize:    ObjStoreMultiPartUploadPartSize})
+		if err != nil {
+			// If network became unreachable, try an exponential backoff rather than just erroring out
+			if strings.Contains(err.Error(), "network is unreachable") {
+				log.Printf("UploadObjFromBuffer: pausing because network became unreachable (%d sec)", backoffSec)
+				time.Sleep(time.Second * time.Duration(backoffSec))
+				backoffSec *= 2
+				if backoffSec > maxBackoffSec {
+					backoffSec = maxBackoffSec
+				}
+				continue
+			} else {
+				log.Printf("error: UploadObjFromBuffer (%s): %v", objectName, err)
+				return err
+			}
+		}
+		if info.ETag != expectedETag {
+			log.Printf("error: UploadObjFromBuffer: ETag returned was '%s', expected '%s'", info.ETag, expectedETag)
+			return ErrUploadCorrupted
+		}
+		break
 	}
-	//             remove this:  /-------------------\
-	if info.ETag != expectedETag && expectedETag != "" {
-		log.Printf("error: UploadObjFromBuffer: ETag returned was '%s', expected '%s'", info.ETag, expectedETag)
-		return ErrUploadCorrupted
-	}
-
-	//log.Printf("Successfully uploaded buffer of size %d\n", info.Size)
 
 	return nil
 }

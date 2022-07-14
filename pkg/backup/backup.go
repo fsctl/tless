@@ -126,7 +126,8 @@ func Backup(ctx context.Context, key []byte, rootDirName string, relPath string,
 			cp.Complete()
 			didSucceedNow := cp.AddDirEntry(relPath, buf, bjt)
 			if !didSucceedNow {
-				log.Fatalf("Failed to add dir entry to chunk packer even after clearing it (%s)", relPath)
+				log.Printf("error: Backup: failed to add dir entry to chunk packer even after clearing it (%s)", relPath)
+				return nil, false, err
 			}
 		}
 		pendingInChunkPacker = true
