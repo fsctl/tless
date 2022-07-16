@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/fsctl/tless/pkg/objstore"
 	"github.com/fsctl/tless/pkg/snapshots"
@@ -55,6 +56,7 @@ func PruneSnapshots() error {
 		return err
 	}
 
+	cntDeletedSnapshots := 0
 	for backupName := range mSnapshots {
 		// Mark what is to be kept
 		keeps := snapshots.GetPruneKeepsList(mSnapshots[backupName])
@@ -76,12 +78,26 @@ func PruneSnapshots() error {
 				}
 				if err = snapshots.DeleteSnapshots(ctx, encKey, []snapshots.SnapshotForDeletion{ssDel}, objst, bucket, vlog, nil, nil); err != nil {
 					log.Printf("AUTOPRUNE> error: could not delete snapshot '%s': %v\n", ss.RawSnapshotName, err)
+				} else {
+					cntDeletedSnapshots += 1
 				}
 			} else {
 				log.Printf("AUTOPRUNE> Keeping snapshot '%s'\n", ss.RawSnapshotName)
 			}
 		}
 	}
+
+	// Log a reported event for the autoprune
+	msg := fmt.Sprintf("deleted %d snapshots", cntDeletedSnapshots)
+	gGlobalsLock.Lock()
+	gStatus.reportedEvents = append(gStatus.reportedEvents, util.ReportedEvent{
+		Kind:     util.INFO_AUTOPRUNE_COMPLETED,
+		Path:     "",
+		IsDir:    false,
+		Datetime: time.Now().Unix(),
+		Msg:      msg,
+	})
+	gGlobalsLock.Unlock()
 
 	return nil
 }

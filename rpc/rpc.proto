@@ -75,6 +75,7 @@ message ReportedEvent {
     ErrIncompatibleBucketVersion = 2;
     InfoBackupCompletedWithErrors = 3;
     InfoBackupCanceled = 4;
+    InfoAutopruneCompleted = 5;
   }
   ReportedEventKind Kind = 1;
   string Path = 2;

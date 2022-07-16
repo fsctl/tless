@@ -134,6 +134,14 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 					Datetime: e.Datetime,
 					Msg:      e.Msg,
 				})
+			case util.INFO_AUTOPRUNE_COMPLETED:
+				pbReportedEvents = append(pbReportedEvents, &pb.ReportedEvent{
+					Kind:     pb.ReportedEvent_InfoAutopruneCompleted,
+					Path:     e.Path,
+					IsDir:    e.IsDir,
+					Datetime: e.Datetime,
+					Msg:      e.Msg,
+				})
 			}
 		}
 		gStatus.reportedEvents = make([]util.ReportedEvent, 0)

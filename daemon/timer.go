@@ -3,9 +3,6 @@ package daemon
 import (
 	"context"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/fsctl/tless/pkg/util"
@@ -13,49 +10,26 @@ import (
 )
 
 const (
-	wakeEveryNSeconds            int = 60
-	automaticBackupEveryNSeconds int = 6 * 60 * 60
-	automaticPruneEveryNSeconds  int = 12 * 60 * 60
-	firstAutomaticBackupAfterMin int = 15
-
-	dbgDisableAutoprune bool = false
+	wakeEveryNSeconds            int   = 60
+	dontDoAnythingFirstNSeconds  int64 = 15 * 60
+	automaticBackupEveryNSeconds int64 = 24 * 60 * 60
+	automaticPruneEveryNSeconds  int64 = 24 * 60 * 60
 )
 
 func timerLoop(server *server) {
 	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
-	// Monitor for SIGINT and SIGTERM and exit routine if caught
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-
-	// Start the first automatic backup 15 minutes after this loop starts running
+	// When we first start, pretend an autoprune just ran so we don't run one too soon
 	var (
-		secondsCnt                 int = automaticBackupEveryNSeconds - (firstAutomaticBackupAfterMin * 60)
-		lastAutomaticBackupStarted int = 0
-		lastAutomaticPruneStarted  int = 0
+		startedAtUnixtime     int64 = time.Now().Unix()
+		lastAutopruneUnixtime int64 = time.Now().Unix()
 	)
 
 	for {
-		// Loop wakes up periodically to do automatic tasks
-		//vlog.Println("PERIODIC> going to sleep")
-		for i := 0; i < wakeEveryNSeconds; i++ {
-			time.Sleep(time.Second)
+		time.Sleep(time.Second * time.Duration(wakeEveryNSeconds))
+		nowUnixtime := time.Now().Unix()
 
-			// Check the signals channel to see if we should exit routine
-			select {
-			case sig := <-signals:
-				log.Printf("PERIODIC> exiting (rcvd signal %v)", sig)
-				return
-			default:
-			}
-		}
-
-		// Wake up
-		secondsCnt += wakeEveryNSeconds
-
-		//vlog.Println("PERIODIC> woke up")
-
-		// Has gCfg, gUsername, etc been set yet?  Cannot do anything until that is done
+		// Check if config is ready
 		gGlobalsLock.Lock()
 		isReadyForPeriodics := gCfg != nil && gUsername != "" && gUserHomeDir != "" && gEncKey != nil
 		gGlobalsLock.Unlock()
@@ -66,14 +40,25 @@ func timerLoop(server *server) {
 			continue
 		}
 
+		// We don't do anything until a certain amount of time since startup has passed
+		if nowUnixtime-startedAtUnixtime < dontDoAnythingFirstNSeconds {
+			continue
+		}
+
 		//
-		// Automatic periodic backup
+		// When was last backup? If it's been long enough, start one.
 		//
-		if secondsCnt-lastAutomaticBackupStarted >= automaticBackupEveryNSeconds {
-			// Attempt to start a backup, update lastAutomaticBackupStarted if successful
+		gDbLock.Lock()
+		lastBackupUnixtime, err := gDb.GetLastCompletedBackupUnixTime()
+		gDbLock.Unlock()
+		if err != nil {
+			log.Printf("error: could not get last completed backup time: %v", err)
+		}
+		secondsSinceLastBackup := nowUnixtime - lastBackupUnixtime
+		if secondsSinceLastBackup > automaticBackupEveryNSeconds {
+			// Attempt to start a backup
 			gGlobalsLock.Lock()
 			isIdle := gStatus.state == Idle
-			isBackingUp := gStatus.state == BackingUp
 			gGlobalsLock.Unlock()
 
 			if isIdle {
@@ -86,32 +71,28 @@ func timerLoop(server *server) {
 					log.Printf("PERIODIC> error: periodic backup failed with ErrMsg: %s", response.ErrMsg)
 				} else {
 					log.Println("PERIODIC> periodic backup started")
-					lastAutomaticBackupStarted = secondsCnt
 				}
-			} else if isBackingUp {
-				// We're already backing up, so mark backup as having started
-				lastAutomaticBackupStarted = secondsCnt
 			} else {
 				vlog.Println("PERIODIC> cannot start backup b/c we're not in Idle state")
 			}
 		}
 
 		//
-		// Automatic snapshot prune
+		// When was last autoprune?  Start one if it's been long enough
 		//
-		if !dbgDisableAutoprune && (secondsCnt-lastAutomaticPruneStarted >= automaticPruneEveryNSeconds) {
-			// Attempt to start a prune of snapshots, updating lastAutomaticPruneStarted if successful
+		secondsSinceLastAutoprune := nowUnixtime - lastAutopruneUnixtime
+		if secondsSinceLastAutoprune > automaticPruneEveryNSeconds {
+			// Attempt to start an autoprune
 			gGlobalsLock.Lock()
 			isIdle := gStatus.state == Idle
 			gGlobalsLock.Unlock()
 
 			if isIdle {
-				err := PruneSnapshots()
-				if err == nil {
-					lastAutomaticPruneStarted = secondsCnt
+				if err := PruneSnapshots(); err != nil {
+					log.Println("PERIODIC> failed to run autoprune: ", err)
+				} else {
+					lastAutopruneUnixtime = time.Now().Unix()
 				}
-			} else {
-				vlog.Println("PERIODIC> cannot prune snapshots b/c we're not in Idle state")
 			}
 		}
 	}
