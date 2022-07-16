@@ -37,11 +37,6 @@ var (
 	}
 )
 
-var (
-	// not protected by any lock
-	dbgReturnFakeOpNotPermitteds = false
-)
-
 // Callback for rpc.DaemonCtlServer.Status requests
 func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.DaemonStatusResponse, error) {
 	//log.Println(">> GOT & COMPLETED COMMAND: Status")
@@ -67,29 +62,6 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 	defer gGlobalsLock.Unlock()
 
 	if gStatus.state == Idle {
-		// Debugging feature
-		if dbgReturnFakeOpNotPermitteds {
-			dbgReturnFakeOpNotPermitteds = false
-			gStatus.reportedEvents = append(gStatus.reportedEvents, util.ReportedEvent{
-				Kind:     util.ERR_OP_NOT_PERMITTED,
-				Path:     "/example/inaccessible/path",
-				IsDir:    true,
-				Datetime: time.Now().Unix(),
-			})
-			gStatus.reportedEvents = append(gStatus.reportedEvents, util.ReportedEvent{
-				Kind:     util.ERR_OP_NOT_PERMITTED,
-				Path:     "/example/inaccessible/path2",
-				IsDir:    true,
-				Datetime: time.Now().Unix(),
-			})
-			gStatus.reportedEvents = append(gStatus.reportedEvents, util.ReportedEvent{
-				Kind:     util.ERR_OP_NOT_PERMITTED,
-				Path:     "/another/example/inaccessible/path",
-				IsDir:    true,
-				Datetime: time.Now().Unix(),
-			})
-		}
-
 		// Move the reported events over to the return pb struct and clear them here
 		pbReportedEvents := make([]*pb.ReportedEvent, 0)
 		for _, e := range gStatus.reportedEvents {
