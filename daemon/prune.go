@@ -28,7 +28,7 @@ func PruneSnapshots() error {
 	gGlobalsLock.Unlock()
 
 	done := func() {
-		lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
+		lastBackupTimeFormatted := getLastBackupTimeFormatted(&gDbLock)
 		gGlobalsLock.Lock()
 		gStatus.state = Idle
 		gStatus.msg = "Last backup: " + lastBackupTimeFormatted

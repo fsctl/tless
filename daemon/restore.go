@@ -97,7 +97,7 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 
 	// to call when we exit early
 	done := func() {
-		lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
+		lastBackupTimeFormatted := getLastBackupTimeFormatted(&gDbLock)
 		gGlobalsLock.Lock()
 		gStatus.state = Idle
 		gStatus.percentage = -1.0

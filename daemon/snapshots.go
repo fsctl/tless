@@ -269,7 +269,7 @@ func (s *server) DeleteSnapshots(in *pb.DeleteSnapshotsRequest, srv pb.DaemonCtl
 
 	// When we exit this routine, we'll revert to Idle status
 	resetStatus := func() {
-		lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
+		lastBackupTimeFormatted := getLastBackupTimeFormatted(&gDbLock)
 		gGlobalsLock.Lock()
 		gStatus.state = Idle
 		gStatus.percentage = -1.0
@@ -355,9 +355,9 @@ func (s *server) DeleteSnapshots(in *pb.DeleteSnapshotsRequest, srv pb.DaemonCtl
 		isMostRecent := snapshots.IsMostRecentSnapshotForBackup(ctxBkg, objst, bucket, groupedObjects, ssDelItem.BackupDirName, ssDelItem.SnapshotName)
 		if isMostRecent {
 			vlog.Println(">>> We are deleting the most recent snapshot; next backup will be a full backup")
-			gGlobalsLock.Lock()
+			gDbLock.Lock()
 			err = gDb.ResetLastBackedUpTimeForEntireBackup(ssDelItem.BackupDirName)
-			gGlobalsLock.Unlock()
+			gDbLock.Unlock()
 			if err != nil {
 				log.Printf("Could not reset last backup times on backup '%s': %v", ssDelItem.BackupDirName, err)
 				resp := pb.DeleteSnapshotsResponse{

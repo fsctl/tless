@@ -54,9 +54,9 @@ func (s *server) Backup(ctx context.Context, in *pb.BackupRequest) (*pb.BackupRe
 	// Force full backup?
 	isForceFullBackup := in.ForceFullBackup
 	if isForceFullBackup {
-		gGlobalsLock.Lock()
+		gDbLock.Lock()
 		err := gDb.ResetLastBackedUpTimeForAllDirents()
-		gGlobalsLock.Unlock()
+		gDbLock.Unlock()
 		if err != nil {
 			log.Println("error: failed to reset dirents last_backup times to zero: ", err)
 			return &pb.BackupResponse{
@@ -150,12 +150,20 @@ func Backup(vlog *util.VLog, completion func()) {
 		gStatus.percentage = 0.0
 		gGlobalsLock.Unlock()
 
-		// Setup update progress callback
-		updateBackupProgress := func(finished int64, total int64, globalsLock *sync.Mutex, vlog *util.VLog) {
+		// Set up closure for setting initial backup progress, capturing locks from here
+		setBackupInitialProgressFunc := func(finished int64, total int64, backupDirName string, vlog *util.VLog) {
 			percentDone := (float32(finished) / float32(total)) * float32(100)
-			util.LockIf(globalsLock)
+			util.LockIf(&gGlobalsLock)
+			gStatus.percentage = float32(percentDone)
+			util.UnlockIf(&gGlobalsLock)
+		}
+
+		// Setup update progress callback
+		updateBackupProgressFunc := func(finished int64, total int64, vlog *util.VLog) {
+			percentDone := (float32(finished) / float32(total)) * float32(100)
+			util.LockIf(&gGlobalsLock)
 			gStatus.percentage = percentDone
-			util.UnlockIf(globalsLock)
+			util.UnlockIf(&gGlobalsLock)
 			vlog.Printf("%.2f%% written to cloud", percentDone)
 		}
 
@@ -168,11 +176,16 @@ func Backup(vlog *util.VLog, completion func()) {
 			return isCancelRequested
 		}
 
+		// Set up backup cancelation closure capturing locks from here
+		checkAndHandleBackupCancelationFunc := func(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, backupDirPath string, snapshotName string) bool {
+			return checkAndHandleCancelation(ctx, key, objst, bucket, &gDbLock, gDb, &gGlobalsLock, backupDirPath, snapshotName)
+		}
+
 		// Traverse the FS for changed files and do the journaled backup
 		util.LockIf(&gGlobalsLock)
 		resourceUtilization := gCfg.ResourceUtilization
 		util.UnlockIf(&gGlobalsLock)
-		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, bucket, gDb, &gGlobalsLock, backupDirPath, excludes, vlog, checkAndHandleTraversalCancelation, checkAndHandleCancelation, setBackupInitialProgress, updateBackupProgress, stats, resourceUtilization)
+		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, bucket, &gDbLock, gDb, backupDirPath, excludes, vlog, checkAndHandleTraversalCancelation, checkAndHandleBackupCancelationFunc, setBackupInitialProgressFunc, updateBackupProgressFunc, stats, resourceUtilization)
 		for _, e := range backupReportedEvents {
 			if e.Kind == util.ERR_OP_NOT_PERMITTED {
 				backupEndedInError = true
@@ -236,7 +249,7 @@ func Backup(vlog *util.VLog, completion func()) {
 
 done:
 	// On finished, set the status back to Idle
-	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
+	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gDbLock)
 	gGlobalsLock.Lock()
 	gStatus.state = Idle
 	gStatus.percentage = -1.0
@@ -255,7 +268,6 @@ func replayBackupJournal() {
 	secretKey := gCfg.SecretAccessKey
 	bucket := gCfg.Bucket
 	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
-	db := gDb
 	gGlobalsLock.Unlock()
 	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
 	if ok, err := objst.IsReachable(ctx, bucket, vlog); !ok {
@@ -274,26 +286,42 @@ func replayBackupJournal() {
 	copy(encKey, gEncKey)
 	gGlobalsLock.Unlock()
 
-	// Setup update progress callback
-	updateBackupProgress := func(finished int64, total int64, globalsLock *sync.Mutex, vlog *util.VLog) {
+	// Setup replay initial progress closure capturing locks from here
+	setReplayInitialProgressFunc := func(finished int64, total int64, backupDirName string, vlog *util.VLog) {
 		percentDone := (float32(finished) / float32(total)) * float32(100)
-		util.LockIf(globalsLock)
+		util.LockIf(&gGlobalsLock)
+		gStatus.state = BackingUp
+		gStatus.msg = backupDirName
 		gStatus.percentage = percentDone
-		util.UnlockIf(globalsLock)
+		util.UnlockIf(&gGlobalsLock)
+		vlog.Printf("%.2f%% written to cloud (starting replay)", percentDone)
+	}
+
+	// Setup update progress callback
+	updateBackupProgressFunc := func(finished int64, total int64, vlog *util.VLog) {
+		percentDone := (float32(finished) / float32(total)) * float32(100)
+		util.LockIf(&gGlobalsLock)
+		gStatus.percentage = percentDone
+		util.UnlockIf(&gGlobalsLock)
 		vlog.Printf("%.2f%% written to cloud (replay)", percentDone)
+	}
+
+	// Set up cancelation closure capturing locks from here
+	checkAndHandleReplayCancelationFunc := func(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, backupDirPath string, snapshotName string) bool {
+		return checkAndHandleCancelation(ctx, key, objst, bucket, &gDbLock, gDb, &gGlobalsLock, backupDirPath, snapshotName)
 	}
 
 	// Replay the journal
 	gGlobalsLock.Lock()
 	resourceUtilization := gCfg.ResourceUtilization
 	gGlobalsLock.Unlock()
-	re := backup.ReplayBackupJournal(ctx, encKey, objst, bucket, db, &gGlobalsLock, vlog, setReplayInitialProgress, checkAndHandleCancelation, updateBackupProgress, resourceUtilization)
+	re := backup.ReplayBackupJournal(ctx, encKey, objst, bucket, &gDbLock, gDb, vlog, setReplayInitialProgressFunc, checkAndHandleReplayCancelationFunc, updateBackupProgressFunc, resourceUtilization)
 	gGlobalsLock.Lock()
 	gStatus.reportedEvents = append(gStatus.reportedEvents, re)
 	gGlobalsLock.Unlock()
 
 	// Finally set the status back to Idle since we are done with backup
-	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
+	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gDbLock)
 	gGlobalsLock.Lock()
 	gStatus.state = Idle
 	gStatus.percentage = -1.0
@@ -301,12 +329,12 @@ func replayBackupJournal() {
 	gGlobalsLock.Unlock()
 }
 
-func checkAndHandleCancelation(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, globalsLock *sync.Mutex, db *database.DB, backupDirPath string, snapshotName string) bool {
+func checkAndHandleCancelation(ctx context.Context, key []byte, objst *objstore.ObjStore, bucket string, dbLock *sync.Mutex, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string) bool {
 	util.LockIf(globalsLock)
 	isCancelRequested := gCancelRequested
 	util.UnlockIf(globalsLock)
 	if isCancelRequested {
-		cancelBackup(ctx, key, db, globalsLock, backupDirPath, snapshotName, objst, bucket)
+		cancelBackup(ctx, key, dbLock, db, globalsLock, backupDirPath, snapshotName, objst, bucket)
 		util.LockIf(globalsLock)
 		gCancelRequested = false
 		util.UnlockIf(globalsLock)
@@ -315,24 +343,7 @@ func checkAndHandleCancelation(ctx context.Context, key []byte, objst *objstore.
 	return false
 }
 
-func setBackupInitialProgress(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog) {
-	percentDone := (float32(finished) / float32(total)) * float32(100)
-	util.LockIf(globalsLock)
-	gStatus.percentage = float32(percentDone)
-	util.UnlockIf(globalsLock)
-}
-
-func setReplayInitialProgress(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog) {
-	percentDone := (float32(finished) / float32(total)) * float32(100)
-	util.LockIf(globalsLock)
-	gStatus.state = BackingUp
-	gStatus.msg = backupDirName
-	gStatus.percentage = percentDone
-	util.UnlockIf(globalsLock)
-	vlog.Printf("%.2f%% written to cloud (starting replay)", percentDone)
-}
-
-func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string) {
+func cancelBackup(ctx context.Context, key []byte, dbLock *sync.Mutex, db *database.DB, globalsLock *sync.Mutex, backupDirPath string, snapshotName string, objst *objstore.ObjStore, bucket string) {
 	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
 	vlog.Printf("CANCEL: Starting unwind")
@@ -363,18 +374,18 @@ func cancelBackup(ctx context.Context, key []byte, db *database.DB, globalsLock 
 
 	// Get all completed items in journal and set their dirents.last_backup time to 0
 	vlog.Printf("CANCEL: Resetting last_backup times to zero for processed dirents")
-	globalsLock.Lock()
+	dbLock.Lock()
 	err = db.CancelationResetLastBackupTime()
-	globalsLock.Unlock()
+	dbLock.Unlock()
 	if err != nil {
 		log.Println("error: cancelBackup: db.CancelationResetLastBackupTime failed")
 	}
 
 	// Delete all items in journal + delete backup_info row so this doesn't look like a completed backup
 	vlog.Printf("CANCEL: Clearing journal and deleting backup_info row")
-	globalsLock.Lock()
+	dbLock.Lock()
 	err = db.CancelationCleanupJournal()
-	globalsLock.Unlock()
+	dbLock.Unlock()
 	if err != nil {
 		log.Println("error: cancelBackup: db.CancelationCleanupJournal failed")
 	}

@@ -56,7 +56,7 @@ func (s *server) CheckConn(ctx context.Context, in *pb.CheckConnRequest) (*pb.Ch
 		}
 	}
 
-	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
+	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gDbLock)
 	gGlobalsLock.Lock()
 	gStatus.state = Idle
 	gStatus.msg = "Last backup: " + lastBackupTimeFormatted

@@ -57,8 +57,11 @@ func timerLoop(server *server) {
 
 		// Has gCfg, gUsername, etc been set yet?  Cannot do anything until that is done
 		gGlobalsLock.Lock()
-		isReadyForPeriodics := gCfg != nil && gUsername != "" && gUserHomeDir != "" && gDb != nil && gEncKey != nil
+		isReadyForPeriodics := gCfg != nil && gUsername != "" && gUserHomeDir != "" && gEncKey != nil
 		gGlobalsLock.Unlock()
+		gDbLock.Lock()
+		isReadyForPeriodics = isReadyForPeriodics && gDb != nil
+		gDbLock.Unlock()
 		if !isReadyForPeriodics {
 			continue
 		}

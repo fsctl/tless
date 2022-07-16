@@ -28,12 +28,17 @@ type Status struct {
 }
 
 var (
+	// protected by gGlobalsLock
 	gStatus = &Status{
 		state:          Idle,
 		msg:            "",
 		percentage:     -1.0,
 		reportedEvents: make([]util.ReportedEvent, 0),
 	}
+)
+
+var (
+	// not protected by any lock
 	dbgReturnFakeOpNotPermitteds = false
 )
 
@@ -43,8 +48,11 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 
 	// If daemon has restarted we need to tell the client we need a new Hello to boot us up
 	gGlobalsLock.Lock()
-	isNeedingHello := gUsername == "" || gUserHomeDir == "" || gCfg == nil || gDb == nil || gEncKey == nil
+	isNeedingHello := gUsername == "" || gUserHomeDir == "" || gCfg == nil || gEncKey == nil
 	gGlobalsLock.Unlock()
+	gDbLock.Lock()
+	isNeedingHello = isNeedingHello || gDb == nil
+	gDbLock.Unlock()
 	if isNeedingHello {
 		log.Println(">> Status: we responded that we need a Hello")
 		return &pb.DaemonStatusResponse{
@@ -169,10 +177,10 @@ func (s *server) Status(ctx context.Context, in *pb.DaemonStatusRequest) (*pb.Da
 	}
 }
 
-func getLastBackupTimeFormatted(globalsLock *sync.Mutex) string {
-	globalsLock.Lock()
+func getLastBackupTimeFormatted(dbLock *sync.Mutex) string {
+	dbLock.Lock()
 	lastBackupUnixtime, err := gDb.GetLastCompletedBackupUnixTime()
-	globalsLock.Unlock()
+	dbLock.Unlock()
 	if err != nil {
 		log.Printf("error: could not get last completed backup time: %v", err)
 	}

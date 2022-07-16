@@ -44,7 +44,7 @@ func (s *server) WipeCloud(in *pb.WipeCloudRequest, srv pb.DaemonCtl_WipeCloudSe
 
 	// Sets status back to Idle when routine is done
 	done := func() {
-		lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
+		lastBackupTimeFormatted := getLastBackupTimeFormatted(&gDbLock)
 		gGlobalsLock.Lock()
 		gStatus.state = Idle
 		gStatus.msg = "Last backup: " + lastBackupTimeFormatted

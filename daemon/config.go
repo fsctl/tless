@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	// Module level variables
+	// Protected by gGlobalsLock
 	gCfg         *util.CfgSettings
 	gUsername    string
 	gUserHomeDir string

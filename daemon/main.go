@@ -25,12 +25,32 @@ const (
 	standardConfigFileName = "config.toml"
 )
 
+/*
+
+	~~ LOCK HIERARCHY ~~
+
+	1) gDbLock - take this lock first
+	2) gGlobalsLock - take this lock second
+	3) [module level locks] - take these locks third
+
+*/
+
+// Not protected by lock; these values are set once in daemonMain and never change
 var (
 	gConstVersion    string // not protected by lock
 	gConstCommitHash string // not protected by lock
+)
+
+// Protected by gGlobalsLock
+var (
 	gGlobalsLock     sync.Mutex
-	gDb              *database.DB
 	gCancelRequested bool
+)
+
+// Protected by gDbLock
+var (
+	gDbLock sync.Mutex
+	gDb     *database.DB
 )
 
 // server is used to implement helloworld.GreeterServer.
@@ -47,7 +67,7 @@ func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRespo
 	gUsername = in.GetUsername()
 	gUserHomeDir = in.GetUserHomeDir()
 	gGlobalsLock.Unlock()
-	initDbConn(&gGlobalsLock)
+	initDbConn()
 	if err := initConfig(&gGlobalsLock); err != nil {
 		return &pb.HelloResponse{DidSucceed: false, ErrMsg: err.Error()}, nil
 	}
@@ -55,14 +75,16 @@ func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRespo
 	// Replay dirty journals
 	go func() {
 		for {
-			gGlobalsLock.Lock()
-			isIdle := gStatus.state == Idle
+			gDbLock.Lock()
 			hasDirtyBackupJournal, err := gDb.HasDirtyBackupJournal()
-			gGlobalsLock.Unlock()
+			gDbLock.Unlock()
 			if err != nil {
 				log.Println("error: gDb.HasDirtyBackupJournal: ", err)
 			}
 			if hasDirtyBackupJournal {
+				gGlobalsLock.Lock()
+				isIdle := gStatus.state == Idle
+				gGlobalsLock.Unlock()
 				if isIdle {
 					replayBackupJournal()
 				} else {
@@ -78,11 +100,11 @@ func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRespo
 	return &pb.HelloResponse{DidSucceed: true, ErrMsg: ""}, nil
 }
 
-func initDbConn(globalsLock *sync.Mutex) {
-	globalsLock.Lock()
+func initDbConn() {
+	gGlobalsLock.Lock()
 	username := gUsername
 	userHomeDir := gUserHomeDir
-	globalsLock.Unlock()
+	gGlobalsLock.Unlock()
 
 	// open and prepare sqlite database
 	sqliteDir, err := util.MkdirUserConfig(username, userHomeDir)
@@ -97,12 +119,15 @@ func initDbConn(globalsLock *sync.Mutex) {
 	// so they were crashing with a closed handle.  To solve that, we only call gDb.Close() when
 	// we're in an Idle state, meaning no one is holding a long-lived copy of gDb.
 	// It's not perfect because we still leak some DB handles, but it's less leakage than before.
+	//
+	// Also: taking two locks here.  Lock hierarchy must be observed.
 	sqliteFilePath := filepath.Join(sqliteDir, "state.db")
 	var dbTemp *database.DB
-	globalsLock.Lock()
+	gDbLock.Lock()
 	dbTemp, err = database.NewDB(sqliteFilePath)
 	if err == nil {
 		// Only try to close current db conn if we're in an idle state
+		gGlobalsLock.Lock()
 		if gStatus.state == Idle {
 			if gDb != nil {
 				gDb.Close()
@@ -111,15 +136,16 @@ func initDbConn(globalsLock *sync.Mutex) {
 		} else {
 			gDb = dbTemp
 		}
+		gGlobalsLock.Unlock()
 	}
-	globalsLock.Unlock()
+	gDbLock.Unlock()
 	if err != nil {
 		log.Fatalf("error: cannot open database: %v", err)
 	}
 
-	globalsLock.Lock()
+	gDbLock.Lock()
 	err = gDb.CreateTablesIfNotExist()
-	globalsLock.Unlock()
+	gDbLock.Unlock()
 	if err != nil {
 		log.Fatalf("error: cannot initialize database: %v", err)
 	}
@@ -134,14 +160,14 @@ func initDbConn(globalsLock *sync.Mutex) {
 	}
 
 	// Get the last completed backup time
-	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gGlobalsLock)
+	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gDbLock)
 
 	// Set status message to last backup time if status is Idle
-	globalsLock.Lock()
+	gGlobalsLock.Lock()
 	if gStatus.state == Idle {
 		gStatus.msg = "Last backup: " + lastBackupTimeFormatted
 	}
-	globalsLock.Unlock()
+	gGlobalsLock.Unlock()
 }
 
 func DaemonMain(version string, commitHash string) {
@@ -195,11 +221,11 @@ func DaemonMain(version string, commitHash string) {
 		time.Sleep(time.Second * 5)
 
 		// other cleanup
-		gGlobalsLock.Lock()
+		gDbLock.Lock()
 		if gDb != nil {
 			gDb.Close()
 		}
-		gGlobalsLock.Unlock()
+		gDbLock.Unlock()
 
 		// tell main routine we are ready to exit
 		done <- true

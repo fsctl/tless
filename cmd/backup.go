@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/fsctl/tless/pkg/backup"
@@ -96,7 +95,7 @@ func backupMain() {
 	// initialize progress bar container and its callbacks
 	progressBarContainer := mpb.New()
 	var progressBar *mpb.Bar = nil
-	setBackupInitialProgress := func(finished int64, total int64, backupDirName string, globalsLock *sync.Mutex, vlog *util.VLog) {
+	setBackupInitialProgressFunc := func(finished int64, total int64, backupDirName string, vlog *util.VLog) {
 		if !cfgVerbose {
 			progressBar = progressBarContainer.New(
 				total,
@@ -112,14 +111,14 @@ func backupMain() {
 			)
 		}
 	}
-	updateBackupProgress := func(finished int64, total int64, globalsLock *sync.Mutex, vlog *util.VLog) {
+	updateBackupProgressFunc := func(finished int64, total int64, vlog *util.VLog) {
 		if !cfgVerbose {
 			progressBar.SetCurrent(finished)
 		}
 	}
 
 	// replay/rollback check - if there's an interrupted previous backup, deal with it and exit
-	if didResumeOrRollback := handleReplay(ctx, objst, db, vlog, setBackupInitialProgress, updateBackupProgress); didResumeOrRollback {
+	if didResumeOrRollback := handleReplay(ctx, objst, db, vlog, setBackupInitialProgressFunc, updateBackupProgressFunc); didResumeOrRollback {
 		return
 	}
 
@@ -133,7 +132,7 @@ func backupMain() {
 
 		// Traverse the FS for changed files and do the journaled backup
 		stats := backup.NewBackupStats()
-		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, cfgBucket, db, nil, backupDirPath, cfgExcludePaths, vlog, nil, nil, setBackupInitialProgress, updateBackupProgress, stats, cfgResourceUtilization)
+		backupReportedEvents, breakFromLoop, continueLoop, fatalError := backup.DoJournaledBackup(ctx, encKey, objst, cfgBucket, nil, db, backupDirPath, cfgExcludePaths, vlog, nil, nil, setBackupInitialProgressFunc, updateBackupProgressFunc, stats, cfgResourceUtilization)
 		for _, e := range backupReportedEvents {
 			if e.Kind == util.ERR_OP_NOT_PERMITTED {
 				log.Printf("warning:  insufficient permissions to process path '%s'", e.Path)
@@ -170,7 +169,7 @@ func handleReplay(ctx context.Context, objst *objstore.ObjStore, db *database.DB
 	if hasDirtyBackupJournal {
 		if cfgResumeBackup {
 			fmt.Println("Resuming previous interrupted backup... (--resume-backup=false to roll back)")
-			backup.ReplayBackupJournal(ctx, encKey, objst, cfgBucket, db, nil, vlog, setBackupInitialProgressFunc, nil, updateBackupProgressFunc, cfgResourceUtilization)
+			backup.ReplayBackupJournal(ctx, encKey, objst, cfgBucket, nil, db, vlog, setBackupInitialProgressFunc, nil, updateBackupProgressFunc, cfgResourceUtilization)
 		} else {
 			fmt.Println("Rolling back previous interrupted backup...")
 
