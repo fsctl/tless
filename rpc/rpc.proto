@@ -43,6 +43,9 @@ service DaemonCtl {
   rpc MakeBucket (MakeBucketRequest) returns (MakeBucketResponse) {}
   rpc CheckBucketPassword (CheckBucketPasswordRequest) returns (CheckBucketPasswordResponse) {}
 
+  // Space and bandwidth usage RPCs
+  rpc GetSnapshotSpaceUsage(GetSnapshotSpaceUsageRequest) returns (stream GetSnapshotSpaceUsageResponse) {}
+
   // Misc RPCs
   rpc LogStream (LogStreamRequest) returns (stream LogStreamResponse) {}
   rpc ChangePassword (ChangePasswordRequest) returns (ChangePasswordResponse) {}
@@ -261,6 +264,28 @@ message CheckBucketPasswordResponse {
   }
   CheckBucketPasswordResult Result = 1;
   string ErrMsg = 2;
+}
+
+message GetSnapshotSpaceUsageRequest {}
+
+message Chunk {
+  string Name = 1;
+  int64 ByteCount = 2;
+}
+
+message SnapshotUsage {
+  string BackupName = 1;
+  string SnapshotName = 2;
+  string SnapshotRawName = 3;
+  int64 IndexFileByteCount = 4;
+  repeated Chunk Chunks = 5;
+}
+
+message GetSnapshotSpaceUsageResponse {
+  bool DidSucceed = 1;
+  string ErrMsg = 2;
+  repeated SnapshotUsage SnapshotUsage = 3;
+  double PercentDone = 4;
 }
 
 message LogStreamRequest {

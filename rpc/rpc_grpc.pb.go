@@ -50,6 +50,8 @@ type DaemonCtlClient interface {
 	ListBuckets(ctx context.Context, in *ListBucketsRequest, opts ...grpc.CallOption) (*ListBucketsResponse, error)
 	MakeBucket(ctx context.Context, in *MakeBucketRequest, opts ...grpc.CallOption) (*MakeBucketResponse, error)
 	CheckBucketPassword(ctx context.Context, in *CheckBucketPasswordRequest, opts ...grpc.CallOption) (*CheckBucketPasswordResponse, error)
+	// Space and bandwidth usage RPCs
+	GetSnapshotSpaceUsage(ctx context.Context, in *GetSnapshotSpaceUsageRequest, opts ...grpc.CallOption) (DaemonCtl_GetSnapshotSpaceUsageClient, error)
 	// Misc RPCs
 	LogStream(ctx context.Context, in *LogStreamRequest, opts ...grpc.CallOption) (DaemonCtl_LogStreamClient, error)
 	ChangePassword(ctx context.Context, in *ChangePasswordRequest, opts ...grpc.CallOption) (*ChangePasswordResponse, error)
@@ -311,8 +313,40 @@ func (c *daemonCtlClient) CheckBucketPassword(ctx context.Context, in *CheckBuck
 	return out, nil
 }
 
+func (c *daemonCtlClient) GetSnapshotSpaceUsage(ctx context.Context, in *GetSnapshotSpaceUsageRequest, opts ...grpc.CallOption) (DaemonCtl_GetSnapshotSpaceUsageClient, error) {
+	stream, err := c.cc.NewStream(ctx, &DaemonCtl_ServiceDesc.Streams[4], "/rpc.DaemonCtl/GetSnapshotSpaceUsage", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &daemonCtlGetSnapshotSpaceUsageClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type DaemonCtl_GetSnapshotSpaceUsageClient interface {
+	Recv() (*GetSnapshotSpaceUsageResponse, error)
+	grpc.ClientStream
+}
+
+type daemonCtlGetSnapshotSpaceUsageClient struct {
+	grpc.ClientStream
+}
+
+func (x *daemonCtlGetSnapshotSpaceUsageClient) Recv() (*GetSnapshotSpaceUsageResponse, error) {
+	m := new(GetSnapshotSpaceUsageResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *daemonCtlClient) LogStream(ctx context.Context, in *LogStreamRequest, opts ...grpc.CallOption) (DaemonCtl_LogStreamClient, error) {
-	stream, err := c.cc.NewStream(ctx, &DaemonCtl_ServiceDesc.Streams[4], "/rpc.DaemonCtl/LogStream", opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonCtl_ServiceDesc.Streams[5], "/rpc.DaemonCtl/LogStream", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -393,6 +427,8 @@ type DaemonCtlServer interface {
 	ListBuckets(context.Context, *ListBucketsRequest) (*ListBucketsResponse, error)
 	MakeBucket(context.Context, *MakeBucketRequest) (*MakeBucketResponse, error)
 	CheckBucketPassword(context.Context, *CheckBucketPasswordRequest) (*CheckBucketPasswordResponse, error)
+	// Space and bandwidth usage RPCs
+	GetSnapshotSpaceUsage(*GetSnapshotSpaceUsageRequest, DaemonCtl_GetSnapshotSpaceUsageServer) error
 	// Misc RPCs
 	LogStream(*LogStreamRequest, DaemonCtl_LogStreamServer) error
 	ChangePassword(context.Context, *ChangePasswordRequest) (*ChangePasswordResponse, error)
@@ -454,6 +490,9 @@ func (UnimplementedDaemonCtlServer) MakeBucket(context.Context, *MakeBucketReque
 }
 func (UnimplementedDaemonCtlServer) CheckBucketPassword(context.Context, *CheckBucketPasswordRequest) (*CheckBucketPasswordResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckBucketPassword not implemented")
+}
+func (UnimplementedDaemonCtlServer) GetSnapshotSpaceUsage(*GetSnapshotSpaceUsageRequest, DaemonCtl_GetSnapshotSpaceUsageServer) error {
+	return status.Errorf(codes.Unimplemented, "method GetSnapshotSpaceUsage not implemented")
 }
 func (UnimplementedDaemonCtlServer) LogStream(*LogStreamRequest, DaemonCtl_LogStreamServer) error {
 	return status.Errorf(codes.Unimplemented, "method LogStream not implemented")
@@ -800,6 +839,27 @@ func _DaemonCtl_CheckBucketPassword_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonCtl_GetSnapshotSpaceUsage_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(GetSnapshotSpaceUsageRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaemonCtlServer).GetSnapshotSpaceUsage(m, &daemonCtlGetSnapshotSpaceUsageServer{stream})
+}
+
+type DaemonCtl_GetSnapshotSpaceUsageServer interface {
+	Send(*GetSnapshotSpaceUsageResponse) error
+	grpc.ServerStream
+}
+
+type daemonCtlGetSnapshotSpaceUsageServer struct {
+	grpc.ServerStream
+}
+
+func (x *daemonCtlGetSnapshotSpaceUsageServer) Send(m *GetSnapshotSpaceUsageResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 func _DaemonCtl_LogStream_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(LogStreamRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -944,6 +1004,11 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "WipeCloud",
 			Handler:       _DaemonCtl_WipeCloud_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "GetSnapshotSpaceUsage",
+			Handler:       _DaemonCtl_GetSnapshotSpaceUsage_Handler,
 			ServerStreams: true,
 		},
 		{
