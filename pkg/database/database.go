@@ -111,6 +111,7 @@ func (db *DB) DropAllTables() error {
 	return err
 }
 
+// Legacy:  call PerformDbMigrations instead
 func (db *DB) CreateTablesIfNotExist() error {
 	sql := "SELECT count(*) FROM sqlite_master WHERE type='table' AND (name='dirents' OR name='backup_info' OR name='backup_journal');"
 	cnt, err := db.querySingleRowCount(sql)

@@ -144,7 +144,7 @@ func initDbConn() {
 	}
 
 	gDbLock.Lock()
-	err = gDb.CreateTablesIfNotExist()
+	err = gDb.PerformDbMigrations()
 	gDbLock.Unlock()
 	if err != nil {
 		log.Fatalf("error: cannot initialize database: %v", err)
@@ -218,7 +218,7 @@ func DaemonMain(version string, commitHash string) {
 		//s.GracefulStop()
 
 		// Give go routines a chance to gracefully terminate
-		time.Sleep(time.Second * 5)
+		//time.Sleep(time.Second * 5)
 
 		// other cleanup
 		gDbLock.Lock()
