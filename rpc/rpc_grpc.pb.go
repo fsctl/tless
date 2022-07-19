@@ -52,6 +52,7 @@ type DaemonCtlClient interface {
 	CheckBucketPassword(ctx context.Context, in *CheckBucketPasswordRequest, opts ...grpc.CallOption) (*CheckBucketPasswordResponse, error)
 	// Space and bandwidth usage RPCs
 	GetSnapshotSpaceUsage(ctx context.Context, in *GetSnapshotSpaceUsageRequest, opts ...grpc.CallOption) (DaemonCtl_GetSnapshotSpaceUsageClient, error)
+	GetUsageHistory(ctx context.Context, in *GetUsageHistoryRequest, opts ...grpc.CallOption) (*GetUsageHistoryResponse, error)
 	// Misc RPCs
 	LogStream(ctx context.Context, in *LogStreamRequest, opts ...grpc.CallOption) (DaemonCtl_LogStreamClient, error)
 	ChangePassword(ctx context.Context, in *ChangePasswordRequest, opts ...grpc.CallOption) (*ChangePasswordResponse, error)
@@ -345,6 +346,15 @@ func (x *daemonCtlGetSnapshotSpaceUsageClient) Recv() (*GetSnapshotSpaceUsageRes
 	return m, nil
 }
 
+func (c *daemonCtlClient) GetUsageHistory(ctx context.Context, in *GetUsageHistoryRequest, opts ...grpc.CallOption) (*GetUsageHistoryResponse, error) {
+	out := new(GetUsageHistoryResponse)
+	err := c.cc.Invoke(ctx, "/rpc.DaemonCtl/GetUsageHistory", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daemonCtlClient) LogStream(ctx context.Context, in *LogStreamRequest, opts ...grpc.CallOption) (DaemonCtl_LogStreamClient, error) {
 	stream, err := c.cc.NewStream(ctx, &DaemonCtl_ServiceDesc.Streams[5], "/rpc.DaemonCtl/LogStream", opts...)
 	if err != nil {
@@ -429,6 +439,7 @@ type DaemonCtlServer interface {
 	CheckBucketPassword(context.Context, *CheckBucketPasswordRequest) (*CheckBucketPasswordResponse, error)
 	// Space and bandwidth usage RPCs
 	GetSnapshotSpaceUsage(*GetSnapshotSpaceUsageRequest, DaemonCtl_GetSnapshotSpaceUsageServer) error
+	GetUsageHistory(context.Context, *GetUsageHistoryRequest) (*GetUsageHistoryResponse, error)
 	// Misc RPCs
 	LogStream(*LogStreamRequest, DaemonCtl_LogStreamServer) error
 	ChangePassword(context.Context, *ChangePasswordRequest) (*ChangePasswordResponse, error)
@@ -493,6 +504,9 @@ func (UnimplementedDaemonCtlServer) CheckBucketPassword(context.Context, *CheckB
 }
 func (UnimplementedDaemonCtlServer) GetSnapshotSpaceUsage(*GetSnapshotSpaceUsageRequest, DaemonCtl_GetSnapshotSpaceUsageServer) error {
 	return status.Errorf(codes.Unimplemented, "method GetSnapshotSpaceUsage not implemented")
+}
+func (UnimplementedDaemonCtlServer) GetUsageHistory(context.Context, *GetUsageHistoryRequest) (*GetUsageHistoryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetUsageHistory not implemented")
 }
 func (UnimplementedDaemonCtlServer) LogStream(*LogStreamRequest, DaemonCtl_LogStreamServer) error {
 	return status.Errorf(codes.Unimplemented, "method LogStream not implemented")
@@ -860,6 +874,24 @@ func (x *daemonCtlGetSnapshotSpaceUsageServer) Send(m *GetSnapshotSpaceUsageResp
 	return x.ServerStream.SendMsg(m)
 }
 
+func _DaemonCtl_GetUsageHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUsageHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonCtlServer).GetUsageHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/rpc.DaemonCtl/GetUsageHistory",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonCtlServer).GetUsageHistory(ctx, req.(*GetUsageHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _DaemonCtl_LogStream_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(LogStreamRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -975,6 +1007,10 @@ var DaemonCtl_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CheckBucketPassword",
 			Handler:    _DaemonCtl_CheckBucketPassword_Handler,
+		},
+		{
+			MethodName: "GetUsageHistory",
+			Handler:    _DaemonCtl_GetUsageHistory_Handler,
 		},
 		{
 			MethodName: "ChangePassword",

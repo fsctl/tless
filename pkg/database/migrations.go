@@ -19,7 +19,7 @@ var (
 	DROP TABLE IF EXISTS space_usage_history;
 	CREATE TABLE space_usage_history (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		date TEXT,
+		date INTEGER,
 		space_used INTEGER
 	);
 	`
@@ -28,7 +28,7 @@ var (
 	DROP TABLE IF EXISTS bandwidth_usage_history;
 	CREATE TABLE bandwidth_usage_history (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		date TEXT,
+		date INTEGER,
 		bandwidth_used INTEGER
 	);
 	`

@@ -45,6 +45,7 @@ service DaemonCtl {
 
   // Space and bandwidth usage RPCs
   rpc GetSnapshotSpaceUsage(GetSnapshotSpaceUsageRequest) returns (stream GetSnapshotSpaceUsageResponse) {}
+  rpc GetUsageHistory(GetUsageHistoryRequest) returns (GetUsageHistoryResponse) {}
 
   // Misc RPCs
   rpc LogStream (LogStreamRequest) returns (stream LogStreamResponse) {}
@@ -264,6 +265,20 @@ message CheckBucketPasswordResponse {
   }
   CheckBucketPasswordResult Result = 1;
   string ErrMsg = 2;
+}
+
+message GetUsageHistoryRequest {}
+
+message DailyUsage {
+  string DayYmd = 1;
+  int64 ByteCount = 2;
+}
+
+message GetUsageHistoryResponse {
+  bool DidSucceed = 1;
+  string ErrMsg = 2;
+  repeated DailyUsage PeakSpaceUsage = 3;
+  repeated DailyUsage TotalBandwidthUsage = 4;
 }
 
 message GetSnapshotSpaceUsageRequest {}
