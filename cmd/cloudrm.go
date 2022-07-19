@@ -51,6 +51,9 @@ func init() {
 func cloudrmMain() {
 	vlog := util.NewVLog(nil, func() bool { return cfgVerbose })
 
+	// Record peak usage before delete
+	persistUsage(nil, true, false, vlog)
+
 	ctx := context.Background()
 	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 
@@ -100,6 +103,8 @@ func cloudrmMain() {
 	if err != nil {
 		log.Fatalf("Failed to delete snapshot: %v", err)
 	}
+
+	persistUsage(nil, true, true, vlog)
 
 	time.Sleep(time.Millisecond * 100) // let the bar finish drawing
 }

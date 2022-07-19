@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/fsctl/tless/pkg/database"
+	"github.com/fsctl/tless/pkg/objstore"
+	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
 	"google.golang.org/grpc"
@@ -60,14 +62,16 @@ type server struct {
 
 // Callback for rpc.DaemonCtlServer.Hello requests
 func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloResponse, error) {
-	log.Printf("HELLO> Rcvd Hello from '%v' (with homedir '%v')", in.GetUsername(), in.GetUserHomeDir())
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
+
+	vlog.Printf("HELLO> Rcvd Hello from '%v' (with homedir '%v')", in.GetUsername(), in.GetUserHomeDir())
 
 	// Set up global state
 	gGlobalsLock.Lock()
 	gUsername = in.GetUsername()
 	gUserHomeDir = in.GetUserHomeDir()
 	gGlobalsLock.Unlock()
-	initDbConn()
+	initDbConn(vlog)
 	if err := initConfig(&gGlobalsLock); err != nil {
 		return &pb.HelloResponse{DidSucceed: false, ErrMsg: err.Error()}, nil
 	}
@@ -100,7 +104,7 @@ func (s *server) Hello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRespo
 	return &pb.HelloResponse{DidSucceed: true, ErrMsg: ""}, nil
 }
 
-func initDbConn() {
+func initDbConn(vlog *util.VLog) {
 	gGlobalsLock.Lock()
 	username := gUsername
 	userHomeDir := gUserHomeDir
@@ -143,8 +147,12 @@ func initDbConn() {
 		log.Fatalf("error: cannot open database: %v", err)
 	}
 
+	// vlog takes the globals lock, and here we call PerformDbMigrations under the DB lock.
+	// There is no deadlock because the lock hierarchy dictates we take the dbLock then the globalsLock.
+	// If the lock hierarchy were the other way around, or if we called PerformDbMigrations while holding the
+	// globalsLock, this would be a guaranteed deadlock.
 	gDbLock.Lock()
-	err = gDb.PerformDbMigrations()
+	err = gDb.PerformDbMigrations(vlog)
 	gDbLock.Unlock()
 	if err != nil {
 		log.Fatalf("error: cannot initialize database: %v", err)
@@ -217,13 +225,15 @@ func DaemonMain(version string, commitHash string) {
 		// received during the processing of an RPC.
 		//s.GracefulStop()
 
-		// Give go routines a chance to gracefully terminate
-		//time.Sleep(time.Second * 5)
+		// Persist bandwidth usage data that is stored hot in objstore module
+		vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
+		persistUsage(false, true, vlog)
 
 		// other cleanup
 		gDbLock.Lock()
 		if gDb != nil {
 			gDb.Close()
+			gDb = nil
 		}
 		gDbLock.Unlock()
 
@@ -233,4 +243,59 @@ func DaemonMain(version string, commitHash string) {
 
 	fmt.Println("Press Ctrl+C to exit")
 	<-done
+}
+
+func persistUsage(doSpaceUsage bool, doBandwidthUsage bool, vlog *util.VLog) {
+	gGlobalsLock.Lock()
+	isCfgReady := gCfg != nil
+	isEncKeyReady := len(gEncKey) > 0
+	gGlobalsLock.Unlock()
+	gDbLock.Lock()
+	isDbReady := gDb != nil
+	gDbLock.Unlock()
+	if !isDbReady || !isEncKeyReady || !isCfgReady {
+		vlog.Println("error: persistUsage: cannot persist usage because config and/or db are not ready")
+		return
+	}
+
+	ctx := context.Background()
+	gGlobalsLock.Lock()
+	endpoint := gCfg.Endpoint
+	accessKey := gCfg.AccessKeyId
+	secretKey := gCfg.SecretAccessKey
+	trustSelfSignedCerts := gCfg.TrustSelfSignedCerts
+	bucket := gCfg.Bucket
+	gGlobalsLock.Unlock()
+	objst := objstore.NewObjStore(ctx, endpoint, accessKey, secretKey, trustSelfSignedCerts)
+
+	if doSpaceUsage {
+		// Cloud space usage
+		encKey := make([]byte, 32)
+		gGlobalsLock.Lock()
+		copy(encKey, gEncKey)
+		gGlobalsLock.Unlock()
+
+		cloudSizeUsageBytes, err := snapshots.ComputeTotalCloudSpaceUsage(ctx, objst, bucket, encKey, vlog)
+		if err != nil {
+			log.Println("error: persistUsage: ComputeTotalCloudSpaceUsage failed: ", err)
+		} else {
+			util.LockIf(&gDbLock)
+			err = gDb.AddSpaceUsageReport(time.Now().Unix(), cloudSizeUsageBytes)
+			util.UnlockIf(&gDbLock)
+			if err != nil {
+				log.Println("error: persistUsage: AddSpaceUsageReport failed: ", err)
+			} else {
+				vlog.Printf("USAGE> persisted cloud space usage of %s", util.FormatBytesAsString(cloudSizeUsageBytes))
+			}
+		}
+	}
+
+	if doBandwidthUsage {
+		// Bandwidth usage
+		if err := objst.PersistBandwidthUsage(&gDbLock, gDb, vlog); err != nil {
+			log.Println("error: persistUsage: objst.PersistBandwidthUsage failed: ", err)
+		} else {
+			vlog.Println("USAGE> persisted bandwidth usage")
+		}
+	}
 }

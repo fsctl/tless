@@ -125,6 +125,9 @@ func checkConnMain() {
 func wipeCloudMain() {
 	vlog := util.NewVLog(nil, func() bool { return cfgVerbose })
 
+	// Record peak usage before wipe
+	persistUsage(nil, true, false, vlog)
+
 	objst := objstore.NewObjStore(context.Background(), cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 	ctx := context.Background()
 
@@ -168,6 +171,8 @@ func wipeCloudMain() {
 			}
 		}
 	}
+
+	persistUsage(nil, true, true, vlog)
 
 	if !cfgVerbose {
 		// Give progress bar 0.1 sec to draw itself for final time

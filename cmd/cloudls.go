@@ -142,6 +142,7 @@ func cloudlsMain() {
 			}
 		}
 	}
+	persistUsage(nil, true, true, vlog)
 }
 
 func cloudlsMainShowSnapshot() {
@@ -173,4 +174,5 @@ func cloudlsMainShowSnapshot() {
 			log.Fatalf("error: invalid number of chunks planned for %s", relPath)
 		}
 	}
+	persistUsage(nil, true, true, vlog)
 }

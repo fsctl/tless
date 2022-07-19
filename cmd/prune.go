@@ -54,6 +54,9 @@ func init() {
 func pruneMain(backupName string, isDryRun bool) {
 	vlog := util.NewVLog(nil, func() bool { return cfgVerbose })
 
+	// Record peak usage before prune
+	persistUsage(nil, true, false, vlog)
+
 	ctx := context.Background()
 	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 	mSnapshots, err := snapshots.GetAllSnapshotInfos(ctx, encKey, objst, cfgBucket)
@@ -108,4 +111,6 @@ func pruneMain(backupName string, isDryRun bool) {
 			}
 		}
 	}
+
+	persistUsage(nil, true, true, vlog)
 }

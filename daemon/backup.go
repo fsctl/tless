@@ -248,6 +248,9 @@ func Backup(vlog *util.VLog, completion func()) {
 	}
 
 done:
+	// On finished, log the new total space usage
+	persistUsage(true, true, vlog)
+
 	// On finished, set the status back to Idle
 	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gDbLock)
 	gGlobalsLock.Lock()
@@ -319,6 +322,7 @@ func replayBackupJournal() {
 	gGlobalsLock.Lock()
 	gStatus.reportedEvents = append(gStatus.reportedEvents, re)
 	gGlobalsLock.Unlock()
+	persistUsage(true, true, vlog)
 
 	// Finally set the status back to Idle since we are done with backup
 	lastBackupTimeFormatted := getLastBackupTimeFormatted(&gDbLock)

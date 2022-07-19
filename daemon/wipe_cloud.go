@@ -55,6 +55,9 @@ func (s *server) WipeCloud(in *pb.WipeCloudRequest, srv pb.DaemonCtl_WipeCloudSe
 	}
 	defer done()
 
+	// Log the peak space usage right before wipe
+	persistUsage(true, true, vlog)
+
 	ctx := context.Background()
 	gGlobalsLock.Lock()
 	endpoint := gCfg.Endpoint

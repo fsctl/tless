@@ -13,8 +13,11 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/util"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -30,6 +33,12 @@ type ObjStore struct {
 
 var (
 	ErrUploadCorrupted = errors.New("error: upload corrupted in transit, bad etag returned")
+)
+
+var (
+	// These are always accessed atomically, so no sync.Mutex to protect them
+	uploadBytes   int64 = 0
+	downloadBytes int64 = 0
 )
 
 func NewObjStore(ctx context.Context, endpoint string, accessKeyId string, secretAccessKey string, isTrustSelfSignedCerts bool) *ObjStore {
@@ -87,6 +96,10 @@ func (os *ObjStore) UploadObjFromBuffer(ctx context.Context, bucket string, obje
 				log.Printf("error: UploadObjFromBuffer (%s): %v", objectName, err)
 				return err
 			}
+		} else {
+			// Log the download bandwidth
+			atomic.AddInt64(&uploadBytes, int64(len(buffer)))
+			//log.Printf("notice: UploadObjFromBuffer: added %d bytes to upload byte counter", int64(len(buffer)))
 		}
 		if info.ETag != expectedETag {
 			log.Printf("error: UploadObjFromBuffer: ETag returned was '%s', expected '%s'", info.ETag, expectedETag)
@@ -126,6 +139,10 @@ func (os *ObjStore) DownloadObjToBuffer(ctx context.Context, bucket string, obje
 
 	_ = n
 	//log.Printf("Successfully downloaded %d (=%d) bytes to buffer\n", n, len(ret))
+
+	// Log the download bandwidth
+	atomic.AddInt64(&downloadBytes, int64(len(ret)))
+	//log.Printf("notice: DownloadObjToBuffer: added %d bytes to download byte counter", int64(len(ret)))
 
 	return ret, nil
 }
@@ -243,7 +260,24 @@ func (os *ObjStore) DeleteObj(ctx context.Context, bucket string, objectName str
 	return err
 }
 
-func (os *ObjStore) RenameObj(ctx context.Context, bucket string, objectNameSrc string, objectNameDst string) error {
+func (objst *ObjStore) RenameObj(ctx context.Context, bucket string, objectNameSrc string, objectNameDst string) error {
+	// Bandwidth logging: determine the size of the object
+	var objByteCnt int64 = 0
+	m, err := objst.GetObjList(ctx, bucket, objectNameSrc, false, nil)
+	if err != nil {
+		log.Println("error: RenameObj: cannot get size of source object; bandwidth won't be counted")
+	} else {
+		if len(m) != 1 {
+			msg := fmt.Sprintf("error: RenameObj: there are %d objects named %s, expected 1 object with that name", len(m), objectNameSrc)
+			log.Println(msg)
+			return fmt.Errorf(msg)
+		}
+		for _, byteCnt := range m {
+			objByteCnt = byteCnt
+			break
+		}
+	}
+
 	srcOpts := minio.CopySrcOptions{
 		Bucket: bucket,
 		Object: objectNameSrc,
@@ -252,12 +286,17 @@ func (os *ObjStore) RenameObj(ctx context.Context, bucket string, objectNameSrc 
 		Bucket: bucket,
 		Object: objectNameDst,
 	}
-	_, err := os.minioClient.CopyObject(ctx, dstOpts, srcOpts)
+	_, err = objst.minioClient.CopyObject(ctx, dstOpts, srcOpts)
 	if err != nil {
 		return err
+	} else {
+		// Count copy as upload and download bytes; not clear this is correct for all providers
+		atomic.AddInt64(&uploadBytes, objByteCnt)
+		atomic.AddInt64(&downloadBytes, objByteCnt)
+		log.Printf("notice: RenameObj: added %d, %d bytes to up/download byte counters", objByteCnt, objByteCnt)
 	}
 
-	err = os.DeleteObj(ctx, bucket, objectNameSrc)
+	err = objst.DeleteObj(ctx, bucket, objectNameSrc)
 	return err
 }
 
@@ -317,4 +356,42 @@ func ComputeETag(buf []byte) string {
 	}
 
 	return eTag
+}
+
+func (objst *ObjStore) PersistBandwidthUsage(dbLock *sync.Mutex, db *database.DB, vlog *util.VLog) error {
+	// Get the upload and download bandwidth values and atomically reset those accumulators to zero
+	upBytes := int64(0)
+	downBytes := int64(0)
+	var ok bool
+	for {
+		upBytes = atomic.LoadInt64(&uploadBytes)
+		if ok = atomic.CompareAndSwapInt64(&uploadBytes, upBytes, 0); ok {
+			break
+		} else {
+			vlog.Println("warning: objst.PersistBandwidthUsage: CAS failed")
+		}
+	}
+	for {
+		downBytes = atomic.LoadInt64(&downloadBytes)
+		if ok = atomic.CompareAndSwapInt64(&downloadBytes, downBytes, 0); ok {
+			break
+		} else {
+			vlog.Println("warning: objst.PersistBandwidthUsage: CAS failed")
+		}
+	}
+
+	// Persist the retrieved values to database
+	if upBytes+downBytes > 0 {
+		util.LockIf(dbLock)
+		err := db.AddBandwidthUsageReport(time.Now().Unix(), upBytes+downBytes)
+		util.UnlockIf(dbLock)
+		if err != nil {
+			log.Println("error: objst.PersistBandwidthUsage: AddBandwidthUsageReport failed (putting byte counts back): ", err)
+			atomic.AddInt64(&uploadBytes, upBytes)
+			atomic.AddInt64(&uploadBytes, downBytes)
+			return err
+		}
+	}
+
+	return nil
 }

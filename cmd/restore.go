@@ -160,4 +160,7 @@ func restoreMain(backupAndSnapshotName string, pathToRestoreInto string) {
 
 	// Print the cache hit rate to vlog for diagnostics
 	cc.PrintCacheStatistics()
+
+	// Persist the bandwidth stored hot in objst module
+	persistUsage(nil, false, true, vlog)
 }

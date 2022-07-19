@@ -241,6 +241,9 @@ func (s *server) ReadSnapshotPaths(in *pb.ReadSnapshotPathsRequest, srv pb.Daemo
 func (s *server) DeleteSnapshots(in *pb.DeleteSnapshotsRequest, srv pb.DaemonCtl_DeleteSnapshotsServer) error {
 	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
+	// Record peak usage before deleting anything
+	persistUsage(true, false, vlog)
+
 	log.Printf(">> GOT COMMAND: DeleteSnapshots (%v)", in.SnapshotRawNames)
 	defer log.Println(">> COMPLETED COMMAND: DeleteSnapshots")
 
@@ -447,7 +450,10 @@ func (s *server) GetSnapshotSpaceUsage(in *pb.GetSnapshotSpaceUsageRequest, srv 
 	}
 
 	sendPartial := func(done int, total int, pbSsUsage *pb.SnapshotUsage) {
-		percentDone := float64(100) * float64(done) / float64(total)
+		var percentDone float64 = 0
+		if total > 0 {
+			percentDone = float64(100) * float64(done) / float64(total)
+		}
 		resp := pb.GetSnapshotSpaceUsageResponse{
 			DidSucceed:    true,
 			ErrMsg:        "",
@@ -559,7 +565,7 @@ func (s *server) GetSnapshotSpaceUsage(in *pb.GetSnapshotSpaceUsageRequest, srv 
 			}
 			snapshotsDoneCnt += 1
 			sendPartial(snapshotsDoneCnt, snapshotIndexCnt, &ssUsageRet)
-			vlog.Printf("Completed %d of %d snapshots", snapshotsDoneCnt, snapshotIndexCnt)
+			vlog.Printf("USAGE> Completed %d of %d snapshots", snapshotsDoneCnt, snapshotIndexCnt)
 		}
 	}
 

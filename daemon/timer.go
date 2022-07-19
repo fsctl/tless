@@ -14,15 +14,17 @@ const (
 	dontDoAnythingFirstNSeconds  int64 = 15 * 60
 	automaticBackupEveryNSeconds int64 = 24 * 60 * 60
 	automaticPruneEveryNSeconds  int64 = 24 * 60 * 60
+	persistUsageEveryNSeconds    int64 = 6 * 60 * 60
 )
 
 func timerLoop(server *server) {
 	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
-	// When we first start, pretend an autoprune just ran so we don't run one too soon
+	// When we first start, pretend some tasks just ran so we don't run one too soon
 	var (
 		startedAtUnixtime     int64 = time.Now().Unix()
 		lastAutopruneUnixtime int64 = time.Now().Unix()
+		lastPersistUsage      int64 = time.Now().Unix()
 	)
 
 	for {
@@ -60,7 +62,6 @@ func timerLoop(server *server) {
 			gGlobalsLock.Lock()
 			isIdle := gStatus.state == Idle
 			gGlobalsLock.Unlock()
-
 			if isIdle {
 				in := &pb.BackupRequest{}
 				in.ForceFullBackup = false
@@ -86,13 +87,30 @@ func timerLoop(server *server) {
 			gGlobalsLock.Lock()
 			isIdle := gStatus.state == Idle
 			gGlobalsLock.Unlock()
-
 			if isIdle {
 				if err := PruneSnapshots(); err != nil {
 					log.Println("PERIODIC> failed to run autoprune: ", err)
 				} else {
 					lastAutopruneUnixtime = time.Now().Unix()
+					persistUsage(true, true, vlog)
+					lastPersistUsage = time.Now().Unix()
 				}
+			}
+		}
+
+		//
+		// When did we last persist usage? If it's been long enough, do it now.
+		//
+		secondsSinceLastPersistUsage := nowUnixtime - lastPersistUsage
+		if secondsSinceLastPersistUsage > persistUsageEveryNSeconds {
+			gGlobalsLock.Lock()
+			isIdle := gStatus.state == Idle
+			gGlobalsLock.Unlock()
+			if isIdle {
+				persistUsage(true, true, vlog)
+				lastPersistUsage = time.Now().Unix()
+			} else {
+				vlog.Printf("error: timerLoop: cannot persist usage because we are not in Idle state")
 			}
 		}
 	}

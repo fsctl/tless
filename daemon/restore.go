@@ -82,7 +82,10 @@ EofReached:
 	}
 
 	go Restore(snapshotRawName, restorePath, selRelPaths,
-		func() { log.Println(">> COMPLETED COMMAND: Restore") }, vlog)
+		func() {
+			persistUsage(true, true, vlog)
+			log.Println(">> COMPLETED COMMAND: Restore")
+		}, vlog)
 
 	log.Println("Starting restore")
 	return stream.SendAndClose(&pb.RestoreResponse{
@@ -95,7 +98,7 @@ func Restore(snapshotRawName string, restorePath string, selectedRelPaths []stri
 	// Last step:  call the completion routine
 	defer completion()
 
-	// to call when we exit early
+	// to call when we exit early or normally
 	done := func() {
 		lastBackupTimeFormatted := getLastBackupTimeFormatted(&gDbLock)
 		gGlobalsLock.Lock()

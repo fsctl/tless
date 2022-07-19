@@ -82,7 +82,7 @@ func backupMain() {
 		log.Fatalf("error: cannot open database: %v", err)
 	}
 	defer db.Close()
-	if err := db.CreateTablesIfNotExist(); err != nil {
+	if err := db.PerformDbMigrations(vlog); err != nil {
 		log.Fatalf("error: cannot initialize database: %v", err)
 	}
 
@@ -90,6 +90,11 @@ func backupMain() {
 	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
 	if ok, err := objst.IsReachable(ctx, cfgBucket, vlog); !ok {
 		log.Fatalln("error: exiting because server not reachable: ", err)
+	}
+
+	onDone := func() {
+		// On finished, log the new total space usage
+		persistUsage(db, true, true, vlog)
 	}
 
 	// initialize progress bar container and its callbacks
@@ -119,6 +124,7 @@ func backupMain() {
 
 	// replay/rollback check - if there's an interrupted previous backup, deal with it and exit
 	if didResumeOrRollback := handleReplay(ctx, objst, db, vlog, setBackupInitialProgressFunc, updateBackupProgressFunc); didResumeOrRollback {
+		onDone()
 		return
 	}
 
@@ -157,6 +163,7 @@ func backupMain() {
 	}
 
 done:
+	onDone()
 }
 
 func handleReplay(ctx context.Context, objst *objstore.ObjStore, db *database.DB, vlog *util.VLog, setBackupInitialProgressFunc backup.SetReplayInitialProgressFuncType, updateBackupProgressFunc backup.UpdateProgressFuncType) bool {

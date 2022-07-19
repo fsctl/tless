@@ -6,11 +6,14 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/fsctl/tless/pkg/database"
 	"github.com/fsctl/tless/pkg/objstore"
+	"github.com/fsctl/tless/pkg/snapshots"
 	"github.com/fsctl/tless/pkg/util"
 )
 
@@ -239,4 +242,45 @@ func validateConfigVars() error {
 	vlog.Println("Everything looks good with bucket metadata")
 
 	return nil
+}
+
+func persistUsage(db *database.DB, doSpaceUsage bool, doBandwidthUsage bool, vlog *util.VLog) {
+	ctx := context.Background()
+	objst := objstore.NewObjStore(ctx, cfgEndpoint, cfgAccessKeyId, cfgSecretAccessKey, cfgTrustSelfSignedCerts)
+
+	if db == nil {
+		sqliteDir, err := util.MkdirUserConfig("", "")
+		if err != nil {
+			log.Fatalf("error: making sqlite dir: %v", err)
+		}
+		db, err := database.NewDB(filepath.Join(sqliteDir, "state.db"))
+		if err != nil {
+			log.Fatalf("error: cannot open database: %v", err)
+		}
+		defer db.Close()
+	}
+
+	if doSpaceUsage {
+		// Cloud space usage
+		cloudSizeUsageBytes, err := snapshots.ComputeTotalCloudSpaceUsage(ctx, objst, cfgBucket, encKey, vlog)
+		if err != nil {
+			log.Println("error: persistUsage: ComputeTotalCloudSpaceUsage failed: ", err)
+		} else {
+			err = db.AddSpaceUsageReport(time.Now().Unix(), cloudSizeUsageBytes)
+			if err != nil {
+				log.Println("error: persistUsage: AddSpaceUsageReport failed: ", err)
+			} else {
+				vlog.Println("USAGE> persisted cloud space usage of %s", util.FormatBytesAsString(cloudSizeUsageBytes))
+			}
+		}
+	}
+
+	if doBandwidthUsage {
+		// Bandwidth usage
+		if err := objst.PersistBandwidthUsage(nil, db, vlog); err != nil {
+			log.Println("error: persistUsage: objst.PersistBandwidthUsage failed: ", err)
+		} else {
+			vlog.Println("USAGE> persisted bandwidth usage")
+		}
+	}
 }

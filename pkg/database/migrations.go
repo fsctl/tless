@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+
+	"github.com/fsctl/tless/pkg/util"
 )
 
 var (
@@ -34,7 +36,7 @@ var (
 	`
 )
 
-func (db *DB) PerformDbMigrations() error {
+func (db *DB) PerformDbMigrations(vlog *util.VLog) error {
 	dbVersion, err := db.getDbVersion()
 	if err != nil {
 		log.Println("error: PerformDbMigrations: couldn't get version (treating as -1)", err)
@@ -44,28 +46,28 @@ func (db *DB) PerformDbMigrations() error {
 	switch dbVersion {
 	case -1:
 		// Fresh db => create everything
-		log.Println("notice: PerformDbMigrations: at ver -1 (fresh db => creating everything)")
+		vlog.Println("notice: PerformDbMigrations: at ver -1 (fresh db => creating everything)")
 		db.DropAllTables()
 		db.CreateTablesIfNotExist()
 		// now we're at db version 0
-		log.Println("notice: PerformDbMigrations: at ver 0 (migrating forward)")
+		vlog.Println("notice: PerformDbMigrations: at ver 0 (migrating forward)")
 		err = db.migrateToVer1()
 		if err != nil {
 			log.Println("error: PerformDbMigrations: failed to migrate to v1", err)
 			return err
 		}
-		log.Println("notice: PerformDbMigrations: now at ver 1")
+		vlog.Println("notice: PerformDbMigrations: now at ver 1")
 	case 0:
-		log.Println("notice: PerformDbMigrations: at ver 0 (migrating forward)")
+		vlog.Println("notice: PerformDbMigrations: at ver 0 (migrating forward)")
 		err = db.migrateToVer1()
 		if err != nil {
 			log.Println("error: PerformDbMigrations: failed to migrate to v1", err)
 			return err
 		}
-		log.Println("notice: PerformDbMigrations: now at ver 1")
+		vlog.Println("notice: PerformDbMigrations: now at ver 1")
 	case 1:
 		// No versions higher than 1 yet
-		log.Println("notice: PerformDbMigrations: at ver 1 (latest)")
+		vlog.Println("notice: PerformDbMigrations: at ver 1 (latest)")
 	}
 
 	return nil
