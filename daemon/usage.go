@@ -5,15 +5,19 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/fsctl/tless/pkg/util"
 	pb "github.com/fsctl/tless/rpc"
 )
 
 // Callback for rpc.DaemonCtlServer.ReadAllSnapshotsMetadata requests
 func (s *server) GetUsageHistory(context.Context, *pb.GetUsageHistoryRequest) (*pb.GetUsageHistoryResponse, error) {
-	//vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
+	vlog := util.NewVLog(&gGlobalsLock, func() bool { return gCfg == nil || gCfg.VerboseDaemon })
 
 	log.Println(">> GOT COMMAND: GetUsageHistory")
 	defer log.Println(">> COMPLETED COMMAND: GetUsageHistory")
+
+	// Save the information we will return to db so what we are storing stays up to date with what user is shown
+	persistUsage(true, true, vlog)
 
 	doneWithError := func(msg string) (*pb.GetUsageHistoryResponse, error) {
 		log.Println(msg)
